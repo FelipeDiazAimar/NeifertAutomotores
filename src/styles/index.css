@@ -1,0 +1,175 @@
+@import 'tailwindcss';
+
+/* Dark mode por clase (.dark en <html>) en vez de prefers-color-scheme */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ----------------------------------------------------------------------------
+   Tokens semánticos (cambian con el tema). Los componentes usan estos tokens,
+   nunca hex sueltos, así heredan light/dark automáticamente.
+---------------------------------------------------------------------------- */
+:root {
+  --c-bg: #f5f6f8;
+  --c-bg-deep: #eceef2;
+  --c-surface: rgba(255, 255, 255, 0.64);
+  --c-surface-solid: #ffffff;
+  --c-border: rgba(255, 255, 255, 0.75);
+  --c-line: rgba(11, 11, 15, 0.08);
+  --c-text: #0b0b0f;
+  --c-text-2: #5f5e5a;
+  --c-text-3: #9aa0a8;
+  --c-shadow: rgba(11, 11, 15, 0.14);
+  --glass-blur: 22px;
+}
+
+.dark {
+  --c-bg: #0a0a0c;
+  --c-bg-deep: #050506;
+  --c-surface: rgba(255, 255, 255, 0.055);
+  --c-surface-solid: #141418;
+  --c-border: rgba(255, 255, 255, 0.1);
+  --c-line: rgba(255, 255, 255, 0.08);
+  --c-text: #f5f6f8;
+  --c-text-2: #9aa0a8;
+  --c-text-3: #6b7280;
+  --c-shadow: rgba(0, 0, 0, 0.5);
+}
+
+/* ----------------------------------------------------------------------------
+   Mapeo a utilidades de Tailwind v4. `@theme inline` deja que bg-bg, text-ink,
+   etc. resuelvan a var(--c-*) → cambian solos con el tema.
+---------------------------------------------------------------------------- */
+@theme inline {
+  --color-neifert: #be1e2d;
+  --color-neifert-dark: #9e1623;
+  --color-neifert-light: #e24b4a;
+  --color-whatsapp: #25d366;
+  --color-success: #10b981;
+  --color-amber: #f59e0b;
+
+  --color-bg: var(--c-bg);
+  --color-bg-deep: var(--c-bg-deep);
+  --color-surface: var(--c-surface);
+  --color-surface-solid: var(--c-surface-solid);
+  --color-glassborder: var(--c-border);
+  --color-line: var(--c-line);
+  --color-ink: var(--c-text);
+  --color-ink-2: var(--c-text-2);
+  --color-ink-3: var(--c-text-3);
+
+  --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: 'Sora', 'Inter', sans-serif;
+
+  --radius-glass: 20px;
+}
+
+/* ----------------------------------------------------------------------------
+   Base
+---------------------------------------------------------------------------- */
+@layer base {
+  * {
+    border-color: var(--c-line);
+  }
+
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    background-color: var(--c-bg);
+    color: var(--c-text);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+    transition:
+      background-color 0.5s ease,
+      color 0.5s ease;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+
+  ::selection {
+    background: rgba(190, 30, 45, 0.9);
+    color: #fff;
+  }
+
+  /* Scrollbar personalizada — track transparente, thumb rojo */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #be1e2d;
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #9e1623;
+  }
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: #be1e2d transparent;
+  }
+
+  /* Lenis maneja el smooth scroll; desactivamos el nativo para no duplicar */
+  html.lenis,
+  html.lenis body {
+    height: auto;
+  }
+  .lenis.lenis-smooth {
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ----------------------------------------------------------------------------
+   Utilidades de glassmorphism + helpers
+---------------------------------------------------------------------------- */
+@layer utilities {
+  .glass {
+    background-color: var(--c-surface);
+    backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(160%);
+    border: 1px solid var(--c-border);
+  }
+
+  .glass-nav {
+    background-color: var(--c-surface);
+    backdrop-filter: blur(16px) saturate(180%);
+    -webkit-backdrop-filter: blur(16px) saturate(180%);
+    border: 1px solid var(--c-border);
+  }
+
+  .shadow-glass {
+    box-shadow: 0 18px 40px -18px var(--c-shadow);
+  }
+
+  .shadow-glow-red {
+    box-shadow: 0 24px 50px -20px rgba(190, 30, 45, 0.45);
+  }
+
+  .text-gradient-ink {
+    background: linear-gradient(
+      180deg,
+      var(--c-text) 0%,
+      color-mix(in srgb, var(--c-text) 55%, transparent) 100%
+    );
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+}

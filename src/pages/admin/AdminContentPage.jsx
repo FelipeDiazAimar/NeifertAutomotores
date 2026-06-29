@@ -1,0 +1,332 @@
+import { useState } from 'react'
+import { toast } from 'sonner'
+import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon } from 'lucide-react'
+import Button from '@/components/common/Button'
+import ImageUploader from '@/components/admin/ImageUploader'
+import VideoUploader from '@/components/admin/VideoUploader'
+import { TextField, Section, inputCls } from '@/components/admin/ContentFields'
+import { useSiteStore } from '@/store/useSiteStore'
+import { cn } from '@/lib/cn'
+
+const TABS = [
+  { id: 'home', label: 'Home' },
+  { id: 'instagram', label: 'Instagram' },
+  { id: 'footer', label: 'Footer' },
+  { id: 'redes', label: 'Redes & Contacto' },
+]
+
+/* ------------------------------- HOME -------------------------------- */
+function HomeTab() {
+  const home = useSiteStore((s) => s.home)
+  const setHome = useSiteStore((s) => s.setHome)
+  const stories = useSiteStore((s) => s.stories)
+  const addStory = useSiteStore((s) => s.addStory)
+  const updateStory = useSiteStore((s) => s.updateStory)
+  const removeStory = useSiteStore((s) => s.removeStory)
+
+  return (
+    <div className="space-y-5">
+      <Section title="Encabezado (Hero)">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Badge" value={home.heroBadge} onChange={(v) => setHome({ heroBadge: v })} />
+          <div />
+          <TextField label="Título — inicio" value={home.heroTitleA} onChange={(v) => setHome({ heroTitleA: v })} />
+          <TextField label="Título — palabra destacada (roja)" value={home.heroTitleEm} onChange={(v) => setHome({ heroTitleEm: v })} />
+          <TextField label="Título — final" value={home.heroTitleB} onChange={(v) => setHome({ heroTitleB: v })} className="sm:col-span-2" />
+          <TextField label="Subtítulo" value={home.heroSubtitle} onChange={(v) => setHome({ heroSubtitle: v })} textarea className="sm:col-span-2" />
+        </div>
+      </Section>
+
+      <Section title="Llamado a la acción (CTA)">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Título — inicio" value={home.ctaTitleA} onChange={(v) => setHome({ ctaTitleA: v })} />
+          <TextField label="Título — destacado (rojo)" value={home.ctaTitleEm} onChange={(v) => setHome({ ctaTitleEm: v })} />
+          <TextField label="Título — final" value={home.ctaTitleB} onChange={(v) => setHome({ ctaTitleB: v })} />
+          <TextField label="Subtítulo" value={home.ctaSubtitle} onChange={(v) => setHome({ ctaSubtitle: v })} textarea className="sm:col-span-2" />
+          <div className="sm:col-span-2">
+            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">
+              Imagen de fondo
+            </span>
+            <ImageUploader
+              multiple={false}
+              value={home.ctaImage ? [home.ctaImage] : []}
+              onChange={(urls) => setHome({ ctaImage: urls[0] || '' })}
+            />
+          </div>
+        </div>
+      </Section>
+
+      <Section
+        title="Historias y testimonios"
+        desc="Aparecen en la home en zig-zag."
+        action={
+          <div className="flex flex-wrap gap-2">
+            <Button size="sm" variant="glass" icon={Video} onClick={() => addStory({ kind: 'video', title: 'Nuevo video', caption: '', duration: '', video_url: '', poster_url: '' })}>
+              Video
+            </Button>
+            <Button size="sm" variant="glass" icon={ImageIcon} onClick={() => addStory({ kind: 'photo', title: 'Nueva foto', caption: '', poster_url: '' })}>
+              Foto
+            </Button>
+            <Button size="sm" variant="glass" icon={Quote} onClick={() => addStory({ kind: 'testimonial', quote: '', author_name: '', author_role: '' })}>
+              Testimonio
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-3">
+          {stories.map((st) => (
+            <div key={st.id} className="rounded-xl border border-line p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="inline-flex items-center gap-1.5 text-xs font-bold uppercase tracking-wider text-neifert">
+                  {st.kind === 'video' ? <Video size={13} /> : st.kind === 'photo' ? <ImageIcon size={13} /> : <Quote size={13} />}
+                  {st.kind === 'video' ? 'Video' : st.kind === 'photo' ? 'Foto' : 'Testimonio'}
+                </span>
+                <button
+                  onClick={() => removeStory(st.id)}
+                  className="text-ink-3 transition-colors hover:text-neifert"
+                  aria-label="Borrar"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </div>
+
+              {st.kind === 'video' && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <TextField label="Título" value={st.title} onChange={(v) => updateStory(st.id, { title: v })} />
+                  <TextField label="Caption" value={st.caption} onChange={(v) => updateStory(st.id, { caption: v })} />
+                  <TextField label="Duración (opcional)" value={st.duration} onChange={(v) => updateStory(st.id, { duration: v })} />
+                  <TextField label="URL del video (opcional)" value={st.video_url} onChange={(v) => updateStory(st.id, { video_url: v })} placeholder="https://…/video.mp4" />
+                  <div className="sm:col-span-2">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Video (se reproduce solo al hacer scroll)</span>
+                    <VideoUploader value={st.video_url} onChange={(url) => updateStory(st.id, { video_url: url })} />
+                  </div>
+                  <div className="sm:col-span-2">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Póster (mientras carga el video)</span>
+                    <ImageUploader
+                      multiple={false}
+                      value={st.poster_url ? [st.poster_url] : []}
+                      onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {st.kind === 'photo' && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <TextField label="Título" value={st.title} onChange={(v) => updateStory(st.id, { title: v })} />
+                  <TextField label="Caption" value={st.caption} onChange={(v) => updateStory(st.id, { caption: v })} />
+                  <div className="sm:col-span-2">
+                    <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Imagen</span>
+                    <ImageUploader
+                      multiple={false}
+                      value={st.poster_url ? [st.poster_url] : []}
+                      onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
+                    />
+                  </div>
+                </div>
+              )}
+
+              {st.kind === 'testimonial' && (
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <TextField label="Cita" value={st.quote} onChange={(v) => updateStory(st.id, { quote: v })} textarea className="sm:col-span-2" />
+                  <TextField label="Autor" value={st.author_name} onChange={(v) => updateStory(st.id, { author_name: v })} />
+                  <TextField label="Rol" value={st.author_role} onChange={(v) => updateStory(st.id, { author_role: v })} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+  )
+}
+
+/* ----------------------------- INSTAGRAM ----------------------------- */
+function InstagramTab() {
+  const ig = useSiteStore((s) => s.instagram)
+  const setMeta = useSiteStore((s) => s.setInstagramMeta)
+  const addIgItem = useSiteStore((s) => s.addIgItem)
+  const updateIgItem = useSiteStore((s) => s.updateIgItem)
+  const removeIgItem = useSiteStore((s) => s.removeIgItem)
+
+  return (
+    <div className="space-y-5">
+      <Section title="Encabezado de la página">
+        <div className="grid gap-4">
+          <TextField label="Título" value={ig.headline} onChange={(v) => setMeta({ headline: v })} />
+          <TextField label="Subtítulo" value={ig.subtitle} onChange={(v) => setMeta({ subtitle: v })} textarea />
+        </div>
+      </Section>
+
+      <Section
+        title="Galería"
+        desc="Capturas, fotos y videos del perfil. Tocá una para ir a tu Instagram."
+        action={
+          <div className="flex gap-2">
+            <Button size="sm" variant="glass" icon={ImageIcon} onClick={() => addIgItem({ type: 'image', url: '', caption: '' })}>
+              Imagen
+            </Button>
+            <Button size="sm" variant="glass" icon={Video} onClick={() => addIgItem({ type: 'video', url: '', caption: '' })}>
+              Video
+            </Button>
+          </div>
+        }
+      >
+        <div className="grid gap-3 sm:grid-cols-2">
+          {ig.items.map((it) => (
+            <div key={it.id} className="rounded-xl border border-line p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neifert">
+                  {it.type === 'video' ? 'Video' : 'Imagen'}
+                </span>
+                <button onClick={() => removeIgItem(it.id)} className="text-ink-3 hover:text-neifert" aria-label="Borrar">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+              <ImageUploader
+                multiple={false}
+                value={it.url ? [it.url] : []}
+                onChange={(urls) => updateIgItem(it.id, { url: urls[0] || '' })}
+              />
+              <div className="mt-3 grid gap-3">
+                <TextField label="Caption" value={it.caption} onChange={(v) => updateIgItem(it.id, { caption: v })} />
+                <TextField label="Enlace (opcional)" value={it.link} onChange={(v) => updateIgItem(it.id, { link: v })} placeholder="https://instagram.com/p/…" />
+              </div>
+            </div>
+          ))}
+        </div>
+      </Section>
+    </div>
+  )
+}
+
+/* ------------------------------ FOOTER ------------------------------- */
+function FooterTab() {
+  const footer = useSiteStore((s) => s.footer)
+  const setFooter = useSiteStore((s) => s.setFooter)
+
+  const setColumns = (columns) => setFooter({ columns })
+  const updateCol = (ci, patch) =>
+    setColumns(footer.columns.map((c, i) => (i === ci ? { ...c, ...patch } : c)))
+  const updateItem = (ci, ii, patch) =>
+    updateCol(ci, {
+      items: footer.columns[ci].items.map((it, i) => (i === ii ? { ...it, ...patch } : it)),
+    })
+  const addItem = (ci) =>
+    updateCol(ci, { items: [...footer.columns[ci].items, { label: 'Nuevo', href: '#' }] })
+  const removeItem = (ci, ii) =>
+    updateCol(ci, { items: footer.columns[ci].items.filter((_, i) => i !== ii) })
+
+  return (
+    <div className="space-y-5">
+      <Section title="Textos generales">
+        <div className="grid gap-4">
+          <TextField label="Descripción" value={footer.tagline} onChange={(v) => setFooter({ tagline: v })} textarea />
+          <div className="grid gap-4 sm:grid-cols-2">
+            <TextField label="Título del boletín" value={footer.newsletterTitle} onChange={(v) => setFooter({ newsletterTitle: v })} />
+            <TextField label="Copyright" value={footer.copyright} onChange={(v) => setFooter({ copyright: v })} />
+          </div>
+        </div>
+      </Section>
+
+      {footer.columns.map((col, ci) => (
+        <Section
+          key={ci}
+          title={`Columna: ${col.title || '—'}`}
+          action={
+            <Button size="sm" variant="glass" icon={Plus} onClick={() => addItem(ci)}>
+              Enlace
+            </Button>
+          }
+        >
+          <TextField label="Título de la columna" value={col.title} onChange={(v) => updateCol(ci, { title: v })} className="mb-3" />
+          <div className="space-y-2">
+            {col.items.map((it, ii) => (
+              <div key={ii} className="flex items-center gap-2">
+                <input className={inputCls} value={it.label} onChange={(e) => updateItem(ci, ii, { label: e.target.value })} placeholder="Texto" />
+                <input className={inputCls} value={it.href} onChange={(e) => updateItem(ci, ii, { href: e.target.value })} placeholder="/ruta o https://…" />
+                <button onClick={() => removeItem(ci, ii)} className="shrink-0 text-ink-3 hover:text-neifert" aria-label="Borrar">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        </Section>
+      ))}
+    </div>
+  )
+}
+
+/* ------------------------------ REDES -------------------------------- */
+function RedesTab() {
+  const socials = useSiteStore((s) => s.socials)
+  const setSocials = useSiteStore((s) => s.setSocials)
+
+  return (
+    <div className="space-y-5">
+      <Section title="Contacto" desc="El teléfono se usa en todos los botones de WhatsApp del sitio.">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="WhatsApp (con código de país)" value={socials.whatsappPhone} onChange={(v) => setSocials({ whatsappPhone: v })} placeholder="5491100000000" />
+          <div />
+          <TextField label="Dirección" value={socials.address} onChange={(v) => setSocials({ address: v })} />
+          <TextField label="Horarios" value={socials.hours} onChange={(v) => setSocials({ hours: v })} />
+        </div>
+      </Section>
+
+      <Section title="Redes sociales" desc="Enlaces globales (footer e Instagram).">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <TextField label="Instagram" value={socials.instagram} onChange={(v) => setSocials({ instagram: v })} placeholder="https://instagram.com/…" />
+          <TextField label="Facebook" value={socials.facebook} onChange={(v) => setSocials({ facebook: v })} placeholder="https://facebook.com/…" />
+          <TextField label="X / Twitter" value={socials.x} onChange={(v) => setSocials({ x: v })} placeholder="https://x.com/…" />
+        </div>
+      </Section>
+    </div>
+  )
+}
+
+export default function AdminContentPage() {
+  const [tab, setTab] = useState('home')
+  const resetContent = useSiteStore((s) => s.resetContent)
+
+  const onReset = () => {
+    if (confirm('¿Restablecer todo el contenido a los valores por defecto?')) {
+      resetContent()
+      toast.success('Contenido restablecido')
+    }
+  }
+
+  return (
+    <section>
+      <div className="mb-6 flex items-end justify-between gap-4">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-wider text-neifert">Gestión</p>
+          <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Contenido</h1>
+          <p className="mt-1 text-sm text-ink-3">Los cambios se guardan automáticamente.</p>
+        </div>
+        <Button variant="ghost" size="sm" icon={RotateCcw} onClick={onReset}>
+          Restablecer
+        </Button>
+      </div>
+
+      <div className="mb-6 flex flex-wrap gap-2">
+        {TABS.map((t) => (
+          <button
+            key={t.id}
+            onClick={() => setTab(t.id)}
+            className={cn(
+              'rounded-full px-4 py-2 text-sm font-semibold transition-colors',
+              tab === t.id ? 'bg-neifert text-white shadow-glow-red' : 'glass text-ink-2 hover:text-ink'
+            )}
+          >
+            {t.label}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'home' && <HomeTab />}
+      {tab === 'instagram' && <InstagramTab />}
+      {tab === 'footer' && <FooterTab />}
+      {tab === 'redes' && <RedesTab />}
+    </section>
+  )
+}
