@@ -7,8 +7,16 @@
  * funciona bien, por eso este script se corre local, no en el servidor).
  *
  * Uso:
- *   npm run sync:instagram              (trae posteos nuevos, hasta ponerse al día)
- *   npm run sync:instagram -- --pages=3 (limita cuántas páginas de 24 trae)
+ *   npm run sync:instagram                    (trae solo posteos nuevos; para en
+ *                                               cuanto encuentra uno ya guardado)
+ *   npm run sync:instagram -- --all           (carga completa: recorre todo el
+ *                                               historial, sin parar en lo ya
+ *                                               guardado — usar la primera vez
+ *                                               o si falta traer posteos viejos)
+ *   npm run sync:instagram -- --all --pages=20 (limita/ajusta cuántas páginas
+ *                                               de 24 recorre; default 12 ≈ 288
+ *                                               posteos, alcanza para el perfil
+ *                                               actual de ~284)
  *
  * Necesita en .env: VITE_SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY,
  * R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_ENDPOINT,
@@ -20,6 +28,7 @@ import { fetchInstagramPage } from '../src/server/instagramCore.js'
 import { createR2Client, putR2Object } from '../src/server/r2Core.js'
 
 const MAX_PAGES = Number(process.argv.find((a) => a.startsWith('--pages='))?.split('=')[1]) || 12
+const FULL_SYNC = process.argv.includes('--all') || process.argv.includes('--full')
 
 const {
   VITE_SUPABASE_URL,
@@ -97,6 +106,7 @@ async function main() {
   }
   const existingIds = new Set(current.items.map((it) => it.id))
   console.log(`Ya hay ${current.items.length} posteos guardados.`)
+  console.log(FULL_SYNC ? 'Modo: carga completa (--all)' : 'Modo: solo lo nuevo')
 
   const newItems = []
   let cursor = null
@@ -109,8 +119,9 @@ async function main() {
     for (const post of posts) {
       const id = `ig-${post.id}`
       if (existingIds.has(id)) {
+        if (FULL_SYNC) continue // ya lo tenemos, pero seguimos revisando el resto
         caughtUp = true
-        break // ya llegamos a posteos que ya teníamos sincronizados
+        break // modo incremental: en cuanto encontramos uno conocido, ya estamos al día
       }
       if (!post.thumb) continue // sin imagen de portada, no hay nada que subir
 
