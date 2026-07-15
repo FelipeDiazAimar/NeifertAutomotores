@@ -250,6 +250,11 @@ export const useSiteStore = create(
    - subscribe: persiste (upsert, con debounce) cada sección que cambia.
 --------------------------------------------------------------------------- */
 
+// Evita que la hidratación inicial (traer contenido de Supabase) dispare una
+// escritura de "guardado" hacia atrás — sin esto, cualquier visitante anónimo
+// terminaba intentando un upsert a contenido_sitio y lo rechazaba el RLS (401).
+let isHydrating = false
+
 /** Hidrata el store con el contenido guardado en Supabase. Llamar al iniciar. */
 export async function hydrateSiteContent() {
   if (!isSupabaseConfigured) return
@@ -258,7 +263,11 @@ export async function hydrateSiteContent() {
     if (!content) return
     const merged = {}
     for (const k of CONTENT_KEYS) if (content[k] != null) merged[k] = content[k]
-    if (Object.keys(merged).length) useSiteStore.setState(merged)
+    if (Object.keys(merged).length) {
+      isHydrating = true
+      useSiteStore.setState(merged)
+      isHydrating = false
+    }
   } catch (e) {
     console.warn('[Neifert] No se pudo hidratar site_content:', e.message)
   }
@@ -267,6 +276,7 @@ export async function hydrateSiteContent() {
 if (isSupabaseConfigured) {
   const timers = {}
   useSiteStore.subscribe((state, prev) => {
+    if (isHydrating) return
     for (const k of CONTENT_KEYS) {
       if (state[k] !== prev[k]) {
         clearTimeout(timers[k])

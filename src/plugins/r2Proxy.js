@@ -1,19 +1,13 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
-import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
+import { createR2Client, presignR2Upload, deleteR2Object } from '../server/r2Core.js'
 
 /**
- * Proxy de Cloudflare R2 (storage tipo S3, 10GB gratis, egress gratis para
- * siempre — requiere tarjeta para habilitarlo pero no cobra dentro del free
- * tier).
- *
- * El navegador NUNCA ve las credenciales de R2: pide acá una URL firmada
- * (presigned PUT, válida unos minutos) y sube el archivo directo a R2 con esa
- * URL — el archivo no pasa por nuestro servidor, así video pesado no lo satura.
+ * Plugin de Vite que expone el proxy de Cloudflare R2 en el servidor de
+ * desarrollo. La lógica real vive en src/server/r2Core.js (compartida con
+ * las funciones serverless de producción en api/r2/*.js).
  *
  * POST /api/r2/presign  body: { filename, contentType }
  *   -> { ok:true, uploadUrl, publicUrl } | { ok:false, error }
- *
- * POST /api/r2/delete  body: { url }  (la URL pública devuelta al subir)
+ * POST /api/r2/delete  body: { url }
  *   -> { ok:true } | { ok:false, error }
  */
 
@@ -41,13 +35,7 @@ function sendJson(res, status, payload) {
 
 export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, publicUrlBase } = {}) {
   const configured = Boolean(accessKeyId && secretAccessKey && bucket && endpoint && publicUrlBase)
-  const client = configured
-    ? new S3Client({
-        endpoint,
-        region: 'auto',
-        credentials: { accessKeyId, secretAccessKey },
-      })
-    : null
+  const client = configured ? createR2Client({ accessKeyId, secretAccessKey, endpoint }) : null
 
   return {
     name: 'r2-proxy',
@@ -62,15 +50,8 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
         }
         try {
           const { filename, contentType } = await readJsonBody(req)
-          if (!filename) throw new Error('Falta filename')
-          const command = new PutObjectCommand({
-            Bucket: bucket,
-            Key: filename,
-            ContentType: contentType || 'application/octet-stream',
-          })
-          const uploadUrl = await getSignedUrl(client, command, { expiresIn: 900 })
-          const publicUrl = `${publicUrlBase.replace(/\/$/, '')}/${filename}`
-          sendJson(res, 200, { ok: true, uploadUrl, publicUrl })
+          const result = await presignR2Upload(client, { bucket, filename, contentType, publicUrlBase })
+          sendJson(res, 200, { ok: true, ...result })
         } catch (e) {
           console.error('[r2-proxy] presign:', e.message)
           sendJson(res, 500, { ok: false, error: e.message })
@@ -84,13 +65,8 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
         }
         try {
           const { url } = await readJsonBody(req)
-          const base = publicUrlBase.replace(/\/$/, '')
-          if (!url || !url.startsWith(base)) {
-            return sendJson(res, 200, { ok: false, error: 'La URL no pertenece a este bucket de R2.' })
-          }
-          const key = decodeURIComponent(url.slice(base.length + 1))
-          await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
-          sendJson(res, 200, { ok: true })
+          const result = await deleteR2Object(client, { bucket, url, publicUrlBase })
+          sendJson(res, 200, result)
         } catch (e) {
           console.error('[r2-proxy] delete:', e.message)
           sendJson(res, 500, { ok: false, error: e.message })
