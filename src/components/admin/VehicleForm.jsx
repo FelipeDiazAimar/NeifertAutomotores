@@ -1,7 +1,8 @@
 import { useState } from 'react'
 import Button from '@/components/common/Button'
 import ImageUploader from './ImageUploader'
-import { VEHICLE_CATEGORIES, FUEL_TYPES, TRANSMISSIONS } from '@/lib/constants'
+import { FUEL_TYPES, TRANSMISSIONS } from '@/lib/constants'
+import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
 const STATUSES = [
@@ -9,8 +10,6 @@ const STATUSES = [
   { id: 'reservado', label: 'Reservado' },
   { id: 'vendido', label: 'Vendido' },
 ]
-
-const CATS = VEHICLE_CATEGORIES.filter((c) => c.id !== 'todos')
 
 const fieldCls =
   'glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
@@ -43,8 +42,10 @@ const EMPTY = {
 }
 
 export default function VehicleForm({ initial, onSave, onCancel, saving }) {
+  const categories = useSiteStore((s) => s.categories)
   const [form, setForm] = useState(() => ({
     ...EMPTY,
+    category: initial?.category ?? categories[0]?.id ?? '',
     ...initial,
     images: initial?.images?.length
       ? initial.images
@@ -102,7 +103,8 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
       </Field>
       <Field label="Categoría">
         <select className={fieldCls} value={form.category} onChange={(e) => set('category', e.target.value)}>
-          {CATS.map((c) => (
+          {categories.length === 0 && <option value="">— Creá categorías en Contenido —</option>}
+          {categories.map((c) => (
             <option key={c.id} value={c.id}>{c.label}</option>
           ))}
         </select>

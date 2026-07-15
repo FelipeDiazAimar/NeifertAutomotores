@@ -31,8 +31,8 @@ export default function PublicNavbar() {
                 end={l.end}
                 className={({ isActive }) =>
                   cn(
-                    'rounded-xl px-4 py-2 text-sm font-medium transition-colors',
-                    isActive ? 'text-neifert' : 'text-ink-2 hover:text-ink'
+                    'rounded-xl px-4 py-2 text-sm font-semibold transition-colors',
+                    isActive ? 'text-neifert' : 'text-ink hover:text-neifert'
                   )
                 }
               >

@@ -1,26 +1,38 @@
 import { useRef, useState } from 'react'
-import { UploadCloud, X, Star } from 'lucide-react'
-import { filesToDataUrls, onlyImages } from '@/lib/files'
+import { toast } from 'sonner'
+import { UploadCloud, X, Star, Loader2 } from 'lucide-react'
+import { uploadImageMedia } from '@/services/media.service'
+import { IMAGE_RATIOS, MAX_IMAGE_MB } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 
-/** Subida de imágenes por explorador o drag & drop. Guarda dataURL.
- *  value: string[] (urls/dataURL) · onChange: (urls) => void
- *  La primera imagen es la principal (badge ★). */
+/** Subida de imágenes (explorador / drag & drop / cámara en mobile).
+ *  Comprime a WebP y valida formato antes de guardar.
+ *  value: string[] · onChange: (urls) => void · La 1ª es la principal (★). */
 export default function ImageUploader({ value = [], onChange, multiple = true }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
-  const [busy, setBusy] = useState(false)
+  const [progress, setProgress] = useState(null) // null | 0..1
 
   const addFiles = async (fileList) => {
-    const imgs = onlyImages(fileList)
-    if (!imgs.length) return
-    setBusy(true)
-    try {
-      const urls = await filesToDataUrls(imgs)
-      onChange(multiple ? [...value, ...urls] : [urls[0]])
-    } finally {
-      setBusy(false)
+    const files = Array.from(fileList).filter((f) => f.type.startsWith('image/'))
+    if (!files.length) return
+    const toAdd = multiple ? files : files.slice(0, 1)
+
+    const urls = []
+    for (let i = 0; i < toAdd.length; i++) {
+      try {
+        setProgress(0)
+        const res = await uploadImageMedia(toAdd[i], {
+          onProgress: (p) => setProgress((i + p) / toAdd.length),
+        })
+        urls.push(res.url)
+        if (res.warning) toast.warning(res.warning, { duration: 5000 })
+      } catch (e) {
+        toast.error(e.message || 'No se pudo subir la imagen')
+      }
     }
+    setProgress(null)
+    if (urls.length) onChange(multiple ? [...value, ...urls] : [urls[0]])
   }
 
   const onDrop = (e) => {
@@ -30,13 +42,14 @@ export default function ImageUploader({ value = [], onChange, multiple = true })
   }
 
   const removeAt = (i) => onChange(value.filter((_, idx) => idx !== i))
-  const makeMain = (i) =>
-    onChange([value[i], ...value.filter((_, idx) => idx !== i)])
+  const makeMain = (i) => onChange([value[i], ...value.filter((_, idx) => idx !== i)])
+
+  const busy = progress != null
 
   return (
     <div>
       <div
-        onClick={() => inputRef.current?.click()}
+        onClick={() => !busy && inputRef.current?.click()}
         onDragOver={(e) => {
           e.preventDefault()
           setDragging(true)
@@ -44,15 +57,35 @@ export default function ImageUploader({ value = [], onChange, multiple = true })
         onDragLeave={() => setDragging(false)}
         onDrop={onDrop}
         className={cn(
-          'flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors',
-          dragging ? 'border-neifert bg-neifert/5' : 'border-glassborder hover:border-neifert/60'
+          'relative flex cursor-pointer flex-col items-center justify-center gap-2 overflow-hidden rounded-2xl border-2 border-dashed px-4 py-8 text-center transition-colors',
+          dragging ? 'border-neifert bg-neifert/5' : 'border-glassborder hover:border-neifert/60',
+          busy && 'pointer-events-none opacity-90'
         )}
       >
-        <UploadCloud size={26} className="text-ink-3" />
+        {busy ? (
+          <Loader2 size={26} className="animate-spin text-neifert" />
+        ) : (
+          <UploadCloud size={26} className="text-ink-3" />
+        )}
         <p className="text-sm font-semibold text-ink">
-          {busy ? 'Procesando…' : 'Arrastrá fotos acá o hacé clic'}
+          {busy ? `Procesando… ${Math.round(progress * 100)}%` : 'Arrastrá fotos o hacé clic'}
         </p>
-        <p className="text-xs text-ink-3">PNG, JPG o WebP · {multiple ? 'varias' : 'una'}</p>
+        <p className="text-xs text-ink-3">
+          JPG · PNG · WebP · hasta {MAX_IMAGE_MB}MB · {multiple ? 'varias' : 'una'}
+        </p>
+        <p className="text-[11px] text-ink-3">
+          Formatos ideales: {IMAGE_RATIOS.map((r) => r.id).join(' · ')}
+        </p>
+
+        {busy && (
+          <div className="absolute inset-x-0 bottom-0 h-1 bg-line">
+            <div
+              className="h-full bg-neifert transition-[width] duration-200"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
+        )}
+
         <input
           ref={inputRef}
           type="file"
@@ -74,13 +107,13 @@ export default function ImageUploader({ value = [], onChange, multiple = true })
               className="group relative aspect-square overflow-hidden rounded-xl border border-glassborder"
             >
               <img src={url} alt="" className="h-full w-full object-cover" />
-              {i === 0 && (
+              {i === 0 && multiple && (
                 <span className="absolute left-1 top-1 flex items-center gap-1 rounded-full bg-neifert px-1.5 py-0.5 text-[9px] font-bold text-white">
                   <Star size={9} fill="currentColor" /> Principal
                 </span>
               )}
               <div className="absolute inset-0 flex items-center justify-center gap-1 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
-                {i !== 0 && (
+                {i !== 0 && multiple && (
                   <button
                     type="button"
                     onClick={() => makeMain(i)}

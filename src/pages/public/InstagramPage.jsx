@@ -1,7 +1,7 @@
-import { useEffect, useRef, useCallback } from 'react'
+import { useRef, useState } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ExternalLink, Play, RefreshCw, Layers } from 'lucide-react'
+import { ExternalLink, Play, RefreshCw, Layers, ChevronLeft, ChevronRight, Loader2 } from 'lucide-react'
 import { InstagramIcon } from '@/components/common/SocialIcons'
 import Button from '@/components/common/Button'
 import { useSiteStore } from '@/store/useSiteStore'
@@ -79,10 +79,43 @@ function SkeletonItem() {
   return <div className="aspect-square animate-pulse rounded-[18px] bg-surface/60" />
 }
 
-function LoadingRow() {
+/** Control de paginación numerada. Con cursores de Instagram solo se puede
+ *  avanzar de a una página; las ya cargadas quedan navegables hacia atrás. */
+function Pagination({ pageIdx, loadedPages, hasNext, loading, onGo, onNext, onPrev }) {
+  const pillBase =
+    'grid h-9 min-w-9 place-items-center rounded-full px-3 text-sm font-semibold transition-colors'
   return (
-    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4">
-      {Array.from({ length: 4 }).map((_, i) => <SkeletonItem key={i} />)}
+    <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+      <button
+        onClick={onPrev}
+        disabled={pageIdx === 0}
+        aria-label="Página anterior"
+        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-40')}
+      >
+        <ChevronLeft size={18} />
+      </button>
+
+      {Array.from({ length: loadedPages }).map((_, i) => (
+        <button
+          key={i}
+          onClick={() => onGo(i)}
+          className={cn(
+            pillBase,
+            i === pageIdx ? 'bg-neifert text-white shadow-glow-red' : 'glass text-ink-2 hover:text-neifert'
+          )}
+        >
+          {i + 1}
+        </button>
+      ))}
+
+      <button
+        onClick={onNext}
+        disabled={loading || (pageIdx >= loadedPages - 1 && !hasNext)}
+        aria-label="Página siguiente"
+        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-40')}
+      >
+        {loading ? <Loader2 size={16} className="animate-spin" /> : <ChevronRight size={18} />}
+      </button>
     </div>
   )
 }
@@ -90,7 +123,8 @@ function LoadingRow() {
 export default function InstagramPage() {
   const instagram = useSiteStore((s) => s.instagram)
   const socials = useSiteStore((s) => s.socials)
-  const sentinelRef = useRef(null)
+  const gridRef = useRef(null)
+  const [pageIdx, setPageIdx] = useState(0)
 
   const {
     data,
@@ -109,26 +143,29 @@ export default function InstagramPage() {
     retry: 1,
   })
 
-  const posts = data?.pages.flatMap((p) => p.posts) ?? []
+  const pages = data?.pages ?? []
+  const posts = pages[pageIdx]?.posts ?? []
   const handle = (socials.instagram || '').split('/').filter(Boolean).pop() || 'neifertautomotores'
 
-  // Infinite scroll: carga la siguiente página cuando el sentinel entra en el viewport
-  const onIntersect = useCallback(
-    ([entry]) => {
-      if (entry.isIntersecting && hasNextPage && !isFetchingNextPage) {
-        fetchNextPage()
-      }
-    },
-    [hasNextPage, isFetchingNextPage, fetchNextPage]
-  )
+  const scrollToTop = () =>
+    gridRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
 
-  useEffect(() => {
-    const el = sentinelRef.current
-    if (!el) return
-    const observer = new IntersectionObserver(onIntersect, { rootMargin: '300px' })
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [onIntersect])
+  const goTo = (i) => {
+    setPageIdx(i)
+    scrollToTop()
+  }
+  const goPrev = () => {
+    if (pageIdx > 0) goTo(pageIdx - 1)
+  }
+  const goNext = async () => {
+    if (pageIdx < pages.length - 1) {
+      goTo(pageIdx + 1)
+    } else if (hasNextPage) {
+      await fetchNextPage()
+      setPageIdx((i) => i + 1)
+      scrollToTop()
+    }
+  }
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-12 md:px-8">
@@ -180,21 +217,21 @@ export default function InstagramPage() {
               animate={{ opacity: 1 }}
               className="mt-3 text-sm text-ink-3"
             >
-              {posts.length} publicaciones cargadas
-              {hasNextPage && ' · cargando más…'}
+              Página {pageIdx + 1} · {posts.length} publicaciones
             </motion.p>
           )}
         </AnimatePresence>
       </motion.div>
 
       {/* Grid */}
-      <div className="mt-12 space-y-3 md:space-y-4">
+      <div ref={gridRef} className="mt-12 scroll-mt-24">
         {isLoading ? (
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4">
             {Array.from({ length: 12 }).map((_, i) => <SkeletonItem key={i} />)}
           </div>
         ) : posts.length > 0 ? (
           <motion.div
+            key={pageIdx}
             variants={staggerContainer(0.03)}
             initial="hidden"
             animate="show"
@@ -216,11 +253,20 @@ export default function InstagramPage() {
             </button>
           </div>
         )}
-
-        {/* Sentinel + spinner de carga de página siguiente */}
-        <div ref={sentinelRef} className="h-4" />
-        {isFetchingNextPage && <LoadingRow />}
       </div>
+
+      {/* Paginación */}
+      {!isLoading && pages.length > 0 && (
+        <Pagination
+          pageIdx={pageIdx}
+          loadedPages={pages.length}
+          hasNext={hasNextPage}
+          loading={isFetchingNextPage}
+          onGo={goTo}
+          onNext={goNext}
+          onPrev={goPrev}
+        />
+      )}
     </section>
   )
 }

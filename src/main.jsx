@@ -5,8 +5,18 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'sonner'
 import { ReactLenis } from 'lenis/react'
 import { AuthProvider } from '@/context/AuthProvider'
+import { hydrateSiteContent } from '@/store/useSiteStore'
+import { recordShareVisit } from '@/lib/vehicleClicks'
 import App from '@/App'
 import '@/styles/index.css'
+
+// Trae el contenido del sitio desde Supabase (no-op en modo demo).
+hydrateSiteContent()
+
+// Registra el ingreso si la persona llegó por un link compartido (?ref=share).
+if (new URLSearchParams(window.location.search).get('ref') === 'share') {
+  recordShareVisit(window.location.pathname)
+}
 
 const queryClient = new QueryClient({
   defaultOptions: {

@@ -2,6 +2,8 @@ import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { MOCK_STORIES } from '@/lib/mockData'
 import { WHATSAPP_PHONE } from '@/lib/constants'
+import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { fetchSiteContent, saveSiteContent, CONTENT_KEYS } from '@/services/content.service'
 
 /** Contenido editable del sitio (textos, testimonios, galería de Instagram,
  *  footer y enlaces de redes). En modo demo persiste en localStorage; queda
@@ -9,7 +11,26 @@ import { WHATSAPP_PHONE } from '@/lib/constants'
 
 const uid = () => Math.random().toString(36).slice(2, 10)
 
+/** Convierte un nombre en un id/slug estable (sin acentos ni símbolos). */
+const slugify = (str) =>
+  String(str)
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/(^-|-$)/g, '') || 'cat'
+
+const DEFAULT_CATEGORIES = [
+  { id: 'suv', label: 'SUVs' },
+  { id: 'sedan', label: 'Sedanes' },
+  { id: 'coupe', label: 'Coupé' },
+  { id: 'sport', label: 'Sport' },
+  { id: 'electrico', label: 'Eléctricos' },
+  { id: 'pickup', label: 'Pickups' },
+]
+
 const DEFAULT_CONTENT = {
+  categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
   socials: {
     instagram: 'https://instagram.com/neifertautomotores',
     facebook: 'https://facebook.com/neifertautomotores',
@@ -111,6 +132,27 @@ export const useSiteStore = create(
     (set) => ({
       ...DEFAULT_CONTENT,
 
+      // Categorías de vehículos (filtros del catálogo + alta de vehículos)
+      addCategory: (label) =>
+        set((s) => {
+          const name = String(label || '').trim()
+          if (!name) return {}
+          let id = slugify(name)
+          const taken = new Set(s.categories.map((c) => c.id))
+          let n = 2
+          const baseId = id
+          while (taken.has(id)) id = `${baseId}-${n++}`
+          return { categories: [...s.categories, { id, label: name }] }
+        }),
+      updateCategory: (id, label) =>
+        set((s) => ({
+          categories: s.categories.map((c) =>
+            c.id === id ? { ...c, label } : c
+          ),
+        })),
+      removeCategory: (id) =>
+        set((s) => ({ categories: s.categories.filter((c) => c.id !== id) })),
+
       setSocials: (partial) =>
         set((s) => ({ socials: { ...s.socials, ...partial } })),
       setHome: (partial) => set((s) => ({ home: { ...s.home, ...partial } })),
@@ -166,3 +208,39 @@ export const useSiteStore = create(
     }
   )
 )
+
+/* ---------------------------------------------------------------------------
+   Sincronización con Supabase (solo si hay credenciales; no-op en modo demo).
+   - hydrateSiteContent(): trae el contenido del servidor al iniciar la app.
+   - subscribe: persiste (upsert, con debounce) cada sección que cambia.
+--------------------------------------------------------------------------- */
+
+/** Hidrata el store con el contenido guardado en Supabase. Llamar al iniciar. */
+export async function hydrateSiteContent() {
+  if (!isSupabaseConfigured) return
+  try {
+    const content = await fetchSiteContent()
+    if (!content) return
+    const merged = {}
+    for (const k of CONTENT_KEYS) if (content[k] != null) merged[k] = content[k]
+    if (Object.keys(merged).length) useSiteStore.setState(merged)
+  } catch (e) {
+    console.warn('[Neifert] No se pudo hidratar site_content:', e.message)
+  }
+}
+
+if (isSupabaseConfigured) {
+  const timers = {}
+  useSiteStore.subscribe((state, prev) => {
+    for (const k of CONTENT_KEYS) {
+      if (state[k] !== prev[k]) {
+        clearTimeout(timers[k])
+        timers[k] = setTimeout(() => {
+          saveSiteContent(k, state[k]).catch((e) =>
+            console.warn(`[Neifert] No se pudo guardar ${k}:`, e.message)
+          )
+        }, 800)
+      }
+    }
+  })
+}

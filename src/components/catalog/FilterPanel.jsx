@@ -13,7 +13,7 @@ function Chip({ active, onClick, children }) {
         'rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors',
         active
           ? 'border-neifert bg-neifert text-white'
-          : 'border-glassborder text-ink-2 hover:text-ink'
+          : 'border-glassborder text-ink hover:border-neifert/60'
       )}
     >
       {children}
@@ -24,7 +24,7 @@ function Chip({ active, onClick, children }) {
 function RangeRow({ label, suffix, minVal, maxVal, onMin, onMax, placeholderMax }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-3">{label}</p>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">{label}</p>
       <div className="flex items-center gap-2">
         <input
           type="number"
@@ -114,7 +114,7 @@ export default function FilterPanel(props) {
 
             <div className="space-y-5">
               <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-3">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">
                   Combustible
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -131,7 +131,7 @@ export default function FilterPanel(props) {
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-3">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">
                   Tipo de caja
                 </p>
                 <div className="flex flex-wrap gap-2">

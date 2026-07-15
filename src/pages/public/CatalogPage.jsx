@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { motion } from 'framer-motion'
+import { Share2 } from 'lucide-react'
 import CategoryFilter from '@/components/catalog/CategoryFilter'
 import SortDropdown from '@/components/catalog/SortDropdown'
 import ViewToggle from '@/components/catalog/ViewToggle'
@@ -7,6 +9,8 @@ import FilterPanel from '@/components/catalog/FilterPanel'
 import VehicleGrid from '@/components/catalog/VehicleGrid'
 import Spinner from '@/components/common/Spinner'
 import Button from '@/components/common/Button'
+import { shareOrCopy } from '@/lib/share'
+import { trackShareClick } from '@/lib/vehicleClicks'
 import { useVehicles } from '@/hooks/useVehicles'
 
 export default function CatalogPage() {
@@ -36,6 +40,23 @@ export default function CatalogPage() {
           <FilterPanel />
           <ViewToggle />
           <SortDropdown />
+          <motion.button
+            type="button"
+            onClick={() => {
+              trackShareClick({ kind: 'catalog' })
+              shareOrCopy({
+                url: '/catalogo?ref=share',
+                title: 'Catálogo — Neifert Automotores',
+                text: 'Mirá el catálogo de vehículos de Neifert Automotores.',
+              })
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            aria-label="Compartir catálogo"
+            className="grid h-10 w-10 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert"
+          >
+            <Share2 size={18} />
+          </motion.button>
         </div>
       </div>
 

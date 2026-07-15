@@ -1,6 +1,6 @@
 import { VEHICLE_CATEGORIES } from './constants'
 
-const CAT_LABEL = Object.fromEntries(VEHICLE_CATEGORIES.map((c) => [c.id, c.label]))
+const DEFAULT_CAT_LABEL = Object.fromEntries(VEHICLE_CATEGORIES.map((c) => [c.id, c.label]))
 
 /** Sinónimos / intención → función que puntúa un vehículo. */
 const INTENTS = [
@@ -24,28 +24,52 @@ const norm = (s) =>
     .normalize('NFD')
     .replace(/\p{Diacritic}/gu, '')
 
-/** Texto base de cada vehículo para matchear palabras sueltas. */
-function haystack(v) {
+const STATUS_WORDS = { disponible: 'disponible', reservado: 'reservado', vendido: 'vendido' }
+
+/** Texto base de cada vehículo para matchear palabras sueltas: incluye todos
+ *  los detalles cargados (marca, modelo, categoría, motor, descripción, etc.). */
+function haystack(v, catLabel) {
   return norm(
-    [v.brand, v.model, v.fuel_type, v.transmission, v.engine, v.category, CAT_LABEL[v.category], v.year, v.is_premium ? 'premium' : '']
-      .filter(Boolean)
+    [
+      v.brand,
+      v.model,
+      v.fuel_type,
+      v.transmission,
+      v.engine,
+      v.category,
+      catLabel[v.category],
+      v.year,
+      v.price_usd,
+      v.km,
+      v.description,
+      STATUS_WORDS[v.status] || v.status,
+      v.is_premium ? 'premium' : '',
+    ]
+      .filter((x) => x !== null && x !== undefined && x !== '')
       .join(' ')
   )
 }
 
-/** Recibe la query y los vehículos; devuelve los más relacionados (score desc). */
-export function searchVehicles(query, vehicles = []) {
+/** Recibe la query, los vehículos y (opcional) las categorías del store para
+ *  entender también las categorías nuevas por nombre. Devuelve los más
+ *  relacionados (score desc). */
+export function searchVehicles(query, vehicles = [], categories = null) {
   const q = norm(query).trim()
   if (!q) return []
   const tokens = q.split(/\s+/).filter((t) => t.length > 1)
   if (!tokens.length) return []
+
+  const catLabel =
+    categories && categories.length
+      ? Object.fromEntries(categories.map((c) => [c.id, c.label]))
+      : DEFAULT_CAT_LABEL
 
   const prices = vehicles.map((v) => v.price_usd).sort((a, b) => a - b)
   const priceMid = prices[Math.floor(prices.length / 2)] || 0
   const ctx = { priceMid }
 
   const scored = vehicles.map((v) => {
-    const hay = haystack(v)
+    const hay = haystack(v, catLabel)
     let score = 0
     for (const t of tokens) {
       if (hay.includes(t)) score += 3

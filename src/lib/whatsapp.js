@@ -30,8 +30,10 @@ export function vehicleMessage(vehicle, { origin } = {}) {
   return lines.join('\n')
 }
 
-/** Link de WhatsApp para consultar por un vehículo concreto. */
-export function vehicleWaLink(phone, vehicle) {
+/** Link de WhatsApp para consultar por un vehículo concreto.
+ *  `customMessage` reemplaza el mensaje armado (p. ej. "quiero uno similar"). */
+export function vehicleWaLink(phone, vehicle, customMessage) {
+  if (customMessage) return waLink(phone, customMessage)
   const origin = typeof window !== 'undefined' ? window.location.origin : ''
   return waLink(phone, vehicleMessage(vehicle, { origin }))
 }

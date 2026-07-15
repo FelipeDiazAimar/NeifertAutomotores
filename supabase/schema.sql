@@ -31,7 +31,7 @@ create table if not exists public.vehicles (
   fuel_type     text not null,
   transmission  text,
   engine        text,
-  category      text not null check (category in ('suv','sedan','coupe','sport','electrico','pickup')),
+  category      text not null,  -- categorías dinámicas (editables desde /admin/contenido)
   is_premium    boolean not null default false,
   status        text not null default 'disponible' check (status in ('disponible','reservado','vendido')),
   main_image_url text,
@@ -57,15 +57,20 @@ create table if not exists public.leads (
   contact_date    date,
   assigned_to     uuid references public.profiles (id) on delete set null,
   avatar_url      text,
+  -- Ingesta desde el CRM externo (enlatado) + atribución web
+  external_id     text,          -- id del lead en el CRM externo (dedup/sync)
+  external_source text,          -- sistema de origen: 'crm_enlatado' | 'web' | null
+  viewed_vehicles jsonb not null default '[]'::jsonb, -- autos que vio en la web (atribución)
+  synced_at       timestamptz,   -- última sincronización con el CRM externo
   last_contact_at timestamptz not null default now(),
   created_at      timestamptz not null default now(),
   updated_at      timestamptz not null default now()
 );
 
--- Historias editoriales del Home (videos + testimonios)
+-- Historias editoriales del Home (videos + fotos + testimonios)
 create table if not exists public.stories (
   id          uuid primary key default gen_random_uuid(),
-  kind        text not null check (kind in ('video','testimonial')),
+  kind        text not null check (kind in ('video','photo','testimonial')),
   title       text,
   video_url   text,
   poster_url  text,
@@ -86,6 +91,14 @@ create table if not exists public.daily_traffic (
   showroom int not null default 0
 );
 
+-- Contenido editable del sitio (hero, CTA, historias, galería IG, footer, redes).
+-- Clave→JSON: cada sección del editor de /admin/contenido es una fila.
+create table if not exists public.site_content (
+  key        text primary key,
+  value      jsonb not null default '{}'::jsonb,
+  updated_at timestamptz not null default now()
+);
+
 -- ----------------------------------------------------------------------------
 --  ÍNDICES
 -- ----------------------------------------------------------------------------
@@ -93,6 +106,9 @@ create index if not exists idx_vehicles_category    on public.vehicles (category
 create index if not exists idx_vehicles_status       on public.vehicles (status);
 create index if not exists idx_leads_status          on public.leads (status);
 create index if not exists idx_leads_last_contact    on public.leads (last_contact_at desc);
+-- Dedup de leads ingeridos del CRM externo (upsert por external_id)
+create unique index if not exists idx_leads_external_id
+  on public.leads (external_id) where external_id is not null;
 
 -- ----------------------------------------------------------------------------
 --  TRIGGERS: updated_at automático + alta de perfil al registrarse
@@ -111,6 +127,10 @@ create trigger trg_vehicles_updated before update on public.vehicles
 
 drop trigger if exists trg_leads_updated on public.leads;
 create trigger trg_leads_updated before update on public.leads
+  for each row execute function public.set_updated_at();
+
+drop trigger if exists trg_site_content_updated on public.site_content;
+create trigger trg_site_content_updated before update on public.site_content
   for each row execute function public.set_updated_at();
 
 create or replace function public.handle_new_user()
@@ -181,6 +201,7 @@ alter table public.vehicles      enable row level security;
 alter table public.leads         enable row level security;
 alter table public.stories       enable row level security;
 alter table public.daily_traffic enable row level security;
+alter table public.site_content  enable row level security;
 
 -- profiles: cualquier usuario autenticado lee; cada uno edita el suyo
 drop policy if exists profiles_select on public.profiles;
@@ -190,10 +211,12 @@ drop policy if exists profiles_update_own on public.profiles;
 create policy profiles_update_own on public.profiles
   for update to authenticated using (auth.uid() = id);
 
--- vehicles: lectura pública de disponibles; admin (autenticado) hace todo
+-- vehicles: lectura pública (el catálogo filtra 'disponible' en la query; el
+-- detalle necesita leer reservados/vendidos para la vista "ya no disponible");
+-- admin (autenticado) hace todo
 drop policy if exists vehicles_public_read on public.vehicles;
 create policy vehicles_public_read on public.vehicles
-  for select using (status = 'disponible');
+  for select using (true);
 drop policy if exists vehicles_admin_all on public.vehicles;
 create policy vehicles_admin_all on public.vehicles
   for all to authenticated using (true) with check (true);
@@ -224,6 +247,33 @@ create policy leads_admin_delete on public.leads
 drop policy if exists traffic_admin_read on public.daily_traffic;
 create policy traffic_admin_read on public.daily_traffic
   for select to authenticated using (true);
+
+-- site_content: lectura pública (el sitio la consume); escritura solo admin
+drop policy if exists site_content_public_read on public.site_content;
+create policy site_content_public_read on public.site_content
+  for select using (true);
+drop policy if exists site_content_admin_write on public.site_content;
+create policy site_content_admin_write on public.site_content
+  for all to authenticated using (true) with check (true);
+
+-- ----------------------------------------------------------------------------
+--  MIGRACIONES idempotentes (para bases que ya corrieron una versión previa)
+-- ----------------------------------------------------------------------------
+do $$ begin
+  -- stories.kind: permitir 'photo'
+  alter table public.stories drop constraint if exists stories_kind_check;
+  alter table public.stories add constraint stories_kind_check
+    check (kind in ('video','photo','testimonial'));
+exception when others then null; end $$;
+
+-- vehicles.category: pasa a texto libre (categorías dinámicas)
+alter table public.vehicles drop constraint if exists vehicles_category_check;
+
+-- leads: columnas de ingesta del CRM externo + atribución web
+alter table public.leads add column if not exists external_id     text;
+alter table public.leads add column if not exists external_source text;
+alter table public.leads add column if not exists viewed_vehicles jsonb not null default '[]'::jsonb;
+alter table public.leads add column if not exists synced_at       timestamptz;
 
 -- ----------------------------------------------------------------------------
 --  STORAGE (buckets públicos para imágenes/videos)

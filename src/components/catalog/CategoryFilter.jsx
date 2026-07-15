@@ -1,14 +1,16 @@
-import { VEHICLE_CATEGORIES } from '@/lib/constants'
 import { useCatalogStore } from '@/store/useCatalogStore'
+import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
 export default function CategoryFilter() {
   const category = useCatalogStore((s) => s.category)
   const setCategory = useCatalogStore((s) => s.setCategory)
+  const categories = useSiteStore((s) => s.categories)
+  const items = [{ id: 'todos', label: 'Todos' }, ...categories]
 
   return (
     <div className="no-scrollbar flex gap-2 overflow-x-auto pb-1">
-      {VEHICLE_CATEGORIES.map((c) => (
+      {items.map((c) => (
         <button
           key={c.id}
           onClick={() => setCategory(c.id)}

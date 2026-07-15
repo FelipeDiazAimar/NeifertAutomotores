@@ -8,6 +8,7 @@ import VehicleCard from '@/components/catalog/VehicleCard'
 import { fetchVehicles } from '@/services/vehicles.service'
 import { searchVehicles } from '@/lib/vehicleSearch'
 import { useUiStore } from '@/store/useUiStore'
+import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
 const SUGGESTIONS = ['SUV familiar', 'Eléctrico 0km', 'Deportivo premium', 'Audi 2024', 'Algo económico']
@@ -69,7 +70,11 @@ export default function AiSearchOverlay() {
     }
   }
 
-  const results = useMemo(() => searchVehicles(submitted, pool), [submitted, pool])
+  const categories = useSiteStore((s) => s.categories)
+  const results = useMemo(
+    () => searchVehicles(submitted, pool, categories),
+    [submitted, pool, categories]
+  )
   const hasQuery = submitted.trim().length > 0
 
   return (

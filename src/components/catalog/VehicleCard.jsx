@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Gauge, Fuel, Settings2 } from 'lucide-react'
+import { Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { formatUSD, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
+import { shareOrCopy } from '@/lib/share'
+import { trackShareClick } from '@/lib/vehicleClicks'
 import { useSiteStore } from '@/store/useSiteStore'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
@@ -114,6 +116,35 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
     </motion.a>
   )
 
+  const shareButton = (
+    <motion.button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        trackShareClick({ kind: 'vehicle', id: vehicle.id })
+        shareOrCopy({
+          url: `/catalogo/${vehicle.id}?ref=share`,
+          title: `${vehicle.brand} ${vehicle.model} — Neifert Automotores`,
+          text: `Mirá este ${vehicle.brand} ${vehicle.model} ${vehicle.year} en Neifert.`,
+        })
+      }}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+      aria-label="Compartir"
+      className="grid h-11 w-11 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert"
+    >
+      <Share2 size={18} />
+    </motion.button>
+  )
+
+  const actions = (
+    <div className="flex items-center gap-2">
+      {shareButton}
+      {waButton}
+    </div>
+  )
+
   const layoutProps = {
     layout: true,
     initial: { opacity: 0, scale: 0.96 },
@@ -150,7 +181,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           <p className="font-display text-xl font-extrabold text-ink">
             {formatUSD(vehicle.price_usd)}
           </p>
-          {waButton}
+          {actions}
         </div>
       </motion.div>
     )
@@ -163,7 +194,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       className="group glass overflow-hidden rounded-[20px] shadow-glass"
     >
       <Link to={`/catalogo/${vehicle.id}`} className="block">
-        <div className="relative aspect-[4/3] overflow-hidden">
+        <div className="relative aspect-[4/5] overflow-hidden">
           <CardImage vehicle={vehicle} />
           <span className="absolute left-3 top-3 z-10 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
             {vehicle.year}
@@ -192,7 +223,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
               {formatUSD(vehicle.price_usd)}
             </p>
           </div>
-          {waButton}
+          {actions}
         </div>
       </div>
     </motion.div>

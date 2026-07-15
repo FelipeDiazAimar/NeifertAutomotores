@@ -10,10 +10,79 @@ import { cn } from '@/lib/cn'
 
 const TABS = [
   { id: 'home', label: 'Home' },
+  { id: 'categorias', label: 'Categorías' },
   { id: 'instagram', label: 'Instagram' },
   { id: 'footer', label: 'Footer' },
   { id: 'redes', label: 'Redes & Contacto' },
 ]
+
+/* ---------------------------- CATEGORÍAS ----------------------------- */
+function CategoriesTab() {
+  const categories = useSiteStore((s) => s.categories)
+  const addCategory = useSiteStore((s) => s.addCategory)
+  const updateCategory = useSiteStore((s) => s.updateCategory)
+  const removeCategory = useSiteStore((s) => s.removeCategory)
+  const [newLabel, setNewLabel] = useState('')
+
+  const add = () => {
+    const label = newLabel.trim()
+    if (!label) return
+    addCategory(label)
+    setNewLabel('')
+  }
+
+  return (
+    <div className="space-y-5">
+      <Section
+        title="Categorías de vehículos"
+        desc="Se usan en los chips del catálogo y al elegir la categoría de cada vehículo. Reemplazan a las de ejemplo."
+      >
+        <div className="mb-4 flex gap-2">
+          <input
+            className={inputCls}
+            value={newLabel}
+            onChange={(e) => setNewLabel(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                add()
+              }
+            }}
+            placeholder="Nueva categoría (ej: Deportivo, Familiar…)"
+          />
+          <Button size="sm" variant="glass" icon={Plus} onClick={add}>
+            Agregar
+          </Button>
+        </div>
+
+        <div className="space-y-2">
+          {categories.map((c) => (
+            <div key={c.id} className="flex items-center gap-2">
+              <input
+                className={inputCls}
+                value={c.label}
+                onChange={(e) => updateCategory(c.id, e.target.value)}
+              />
+              <span className="hidden shrink-0 font-mono text-[11px] text-ink-3 sm:inline">
+                {c.id}
+              </span>
+              <button
+                onClick={() => removeCategory(c.id)}
+                className="shrink-0 text-ink-3 transition-colors hover:text-neifert"
+                aria-label="Borrar categoría"
+              >
+                <Trash2 size={15} />
+              </button>
+            </div>
+          ))}
+          {categories.length === 0 && (
+            <p className="text-sm text-ink-3">No hay categorías. Agregá una arriba.</p>
+          )}
+        </div>
+      </Section>
+    </div>
+  )
+}
 
 /* ------------------------------- HOME -------------------------------- */
 function HomeTab() {
@@ -183,11 +252,18 @@ function InstagramTab() {
                   <Trash2 size={15} />
                 </button>
               </div>
-              <ImageUploader
-                multiple={false}
-                value={it.url ? [it.url] : []}
-                onChange={(urls) => updateIgItem(it.id, { url: urls[0] || '' })}
-              />
+              {it.type === 'video' ? (
+                <VideoUploader
+                  value={it.url}
+                  onChange={(url) => updateIgItem(it.id, { url })}
+                />
+              ) : (
+                <ImageUploader
+                  multiple={false}
+                  value={it.url ? [it.url] : []}
+                  onChange={(urls) => updateIgItem(it.id, { url: urls[0] || '' })}
+                />
+              )}
               <div className="mt-3 grid gap-3">
                 <TextField label="Caption" value={it.caption} onChange={(v) => updateIgItem(it.id, { caption: v })} />
                 <TextField label="Enlace (opcional)" value={it.link} onChange={(v) => updateIgItem(it.id, { link: v })} placeholder="https://instagram.com/p/…" />
@@ -324,6 +400,7 @@ export default function AdminContentPage() {
       </div>
 
       {tab === 'home' && <HomeTab />}
+      {tab === 'categorias' && <CategoriesTab />}
       {tab === 'instagram' && <InstagramTab />}
       {tab === 'footer' && <FooterTab />}
       {tab === 'redes' && <RedesTab />}
