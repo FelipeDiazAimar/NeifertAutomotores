@@ -29,6 +29,20 @@ export async function presignR2Upload(client, { bucket, filename, contentType, p
   return { uploadUrl, publicUrl }
 }
 
+/** Sube un archivo directo a R2 (sin presign) — para scripts/servidores de
+ *  confianza que ya tienen las credenciales reales a mano (ej. el sync de
+ *  Instagram), a diferencia del navegador que sube vía URL firmada. */
+export async function putR2Object(client, { bucket, filename, body, contentType }) {
+  await client.send(
+    new PutObjectCommand({
+      Bucket: bucket,
+      Key: filename,
+      Body: body,
+      ContentType: contentType || 'application/octet-stream',
+    })
+  )
+}
+
 /** Borra un objeto de R2 a partir de su URL pública. Devuelve { ok, error }. */
 export async function deleteR2Object(client, { bucket, url, publicUrlBase }) {
   const base = publicUrlBase.replace(/\/$/, '')

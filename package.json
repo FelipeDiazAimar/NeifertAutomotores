@@ -8,7 +8,8 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
-    "format": "prettier --write \"src/**/*.{js,jsx,css}\""
+    "format": "prettier --write \"src/**/*.{js,jsx,css}\"",
+    "sync:instagram": "node --env-file=.env scripts/syncInstagram.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1087.0",
