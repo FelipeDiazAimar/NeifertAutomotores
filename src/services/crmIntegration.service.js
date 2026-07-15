@@ -1,9 +1,10 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient'
+import { toDbLead } from './leads.service'
 
 /** Integración con el CRM externo (enlatado). Es READ-ONLY: ingerimos SUS leads
  *  (WhatsApp de la empresa + gente que va presencial al salón) a nuestra tabla
- *  `leads`, etiquetados por origen, para unificar el embudo y el dashboard con
- *  nuestros propios leads (web/IG/FB/catálogo).
+ *  `prospectos`, etiquetados por origen, para unificar el embudo y el dashboard
+ *  con nuestros propios leads (web/IG/FB/catálogo).
  *
  *  PENDIENTE (cuando tengamos acceso a su API, ~2026-07-14):
  *   - Definir baseURL + auth (API key / OAuth) en variables de entorno.
@@ -36,13 +37,13 @@ export async function fetchExternalLeads(/* { since } = {} */) {
   return []
 }
 
-/** Ingesta: upsert por external_id en `leads` (deduplica). Devuelve cuántos se
- *  procesaron. No-op sin Supabase o sin datos. */
+/** Ingesta: upsert por external_id en `prospectos` (deduplica). Devuelve
+ *  cuántos se procesaron. No-op sin Supabase o sin datos. */
 export async function ingestExternalLeads(rawList) {
   if (!isSupabaseConfigured || !rawList?.length) return { count: 0 }
-  const rows = rawList.map(mapExternalLead).filter((r) => r.external_id)
+  const rows = rawList.map(mapExternalLead).filter((r) => r.external_id).map(toDbLead)
   if (!rows.length) return { count: 0 }
-  const { error } = await supabase.from('leads').upsert(rows, { onConflict: 'external_id' })
+  const { error } = await supabase.from('prospectos').upsert(rows, { onConflict: 'id_externo' })
   if (error) throw error
   return { count: rows.length }
 }

@@ -4,7 +4,7 @@ import { motion } from 'framer-motion'
 import { ArrowLeft, Gauge, Fuel, Settings2, Calendar, Share2, AlertCircle } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { useVehicle } from '@/hooks/useVehicles'
-import { formatUSD, formatKm } from '@/lib/formatters'
+import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
 import { trackVehicleClick, trackVehicleConversion, trackShareClick } from '@/lib/vehicleClicks'
 import { detectSource } from '@/lib/provenance'
@@ -116,13 +116,16 @@ export default function VehicleDetailPage() {
           transition={{ duration: 0.5, delay: 0.1 }}
         >
           <p className="text-sm font-bold uppercase tracking-wider text-neifert">{v.brand}</p>
-          <h1 className="mt-1 font-display text-4xl font-extrabold text-ink">{v.model}</h1>
+          <h1 className="mt-1 font-display text-4xl font-extrabold text-ink">
+            {v.model}
+            {v.version && <span className="text-ink-2"> {v.version}</span>}
+          </h1>
           <p
             className={`mt-4 font-display text-3xl font-extrabold ${
               available ? 'text-ink' : 'text-ink-3 line-through'
             }`}
           >
-            {formatUSD(v.price_usd)}
+            {formatVehiclePrice(v)}
           </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">

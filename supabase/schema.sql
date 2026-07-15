@@ -2,7 +2,11 @@
 --  NEIFERT AUTOMOTORES — Esquema de base de datos (Supabase / PostgreSQL)
 --  Ejecutar en: Supabase -> SQL Editor -> New query -> pegar todo -> Run.
 --  Es idempotente: se puede correr más de una vez sin romper.
---  Después corré seed.sql para cargar datos de ejemplo.
+--  Tablas y columnas en español. Los valores de estado/tipo (ej: 'disponible',
+--  'video', 'WhatsApp') se dejan tal cual, son los que ya usa el sitio.
+--  No se cargan datos de ejemplo acá — perfiles y vehículos vienen del CRM
+--  viejo (login y sincronización); prospectos/historias/tráfico se cargan
+--  con seed.sql si querés ver el panel con contenido de muestra.
 -- ============================================================================
 
 create extension if not exists pgcrypto;
@@ -11,136 +15,156 @@ create extension if not exists pgcrypto;
 --  TABLAS
 -- ----------------------------------------------------------------------------
 
--- Perfiles de usuarios del panel (1-a-1 con auth.users)
-create table if not exists public.profiles (
-  id         uuid primary key references auth.users (id) on delete cascade,
-  full_name  text not null default 'Usuario',
-  role       text not null default 'vendedor',
-  avatar_url text,
-  created_at timestamptz not null default now()
+-- Perfiles de usuarios del panel (1-a-1 con auth.users). Se crean solos al
+-- iniciar sesión (puente con el CRM viejo) o al registrarse.
+create table if not exists public.perfiles (
+  id             uuid primary key references auth.users (id) on delete cascade,
+  nombre_completo text not null default 'Usuario',
+  rol            text not null default 'vendedor',
+  foto_url       text,
+  creado_en      timestamptz not null default now()
 );
 
--- Inventario de vehículos
-create table if not exists public.vehicles (
-  id            uuid primary key default gen_random_uuid(),
-  brand         text not null,
-  model         text not null,
-  year          int  not null,
-  price_usd     numeric not null,
-  km            int  not null default 0,
-  fuel_type     text not null,
-  transmission  text,
-  engine        text,
-  category      text not null,  -- categorías dinámicas (editables desde /admin/contenido)
-  is_premium    boolean not null default false,
-  status        text not null default 'disponible' check (status in ('disponible','reservado','vendido')),
-  main_image_url text,
-  images        jsonb not null default '[]'::jsonb,
-  description   text,
-  view_count    int  not null default 0,
-  created_at    timestamptz not null default now(),
-  updated_at    timestamptz not null default now()
-);
-
--- Leads del CRM
-create table if not exists public.leads (
+-- Inventario de vehículos. Se completa sincronizando con el CRM viejo
+-- (marca/modelo/precio/estado/etc.); fotos y descripción de marketing son
+-- siempre a cargo del admin de este sitio.
+create table if not exists public.vehiculos (
   id              uuid primary key default gen_random_uuid(),
-  full_name       text not null,
-  phone           text,
-  email           text,
-  vehicle_interest text,
-  source          text not null default 'Web'
-                    check (source in ('WhatsApp','Instagram','Web','Showroom','Referido','Facebook')),
-  status          text not null default 'nuevo'
-                    check (status in ('nuevo','primer_contacto','seguimiento','negociacion','vip','cerrado')),
-  notes           text,
-  contact_date    date,
-  assigned_to     uuid references public.profiles (id) on delete set null,
-  avatar_url      text,
+  marca           text not null,
+  modelo          text not null,
+  version         text,          -- versión/trim (ej: "SRX 2.8T 4X4 AT")
+  color           text,
+  anio            int  not null,
+  -- Precio mostrado en su moneda original (el CRM viejo carga ARS o USD).
+  -- precio_usd es el equivalente normalizado interno, solo para ordenar/filtrar.
+  moneda          text not null default 'USD' check (moneda in ('USD','ARS')),
+  precio          numeric,        -- monto en `moneda` tal cual se carga/muestra
+  precio_usd      numeric not null default 0, -- equivalente USD interno
+  km              int  not null default 0,
+  combustible     text not null,
+  transmision     text,
+  motor           text,
+  categoria       text not null,  -- categorías dinámicas (editables desde /admin/contenido)
+  es_premium      boolean not null default false,
+  estado          text not null default 'disponible' check (estado in ('disponible','reservado','vendido')),
+  imagen_principal text,
+  imagenes        jsonb not null default '[]'::jsonb,
+  descripcion     text,
+  vistas          int  not null default 0,
+  -- Ingesta desde el CRM viejo (sincronización de solo estos campos)
+  id_externo       text,          -- id del vehículo en el CRM viejo
+  origen_externo   text,          -- 'crm_viejo'
+  snapshot_externo jsonb,         -- últimos valores del CRM usados (merge de 3 vías)
+  sincronizado_en  timestamptz,
+  creado_en       timestamptz not null default now(),
+  actualizado_en  timestamptz not null default now()
+);
+
+-- Prospectos (leads) del mini-CRM: propios (web/IG/FB/catálogo) + los que se
+-- ingieran del CRM viejo (WhatsApp de la empresa, gente que va al salón).
+create table if not exists public.prospectos (
+  id               uuid primary key default gen_random_uuid(),
+  nombre_completo  text not null,
+  telefono         text,
+  email            text,
+  vehiculo_interes text,
+  origen           text not null default 'Web'
+                     check (origen in ('WhatsApp','Instagram','Web','Showroom','Referido','Facebook')),
+  estado           text not null default 'nuevo'
+                     check (estado in ('nuevo','primer_contacto','seguimiento','negociacion','vip','cerrado')),
+  notas            text,
+  fecha_contacto   date,
+  asignado_a       uuid references public.perfiles (id) on delete set null,
+  foto_url         text,
   -- Ingesta desde el CRM externo (enlatado) + atribución web
-  external_id     text,          -- id del lead en el CRM externo (dedup/sync)
-  external_source text,          -- sistema de origen: 'crm_enlatado' | 'web' | null
-  viewed_vehicles jsonb not null default '[]'::jsonb, -- autos que vio en la web (atribución)
-  synced_at       timestamptz,   -- última sincronización con el CRM externo
-  last_contact_at timestamptz not null default now(),
-  created_at      timestamptz not null default now(),
-  updated_at      timestamptz not null default now()
+  id_externo       text,          -- id del prospecto en el CRM externo (dedup/sync)
+  origen_externo   text,          -- sistema de origen: 'crm_enlatado' | 'web' | null
+  vehiculos_vistos jsonb not null default '[]'::jsonb, -- autos que vio en la web (atribución)
+  sincronizado_en  timestamptz,   -- última sincronización con el CRM externo
+  ultimo_contacto_en timestamptz not null default now(),
+  creado_en        timestamptz not null default now(),
+  actualizado_en   timestamptz not null default now()
 );
 
 -- Historias editoriales del Home (videos + fotos + testimonios)
-create table if not exists public.stories (
+create table if not exists public.historias (
   id          uuid primary key default gen_random_uuid(),
-  kind        text not null check (kind in ('video','photo','testimonial')),
-  title       text,
-  video_url   text,
-  poster_url  text,
-  duration    text,
-  caption     text,
-  quote       text,
-  author_name text,
-  author_role text,
-  order_index int not null default 0,
-  published   boolean not null default true,
-  created_at  timestamptz not null default now()
+  tipo        text not null check (tipo in ('video','photo','testimonial')),
+  titulo      text,
+  url_video   text,
+  imagen_poster text,
+  duracion    text,
+  leyenda     text,
+  cita        text,
+  autor_nombre text,
+  autor_rol   text,
+  orden       int not null default 0,
+  publicado   boolean not null default true,
+  creado_en   timestamptz not null default now()
 );
 
 -- Tráfico diario para el dashboard (Web vs Salón)
-create table if not exists public.daily_traffic (
-  day      date primary key,
-  web      int not null default 0,
-  showroom int not null default 0
+create table if not exists public.trafico_diario (
+  dia   date primary key,
+  web   int not null default 0,
+  salon int not null default 0
 );
 
 -- Contenido editable del sitio (hero, CTA, historias, galería IG, footer, redes).
 -- Clave→JSON: cada sección del editor de /admin/contenido es una fila.
-create table if not exists public.site_content (
-  key        text primary key,
-  value      jsonb not null default '{}'::jsonb,
-  updated_at timestamptz not null default now()
+create table if not exists public.contenido_sitio (
+  clave        text primary key,
+  valor        jsonb not null default '{}'::jsonb,
+  actualizado_en timestamptz not null default now()
 );
 
 -- ----------------------------------------------------------------------------
 --  ÍNDICES
 -- ----------------------------------------------------------------------------
-create index if not exists idx_vehicles_category    on public.vehicles (category);
-create index if not exists idx_vehicles_status       on public.vehicles (status);
-create index if not exists idx_leads_status          on public.leads (status);
-create index if not exists idx_leads_last_contact    on public.leads (last_contact_at desc);
--- Dedup de leads ingeridos del CRM externo (upsert por external_id)
-create unique index if not exists idx_leads_external_id
-  on public.leads (external_id) where external_id is not null;
+create index if not exists idx_vehiculos_categoria     on public.vehiculos (categoria);
+create index if not exists idx_vehiculos_estado         on public.vehiculos (estado);
+create index if not exists idx_prospectos_estado        on public.prospectos (estado);
+create index if not exists idx_prospectos_ultimo_contacto on public.prospectos (ultimo_contacto_en desc);
+-- Dedup de prospectos ingeridos del CRM externo (upsert por id_externo)
+create unique index if not exists idx_prospectos_id_externo
+  on public.prospectos (id_externo) where id_externo is not null;
+-- Dedup de vehículos ingeridos del CRM viejo (upsert por id_externo)
+create unique index if not exists idx_vehiculos_id_externo
+  on public.vehiculos (id_externo) where id_externo is not null;
 
 -- ----------------------------------------------------------------------------
---  TRIGGERS: updated_at automático + alta de perfil al registrarse
+--  TRIGGERS: actualizado_en automático + alta de perfil al iniciar sesión
 -- ----------------------------------------------------------------------------
-create or replace function public.set_updated_at()
+create or replace function public.set_actualizado_en()
 returns trigger language plpgsql as $$
 begin
-  new.updated_at = now();
+  new.actualizado_en = now();
   return new;
 end;
 $$;
 
-drop trigger if exists trg_vehicles_updated on public.vehicles;
-create trigger trg_vehicles_updated before update on public.vehicles
-  for each row execute function public.set_updated_at();
+drop trigger if exists trg_vehiculos_actualizado on public.vehiculos;
+create trigger trg_vehiculos_actualizado before update on public.vehiculos
+  for each row execute function public.set_actualizado_en();
 
-drop trigger if exists trg_leads_updated on public.leads;
-create trigger trg_leads_updated before update on public.leads
-  for each row execute function public.set_updated_at();
+drop trigger if exists trg_prospectos_actualizado on public.prospectos;
+create trigger trg_prospectos_actualizado before update on public.prospectos
+  for each row execute function public.set_actualizado_en();
 
-drop trigger if exists trg_site_content_updated on public.site_content;
-create trigger trg_site_content_updated before update on public.site_content
-  for each row execute function public.set_updated_at();
+drop trigger if exists trg_contenido_sitio_actualizado on public.contenido_sitio;
+create trigger trg_contenido_sitio_actualizado before update on public.contenido_sitio
+  for each row execute function public.set_actualizado_en();
 
+-- Alta automática de perfil: al registrarse por Supabase Auth o al validar
+-- por primera vez contra el CRM viejo (puente de login).
 create or replace function public.handle_new_user()
 returns trigger language plpgsql security definer set search_path = public as $$
 begin
-  insert into public.profiles (id, full_name, role)
+  insert into public.perfiles (id, nombre_completo, rol)
   values (
     new.id,
-    coalesce(new.raw_user_meta_data ->> 'full_name', split_part(new.email, '@', 1)),
-    'vendedor'
+    coalesce(new.raw_user_meta_data ->> 'nombre_completo', split_part(new.email, '@', 1)),
+    coalesce(new.raw_user_meta_data ->> 'rol', 'vendedor')
   )
   on conflict (id) do nothing;
   return new;
@@ -154,158 +178,141 @@ create trigger on_auth_user_created after insert on auth.users
 -- ----------------------------------------------------------------------------
 --  VISTAS para el dashboard (security_invoker => respetan RLS del consumidor)
 -- ----------------------------------------------------------------------------
-create or replace view public.v_leads_by_channel
+create or replace view public.v_prospectos_por_canal
   with (security_invoker = true) as
-select source as channel, count(*)::int as value
-from public.leads
-group by source
-order by value desc;
+select origen as canal, count(*)::int as valor
+from public.prospectos
+group by origen
+order by valor desc;
 
-create or replace view public.v_top_models
+create or replace view public.v_modelos_top
   with (security_invoker = true) as
 select
-  vehicle_interest as name,
-  count(*)::int as interest,
-  row_number() over (order by count(*) desc)::int as rank
-from public.leads
-where vehicle_interest is not null
-group by vehicle_interest
-order by interest desc
+  vehiculo_interes as nombre,
+  count(*)::int as interes,
+  row_number() over (order by count(*) desc)::int as posicion
+from public.prospectos
+where vehiculo_interes is not null
+group by vehiculo_interes
+order by interes desc
 limit 5;
 
-create or replace view public.v_weekly_traffic
+create or replace view public.v_trafico_semanal
   with (security_invoker = true) as
-select to_char(day, 'Dy') as day, web, showroom
-from public.daily_traffic
-order by day desc
+select to_char(dia, 'Dy') as dia, web, salon
+from public.trafico_diario
+order by dia desc
 limit 7;
 
-create or replace view public.v_kpi_summary
+create or replace view public.v_resumen_kpi
   with (security_invoker = true) as
 select
-  (select count(*) from public.leads where status = 'cerrado')::int as ventas_totales,
-  (select count(*) from public.leads where created_at > now() - interval '30 days')::int as nuevos_leads,
-  (select coalesce(sum(web), 0) from public.daily_traffic)::int as visitas_web,
+  (select count(*) from public.prospectos where estado = 'cerrado')::int as ventas_totales,
+  (select count(*) from public.prospectos where creado_en > now() - interval '30 days')::int as nuevos_prospectos,
+  (select coalesce(sum(web), 0) from public.trafico_diario)::int as visitas_web,
   case
-    when (select count(*) from public.leads) = 0 then 0
+    when (select count(*) from public.prospectos) = 0 then 0
     else round(
-      100.0 * (select count(*) from public.leads where status = 'cerrado')
-      / (select count(*) from public.leads), 1)
+      100.0 * (select count(*) from public.prospectos where estado = 'cerrado')
+      / (select count(*) from public.prospectos), 1)
   end as tasa_conversion;
 
 -- ----------------------------------------------------------------------------
 --  RLS (Row Level Security)
 -- ----------------------------------------------------------------------------
-alter table public.profiles      enable row level security;
-alter table public.vehicles      enable row level security;
-alter table public.leads         enable row level security;
-alter table public.stories       enable row level security;
-alter table public.daily_traffic enable row level security;
-alter table public.site_content  enable row level security;
+alter table public.perfiles        enable row level security;
+alter table public.vehiculos       enable row level security;
+alter table public.prospectos      enable row level security;
+alter table public.historias       enable row level security;
+alter table public.trafico_diario  enable row level security;
+alter table public.contenido_sitio enable row level security;
 
--- profiles: cualquier usuario autenticado lee; cada uno edita el suyo
-drop policy if exists profiles_select on public.profiles;
-create policy profiles_select on public.profiles
+-- perfiles: cualquier usuario autenticado lee; cada uno edita el suyo
+drop policy if exists perfiles_select on public.perfiles;
+create policy perfiles_select on public.perfiles
   for select to authenticated using (true);
-drop policy if exists profiles_update_own on public.profiles;
-create policy profiles_update_own on public.profiles
+drop policy if exists perfiles_update_propio on public.perfiles;
+create policy perfiles_update_propio on public.perfiles
   for update to authenticated using (auth.uid() = id);
 
--- vehicles: lectura pública (el catálogo filtra 'disponible' en la query; el
+-- vehiculos: lectura pública (el catálogo filtra 'disponible' en la query; el
 -- detalle necesita leer reservados/vendidos para la vista "ya no disponible");
 -- admin (autenticado) hace todo
-drop policy if exists vehicles_public_read on public.vehicles;
-create policy vehicles_public_read on public.vehicles
+drop policy if exists vehiculos_lectura_publica on public.vehiculos;
+create policy vehiculos_lectura_publica on public.vehiculos
   for select using (true);
-drop policy if exists vehicles_admin_all on public.vehicles;
-create policy vehicles_admin_all on public.vehicles
+drop policy if exists vehiculos_admin_todo on public.vehiculos;
+create policy vehiculos_admin_todo on public.vehiculos
   for all to authenticated using (true) with check (true);
 
--- stories: lectura pública de publicadas; admin hace todo
-drop policy if exists stories_public_read on public.stories;
-create policy stories_public_read on public.stories
-  for select using (published = true);
-drop policy if exists stories_admin_all on public.stories;
-create policy stories_admin_all on public.stories
+-- historias: lectura pública de publicadas; admin hace todo
+drop policy if exists historias_lectura_publica on public.historias;
+create policy historias_lectura_publica on public.historias
+  for select using (publicado = true);
+drop policy if exists historias_admin_todo on public.historias;
+create policy historias_admin_todo on public.historias
   for all to authenticated using (true) with check (true);
 
--- leads: insert anónimo permitido (captación web); admin lee/edita/borra
-drop policy if exists leads_public_insert on public.leads;
-create policy leads_public_insert on public.leads
+-- prospectos: insert anónimo permitido (captación web); admin lee/edita/borra
+drop policy if exists prospectos_insert_publico on public.prospectos;
+create policy prospectos_insert_publico on public.prospectos
   for insert to anon, authenticated with check (true);
-drop policy if exists leads_admin_select on public.leads;
-create policy leads_admin_select on public.leads
+drop policy if exists prospectos_admin_select on public.prospectos;
+create policy prospectos_admin_select on public.prospectos
   for select to authenticated using (true);
-drop policy if exists leads_admin_update on public.leads;
-create policy leads_admin_update on public.leads
+drop policy if exists prospectos_admin_update on public.prospectos;
+create policy prospectos_admin_update on public.prospectos
   for update to authenticated using (true);
-drop policy if exists leads_admin_delete on public.leads;
-create policy leads_admin_delete on public.leads
+drop policy if exists prospectos_admin_delete on public.prospectos;
+create policy prospectos_admin_delete on public.prospectos
   for delete to authenticated using (true);
 
--- daily_traffic: lectura admin
-drop policy if exists traffic_admin_read on public.daily_traffic;
-create policy traffic_admin_read on public.daily_traffic
+-- trafico_diario: lectura admin
+drop policy if exists trafico_admin_lectura on public.trafico_diario;
+create policy trafico_admin_lectura on public.trafico_diario
   for select to authenticated using (true);
 
--- site_content: lectura pública (el sitio la consume); escritura solo admin
-drop policy if exists site_content_public_read on public.site_content;
-create policy site_content_public_read on public.site_content
+-- contenido_sitio: lectura pública (el sitio la consume); escritura solo admin
+drop policy if exists contenido_lectura_publica on public.contenido_sitio;
+create policy contenido_lectura_publica on public.contenido_sitio
   for select using (true);
-drop policy if exists site_content_admin_write on public.site_content;
-create policy site_content_admin_write on public.site_content
+drop policy if exists contenido_admin_escritura on public.contenido_sitio;
+create policy contenido_admin_escritura on public.contenido_sitio
   for all to authenticated using (true) with check (true);
-
--- ----------------------------------------------------------------------------
---  MIGRACIONES idempotentes (para bases que ya corrieron una versión previa)
--- ----------------------------------------------------------------------------
-do $$ begin
-  -- stories.kind: permitir 'photo'
-  alter table public.stories drop constraint if exists stories_kind_check;
-  alter table public.stories add constraint stories_kind_check
-    check (kind in ('video','photo','testimonial'));
-exception when others then null; end $$;
-
--- vehicles.category: pasa a texto libre (categorías dinámicas)
-alter table public.vehicles drop constraint if exists vehicles_category_check;
-
--- leads: columnas de ingesta del CRM externo + atribución web
-alter table public.leads add column if not exists external_id     text;
-alter table public.leads add column if not exists external_source text;
-alter table public.leads add column if not exists viewed_vehicles jsonb not null default '[]'::jsonb;
-alter table public.leads add column if not exists synced_at       timestamptz;
 
 -- ----------------------------------------------------------------------------
 --  STORAGE (buckets públicos para imágenes/videos)
 -- ----------------------------------------------------------------------------
 insert into storage.buckets (id, name, public) values
-  ('vehicles', 'vehicles', true),
-  ('stories',  'stories',  true),
-  ('avatars',  'avatars',  true)
+  ('vehiculos', 'vehiculos', true),
+  ('historias', 'historias', true),
+  ('avatares',  'avatares',  true)
 on conflict (id) do nothing;
 
-drop policy if exists storage_public_read on storage.objects;
-create policy storage_public_read on storage.objects
-  for select using (bucket_id in ('vehicles', 'stories', 'avatars'));
+drop policy if exists storage_lectura_publica on storage.objects;
+create policy storage_lectura_publica on storage.objects
+  for select using (bucket_id in ('vehiculos', 'historias', 'avatares'));
 drop policy if exists storage_auth_insert on storage.objects;
 create policy storage_auth_insert on storage.objects
-  for insert to authenticated with check (bucket_id in ('vehicles', 'stories', 'avatars'));
+  for insert to authenticated with check (bucket_id in ('vehiculos', 'historias', 'avatares'));
 drop policy if exists storage_auth_update on storage.objects;
 create policy storage_auth_update on storage.objects
-  for update to authenticated using (bucket_id in ('vehicles', 'stories', 'avatars'));
+  for update to authenticated using (bucket_id in ('vehiculos', 'historias', 'avatares'));
 drop policy if exists storage_auth_delete on storage.objects;
 create policy storage_auth_delete on storage.objects
-  for delete to authenticated using (bucket_id in ('vehicles', 'stories', 'avatars'));
+  for delete to authenticated using (bucket_id in ('vehiculos', 'historias', 'avatares'));
 
 -- ----------------------------------------------------------------------------
 --  REALTIME (CRM + inventario en vivo)
 -- ----------------------------------------------------------------------------
 do $$ begin
-  alter publication supabase_realtime add table public.leads;
+  alter publication supabase_realtime add table public.prospectos;
 exception when duplicate_object then null; end $$;
 
 do $$ begin
-  alter publication supabase_realtime add table public.vehicles;
+  alter publication supabase_realtime add table public.vehiculos;
 exception when duplicate_object then null; end $$;
 
--- Listo. Ahora ejecutá seed.sql para cargar datos de ejemplo.
+-- Listo. Perfiles y vehículos se completan solos (login y sincronización con
+-- el CRM viejo). Si querés contenido de muestra en prospectos/historias/
+-- tráfico para ver el panel poblado, corré seed.sql.

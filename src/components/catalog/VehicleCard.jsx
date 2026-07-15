@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
-import { formatUSD, formatKm } from '@/lib/formatters'
+import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
 import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
@@ -173,13 +173,16 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
             <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
               {vehicle.brand}
             </p>
-            <p className="font-display text-lg font-bold text-ink">{vehicle.model}</p>
+            <p className="truncate font-display text-lg font-bold text-ink">
+              {vehicle.model}
+              {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
+            </p>
           </Link>
           {specs}
         </div>
         <div className="flex flex-col items-end justify-between py-1">
           <p className="font-display text-xl font-extrabold text-ink">
-            {formatUSD(vehicle.price_usd)}
+            {formatVehiclePrice(vehicle)}
           </p>
           {actions}
         </div>
@@ -211,7 +214,10 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
             {vehicle.brand}
           </p>
-          <p className={cn('font-display text-lg font-bold text-ink')}>{vehicle.model}</p>
+          <p className={cn('truncate font-display text-lg font-bold text-ink')}>
+            {vehicle.model}
+            {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
+          </p>
         </Link>
         <div className="mt-3">{specs}</div>
         <div className="mt-4 flex items-end justify-between">
@@ -220,7 +226,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
               Precio contado
             </p>
             <p className="font-display text-xl font-extrabold text-ink">
-              {formatUSD(vehicle.price_usd)}
+              {formatVehiclePrice(vehicle)}
             </p>
           </div>
           {actions}

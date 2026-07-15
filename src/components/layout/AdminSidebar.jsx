@@ -1,12 +1,11 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Home, Car, Users, BarChart3, LayoutTemplate, LogOut, UserCog } from 'lucide-react'
+import { Home, Car, BarChart3, LayoutTemplate, LogOut, UserCog } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/cn'
 
 const NAV = [
-  { to: '/admin/crm', label: 'Gestión CRM', icon: Users },
   { to: '/admin/catalogo', label: 'Catálogo', icon: Car },
   { to: '/admin/contenido', label: 'Contenido', icon: LayoutTemplate },
   { to: '/admin/estadisticas', label: 'Estadísticas', icon: BarChart3 },

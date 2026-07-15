@@ -11,6 +11,40 @@ const SORT_MAP = {
 const DEMO_KEY = 'nf-vehicles'
 const uid = () => 'v-' + Math.random().toString(36).slice(2, 10)
 
+/* ------------------- traducción español (Supabase) <-> app ------------------
+ * La tabla `vehiculos` en Supabase tiene columnas en español; el resto de la
+ * app (componentes, hooks, filtros, búsqueda) sigue usando los nombres en
+ * inglés de siempre. Esta es la única capa que traduce entre ambos mundos. */
+const FIELD_MAP = {
+  id: 'id', brand: 'marca', model: 'modelo', version: 'version', color: 'color',
+  year: 'anio', currency: 'moneda', price_amount: 'precio', price_usd: 'precio_usd',
+  km: 'km', fuel_type: 'combustible', transmission: 'transmision', engine: 'motor',
+  category: 'categoria', is_premium: 'es_premium', status: 'estado',
+  main_image_url: 'imagen_principal', images: 'imagenes', description: 'descripcion',
+  view_count: 'vistas', external_id: 'id_externo', external_source: 'origen_externo',
+  external_snapshot: 'snapshot_externo', external_synced_at: 'sincronizado_en',
+  created_at: 'creado_en', updated_at: 'actualizado_en',
+}
+const FIELD_MAP_REVERSE = Object.fromEntries(Object.entries(FIELD_MAP).map(([en, es]) => [es, en]))
+const dbCol = (enKey) => FIELD_MAP[enKey] || enKey
+
+function toDbVehicle(payload) {
+  const row = {}
+  for (const [enKey, val] of Object.entries(payload)) {
+    if (FIELD_MAP[enKey]) row[FIELD_MAP[enKey]] = val
+  }
+  return row
+}
+
+function toAppVehicle(row) {
+  if (!row) return row
+  const out = {}
+  for (const [esKey, val] of Object.entries(row)) {
+    out[FIELD_MAP_REVERSE[esKey] || esKey] = val
+  }
+  return out
+}
+
 /* ----------------------------- modo demo ----------------------------- */
 
 function loadDemo() {
@@ -75,49 +109,49 @@ export async function fetchVehicles({
     return applyMock(loadDemo(), { category, sort, search, filters, includeAll })
   }
 
-  let query = supabase.from('vehicles').select('*')
-  if (!includeAll) query = query.eq('status', 'disponible')
-  if (category !== 'todos') query = query.eq('category', category)
+  let query = supabase.from('vehiculos').select('*')
+  if (!includeAll) query = query.eq('estado', 'disponible')
+  if (category !== 'todos') query = query.eq('categoria', category)
   if (search) {
     const numeric = /^\d{4}$/.test(search.trim())
     query = numeric
-      ? query.or(`brand.ilike.%${search}%,model.ilike.%${search}%,year.eq.${search.trim()}`)
-      : query.or(`brand.ilike.%${search}%,model.ilike.%${search}%`)
+      ? query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%,anio.eq.${search.trim()}`)
+      : query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%`)
   }
   if (filters) {
-    if (filters.fuels?.length) query = query.in('fuel_type', filters.fuels)
-    if (filters.transmissions?.length) query = query.in('transmission', filters.transmissions)
-    if (filters.yearMin != null) query = query.gte('year', filters.yearMin)
-    if (filters.yearMax != null) query = query.lte('year', filters.yearMax)
+    if (filters.fuels?.length) query = query.in('combustible', filters.fuels)
+    if (filters.transmissions?.length) query = query.in('transmision', filters.transmissions)
+    if (filters.yearMin != null) query = query.gte('anio', filters.yearMin)
+    if (filters.yearMax != null) query = query.lte('anio', filters.yearMax)
     if (filters.kmMin != null) query = query.gte('km', filters.kmMin)
     if (filters.kmMax != null) query = query.lte('km', filters.kmMax)
   }
   const [col, asc] = SORT_MAP[sort] || SORT_MAP['price-desc']
-  query = query.order(col, { ascending: asc })
+  query = query.order(dbCol(col), { ascending: asc })
 
   const { data, error } = await query
   if (error) throw error
-  return data
+  return data.map(toAppVehicle)
 }
 
 /** Todos los vehículos sin filtrar por estado (para el panel admin). */
 export async function fetchAllVehicles() {
   if (!isSupabaseConfigured) return loadDemo()
   const { data, error } = await supabase
-    .from('vehicles')
+    .from('vehiculos')
     .select('*')
-    .order('created_at', { ascending: false })
+    .order('creado_en', { ascending: false })
   if (error) throw error
-  return data
+  return data.map(toAppVehicle)
 }
 
 export async function fetchVehicleById(id) {
   if (!isSupabaseConfigured) {
     return loadDemo().find((v) => v.id === id) || null
   }
-  const { data, error } = await supabase.from('vehicles').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('vehiculos').select('*').eq('id', id).single()
   if (error) throw error
-  return data
+  return toAppVehicle(data)
 }
 
 /* ---------------------------- mutaciones ----------------------------- */
@@ -137,9 +171,13 @@ export async function createVehicle(payload) {
     saveDemo([vehicle, ...list])
     return vehicle
   }
-  const { data, error } = await supabase.from('vehicles').insert(payload).select().single()
+  const { data, error } = await supabase
+    .from('vehiculos')
+    .insert(toDbVehicle(payload))
+    .select()
+    .single()
   if (error) throw error
-  return data
+  return toAppVehicle(data)
 }
 
 export async function updateVehicle(id, patch) {
@@ -154,13 +192,13 @@ export async function updateVehicle(id, patch) {
     return next.find((v) => v.id === id)
   }
   const { data, error } = await supabase
-    .from('vehicles')
-    .update(patch)
+    .from('vehiculos')
+    .update(toDbVehicle(patch))
     .eq('id', id)
     .select()
     .single()
   if (error) throw error
-  return data
+  return toAppVehicle(data)
 }
 
 export async function deleteVehicle(id) {
@@ -168,7 +206,7 @@ export async function deleteVehicle(id) {
     saveDemo(loadDemo().filter((v) => v.id !== id))
     return { id }
   }
-  const { error } = await supabase.from('vehicles').delete().eq('id', id)
+  const { error } = await supabase.from('vehiculos').delete().eq('id', id)
   if (error) throw error
   return { id }
 }

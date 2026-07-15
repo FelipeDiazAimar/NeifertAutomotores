@@ -6,7 +6,9 @@ export const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp']
 export const VIDEO_MIME = ['video/mp4', 'video/webm', 'video/quicktime']
 
 export const MAX_IMAGE_MB = 5
-export const MAX_VIDEO_MB = 100
+// Límite real de Instagram para Reels (1GB). Con Backblaze B2 como storage no
+// hay un tope artificial de archivo como en ImageKit/Cloudinary (100MB free).
+export const MAX_VIDEO_MB = 1024
 
 /** Relaciones de aspecto permitidas (w/h) con dimensiones objetivo. */
 export const IMAGE_RATIOS = [

@@ -11,10 +11,10 @@ export function useRealtimeLeads() {
     if (!isSupabaseConfigured) return
 
     const channel = supabase
-      .channel('public:leads')
+      .channel('public:prospectos')
       .on(
         'postgres_changes',
-        { event: '*', schema: 'public', table: 'leads' },
+        { event: '*', schema: 'public', table: 'prospectos' },
         () => {
           qc.invalidateQueries({ queryKey: ['leads'] })
           qc.invalidateQueries({ queryKey: ['lead-counts'] })

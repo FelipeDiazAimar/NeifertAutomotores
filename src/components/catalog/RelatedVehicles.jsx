@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { fetchVehicles } from '@/services/vehicles.service'
-import { formatUSD, formatKm } from '@/lib/formatters'
+import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 
 /** Carrusel horizontal con desplazamiento lento de autos de la misma
  *  categoría, ordenados por precio. Pausa al pasar el mouse. */
@@ -72,7 +72,7 @@ export default function RelatedVehicles({ current }) {
                 <p className="truncate font-display font-bold text-ink">{v.model}</p>
                 <div className="mt-1.5 flex items-center justify-between">
                   <p className="font-display text-lg font-extrabold text-ink">
-                    {formatUSD(v.price_usd)}
+                    {formatVehiclePrice(v)}
                   </p>
                   <span className="text-xs text-ink-3">{formatKm(v.km)}</span>
                 </div>

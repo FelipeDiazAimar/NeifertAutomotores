@@ -11,8 +11,6 @@ const VehicleDetailPage = lazy(() => import('@/pages/public/VehicleDetailPage'))
 const InstagramPage = lazy(() => import('@/pages/public/InstagramPage'))
 const AppointmentPage = lazy(() => import('@/pages/public/AppointmentPage'))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
-const CrmPage = lazy(() => import('@/pages/admin/CrmPage'))
-const LeadDetailPage = lazy(() => import('@/pages/admin/LeadDetailPage'))
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'))
 const AdminCatalogPage = lazy(() => import('@/pages/admin/AdminCatalogPage'))
 const AdminContentPage = lazy(() => import('@/pages/admin/AdminContentPage'))
@@ -39,8 +37,6 @@ export default function AppRouter() {
           </ProtectedRoute>
         }
       >
-        <Route path="/admin/crm" element={<CrmPage />} />
-        <Route path="/admin/crm/:id" element={<LeadDetailPage />} />
         <Route path="/admin/catalogo" element={<AdminCatalogPage />} />
         <Route path="/admin/contenido" element={<AdminContentPage />} />
         <Route path="/admin/estadisticas" element={<StatsPage />} />

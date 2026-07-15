@@ -5,26 +5,26 @@ export async function fetchStats() {
   if (!isSupabaseConfigured) return MOCK_STATS
 
   const [kpiRes, trafficRes, channelRes, modelsRes] = await Promise.all([
-    supabase.from('v_kpi_summary').select('*').single(),
-    supabase.from('v_weekly_traffic').select('*'),
-    supabase.from('v_leads_by_channel').select('*'),
-    supabase.from('v_top_models').select('*'),
+    supabase.from('v_resumen_kpi').select('*').single(),
+    supabase.from('v_trafico_semanal').select('*'),
+    supabase.from('v_prospectos_por_canal').select('*'),
+    supabase.from('v_modelos_top').select('*'),
   ])
 
   const k = kpiRes.data || {}
   const weeklyTraffic = (trafficRes.data || [])
     .slice()
     .reverse()
-    .map((r) => ({ day: r.day, web: r.web, showroom: r.showroom }))
+    .map((r) => ({ day: r.dia, web: r.web, showroom: r.salon }))
   const leadsByChannel = (channelRes.data || []).map((r) => ({
-    channel: r.channel,
-    value: r.value,
+    channel: r.canal,
+    value: r.valor,
   }))
   const topModels = (modelsRes.data || []).slice(0, 3).map((r) => ({
-    rank: r.rank,
-    name: r.name,
+    rank: r.posicion,
+    name: r.nombre,
     sub: '',
-    interest: r.interest,
+    interest: r.interes,
     sold: 0,
     delta: 0,
   }))
@@ -32,7 +32,7 @@ export async function fetchStats() {
   return {
     kpis: {
       ventasTotales: { value: k.ventas_totales ?? 0, delta: 0 },
-      nuevosLeads: { value: k.nuevos_leads ?? 0, delta: 0 },
+      nuevosLeads: { value: k.nuevos_prospectos ?? 0, delta: 0 },
       visitasWeb: { value: k.visitas_web ?? 0, delta: 0 },
       tasaConversion: { value: k.tasa_conversion ?? 0, delta: 0 },
     },

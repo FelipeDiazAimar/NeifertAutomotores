@@ -1,4 +1,4 @@
-import { formatUSD, formatKm } from './formatters'
+import { formatVehiclePrice, formatKm } from './formatters'
 
 /** Limpia un teléfono dejando solo dígitos (formato wa.me). */
 export function cleanPhone(phone) {
@@ -18,8 +18,8 @@ export function vehicleMessage(vehicle, { origin } = {}) {
   const lines = [
     `Hola! Me interesa este vehículo de Neifert Automotores:`,
     ``,
-    `🚗 ${vehicle.brand} ${vehicle.model} (${vehicle.year})`,
-    `💵 ${formatUSD(vehicle.price_usd)}`,
+    `🚗 ${vehicle.brand} ${vehicle.model}${vehicle.version ? ` ${vehicle.version}` : ''} (${vehicle.year})`,
+    `💵 ${formatVehiclePrice(vehicle)}`,
     `📊 ${formatKm(vehicle.km)} · ${vehicle.fuel_type}${
       vehicle.transmission ? ` · ${vehicle.transmission}` : ''
     }`,

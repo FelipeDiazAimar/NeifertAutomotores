@@ -4,6 +4,11 @@ import { MOCK_STORIES } from '@/lib/mockData'
 import { WHATSAPP_PHONE } from '@/lib/constants'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { fetchSiteContent, saveSiteContent, CONTENT_KEYS } from '@/services/content.service'
+import { deleteMedia } from '@/services/media.service'
+
+const cleanupMedia = (url) => {
+  if (url) deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
+}
 
 /** Contenido editable del sitio (textos, testimonios, galería de Instagram,
  *  footer y enlaces de redes). En modo demo persiste en localStorage; queda
@@ -12,7 +17,7 @@ import { fetchSiteContent, saveSiteContent, CONTENT_KEYS } from '@/services/cont
 const uid = () => Math.random().toString(36).slice(2, 10)
 
 /** Convierte un nombre en un id/slug estable (sin acentos ni símbolos). */
-const slugify = (str) =>
+export const slugify = (str) =>
   String(str)
     .toLowerCase()
     .normalize('NFD')
@@ -129,7 +134,7 @@ const DEFAULT_CONTENT = {
 
 export const useSiteStore = create(
   persist(
-    (set) => ({
+    (set, get) => ({
       ...DEFAULT_CONTENT,
 
       // Categorías de vehículos (filtros del catálogo + alta de vehículos)
@@ -155,7 +160,11 @@ export const useSiteStore = create(
 
       setSocials: (partial) =>
         set((s) => ({ socials: { ...s.socials, ...partial } })),
-      setHome: (partial) => set((s) => ({ home: { ...s.home, ...partial } })),
+      setHome: (partial) => {
+        const current = get().home
+        if ('ctaImage' in partial && partial.ctaImage !== current.ctaImage) cleanupMedia(current.ctaImage)
+        set((s) => ({ home: { ...s.home, ...partial } }))
+      },
       setInstagramMeta: (partial) =>
         set((s) => ({ instagram: { ...s.instagram, ...partial } })),
       setFooter: (partial) => set((s) => ({ footer: { ...s.footer, ...partial } })),
@@ -168,12 +177,24 @@ export const useSiteStore = create(
             { id: uid(), order_index: s.stories.length + 1, ...story },
           ],
         })),
-      updateStory: (id, partial) =>
+      updateStory: (id, partial) => {
+        const current = get().stories.find((it) => it.id === id)
+        if (current) {
+          if ('video_url' in partial && partial.video_url !== current.video_url) cleanupMedia(current.video_url)
+          if ('poster_url' in partial && partial.poster_url !== current.poster_url) cleanupMedia(current.poster_url)
+        }
         set((s) => ({
           stories: s.stories.map((it) => (it.id === id ? { ...it, ...partial } : it)),
-        })),
-      removeStory: (id) =>
-        set((s) => ({ stories: s.stories.filter((it) => it.id !== id) })),
+        }))
+      },
+      removeStory: (id) => {
+        const current = get().stories.find((it) => it.id === id)
+        if (current) {
+          cleanupMedia(current.video_url)
+          cleanupMedia(current.poster_url)
+        }
+        set((s) => ({ stories: s.stories.filter((it) => it.id !== id) }))
+      },
 
       // Galería de Instagram
       addIgItem: (item) =>
@@ -183,7 +204,9 @@ export const useSiteStore = create(
             items: [...s.instagram.items, { id: uid(), type: 'image', ...item }],
           },
         })),
-      updateIgItem: (id, partial) =>
+      updateIgItem: (id, partial) => {
+        const current = get().instagram.items.find((it) => it.id === id)
+        if (current && 'url' in partial && partial.url !== current.url) cleanupMedia(current.url)
         set((s) => ({
           instagram: {
             ...s.instagram,
@@ -191,16 +214,28 @@ export const useSiteStore = create(
               it.id === id ? { ...it, ...partial } : it
             ),
           },
-        })),
-      removeIgItem: (id) =>
+        }))
+      },
+      removeIgItem: (id) => {
+        const current = get().instagram.items.find((it) => it.id === id)
+        if (current) cleanupMedia(current.url)
         set((s) => ({
           instagram: {
             ...s.instagram,
             items: s.instagram.items.filter((it) => it.id !== id),
           },
-        })),
+        }))
+      },
 
-      resetContent: () => set({ ...DEFAULT_CONTENT }),
+      resetContent: () => {
+        const s = get()
+        s.stories.forEach((it) => {
+          cleanupMedia(it.video_url)
+          cleanupMedia(it.poster_url)
+        })
+        s.instagram.items.forEach((it) => cleanupMedia(it.url))
+        set({ ...DEFAULT_CONTENT })
+      },
     }),
     {
       name: 'nf-site-content',

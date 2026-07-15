@@ -17,6 +17,9 @@ dist-ssr
 .env.*
 !.env.example
 
+# Capturas del CRM viejo (contienen credenciales/tokens reales — nunca commitear)
+scraping/
+
 # Editor / OS
 .DS_Store
 .vscode/*

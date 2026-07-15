@@ -9,6 +9,39 @@ export const QUICK_FILTER_STATUSES = {
   finalizados: ['cerrado'],
 }
 
+/* ------------------- traducción español (Supabase) <-> app ------------------
+ * La tabla `prospectos` en Supabase tiene columnas en español; el resto de la
+ * app sigue usando los nombres en inglés de siempre (full_name, status, etc.).
+ * Esta es la única capa que traduce entre ambos mundos. */
+const FIELD_MAP = {
+  id: 'id', full_name: 'nombre_completo', phone: 'telefono', email: 'email',
+  vehicle_interest: 'vehiculo_interes', source: 'origen', status: 'estado',
+  notes: 'notas', contact_date: 'fecha_contacto', assigned_to: 'asignado_a',
+  avatar_url: 'foto_url', external_id: 'id_externo', external_source: 'origen_externo',
+  viewed_vehicles: 'vehiculos_vistos', synced_at: 'sincronizado_en',
+  last_contact_at: 'ultimo_contacto_en', created_at: 'creado_en', updated_at: 'actualizado_en',
+}
+const FIELD_MAP_REVERSE = Object.fromEntries(Object.entries(FIELD_MAP).map(([en, es]) => [es, en]))
+
+/** Exportada para que crmIntegration.service.js (ingesta del CRM externo)
+ *  reutilice la misma traducción al insertar/actualizar en bloque. */
+export function toDbLead(payload) {
+  const row = {}
+  for (const [enKey, val] of Object.entries(payload)) {
+    if (FIELD_MAP[enKey]) row[FIELD_MAP[enKey]] = val
+  }
+  return row
+}
+
+function toAppLead(row) {
+  if (!row) return row
+  const out = {}
+  for (const [esKey, val] of Object.entries(row)) {
+    out[FIELD_MAP_REVERSE[esKey] || esKey] = val
+  }
+  return out
+}
+
 // MODO DEMO: copia mutable para que los leads creados aparezcan en la sesión.
 let demoLeads = [...MOCK_LEADS]
 
@@ -30,21 +63,21 @@ function filterDemo({ quickFilter = 'todos', search = '' }) {
 export async function fetchLeads({ quickFilter = 'todos', search = '' } = {}) {
   if (!isSupabaseConfigured) return filterDemo({ quickFilter, search })
 
-  let query = supabase.from('leads').select('*').order('last_contact_at', { ascending: false })
+  let query = supabase.from('prospectos').select('*').order('ultimo_contacto_en', { ascending: false })
   const statuses = QUICK_FILTER_STATUSES[quickFilter]
-  if (statuses) query = query.in('status', statuses)
-  if (search) query = query.or(`full_name.ilike.%${search}%,vehicle_interest.ilike.%${search}%`)
+  if (statuses) query = query.in('estado', statuses)
+  if (search) query = query.or(`nombre_completo.ilike.%${search}%,vehiculo_interes.ilike.%${search}%`)
 
   const { data, error } = await query
   if (error) throw error
-  return data
+  return data.map(toAppLead)
 }
 
 export async function fetchLeadById(id) {
   if (!isSupabaseConfigured) return demoLeads.find((l) => l.id === id) || null
-  const { data, error } = await supabase.from('leads').select('*').eq('id', id).single()
+  const { data, error } = await supabase.from('prospectos').select('*').eq('id', id).single()
   if (error) throw error
-  return data
+  return toAppLead(data)
 }
 
 export async function fetchLeadCounts() {
@@ -57,9 +90,9 @@ export async function fetchLeadCounts() {
       finalizados: count('finalizados'),
     }
   }
-  const { data, error } = await supabase.from('leads').select('status')
+  const { data, error } = await supabase.from('prospectos').select('estado')
   if (error) throw error
-  const has = (statuses) => data.filter((l) => statuses.includes(l.status)).length
+  const has = (statuses) => data.filter((l) => statuses.includes(l.estado)).length
   return {
     todos: data.length,
     nuevos: has(QUICK_FILTER_STATUSES.nuevos),
@@ -81,7 +114,7 @@ export async function createLead(payload) {
     demoLeads = [lead, ...demoLeads]
     return lead
   }
-  const { data, error } = await supabase.from('leads').insert(payload).select().single()
+  const { data, error } = await supabase.from('prospectos').insert(toDbLead(payload)).select().single()
   if (error) throw error
-  return data
+  return toAppLead(data)
 }

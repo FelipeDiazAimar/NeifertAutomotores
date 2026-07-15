@@ -1,10 +1,17 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
+import { useLenis } from 'lenis/react'
 import { toast } from 'sonner'
-import { Plus, Pencil, Trash2, Link2, X, Search, Eye, MessageCircle, RefreshCw } from 'lucide-react'
+import {
+  Plus, Pencil, Trash2, Link2, X, Search, Eye, MessageCircle, RefreshCw, DatabaseZap,
+  ChevronLeft, ChevronRight,
+} from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { aggregateStats } from '@/lib/vehicleClicks'
+import { syncVehiclesFromCrm } from '@/services/crmVehicles.service'
+import { deleteMedia } from '@/services/media.service'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
@@ -12,7 +19,7 @@ import VehicleForm from '@/components/admin/VehicleForm'
 import SortDropdown from '@/components/catalog/SortDropdown'
 import FilterPanel from '@/components/catalog/FilterPanel'
 import { useAllVehicles, useVehicleMutations } from '@/hooks/useVehicles'
-import { formatUSD, formatKm } from '@/lib/formatters'
+import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleMessage } from '@/lib/whatsapp'
 import {
   EMPTY_FILTERS,
@@ -27,11 +34,70 @@ const STATUS_STYLE = {
   vendido: 'border-ink-3 text-ink-3',
 }
 
+const PAGE_SIZE = 12
+
+function Pagination({ page, totalPages, onChange }) {
+  if (totalPages <= 1) return null
+  const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
+  return (
+    <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page === 1}
+        aria-label="Página anterior"
+        className="grid h-9 w-9 place-items-center rounded-full glass text-ink-2 transition-colors hover:text-neifert disabled:opacity-40"
+      >
+        <ChevronLeft size={16} />
+      </button>
+      {pages.map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={cn(
+            'grid h-9 min-w-9 place-items-center rounded-full px-3 text-sm font-semibold transition-colors',
+            p === page ? 'bg-neifert text-white shadow-glow-red' : 'glass text-ink-2 hover:text-neifert'
+          )}
+        >
+          {p}
+        </button>
+      ))}
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page === totalPages}
+        aria-label="Página siguiente"
+        className="grid h-9 w-9 place-items-center rounded-full glass text-ink-2 transition-colors hover:text-neifert disabled:opacity-40"
+      >
+        <ChevronRight size={16} />
+      </button>
+    </div>
+  )
+}
+
 function WideModal({ open, onClose, title, children }) {
+  // Bloquea el scroll del catálogo de fondo mientras el modal está abierto
+  // (Lenis maneja el scroll suave global y si no se pausa, la ruedita del
+  // mouse sigue moviendo la página de atrás en vez del contenido del modal).
+  const lenis = useLenis()
+  useEffect(() => {
+    if (!lenis) return
+    if (open) lenis.stop()
+    else lenis.start()
+    return () => lenis.start()
+  }, [open, lenis])
+
+  useEffect(() => {
+    if (!open) return
+    document.body.style.overflow = 'hidden'
+    return () => {
+      document.body.style.overflow = ''
+    }
+  }, [open])
+
   return createPortal(
     <AnimatePresence>
       {open && (
         <motion.div
+          data-lenis-prevent
           className="fixed inset-0 z-50 grid place-items-start justify-center overflow-y-auto p-4 py-10"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
@@ -55,7 +121,7 @@ function WideModal({ open, onClose, title, children }) {
                 <X size={18} />
               </button>
             </div>
-            <div className="overflow-y-auto px-6 py-5">{children}</div>
+            <div data-lenis-prevent className="overflow-y-auto px-6 py-5">{children}</div>
           </motion.div>
         </motion.div>
       )}
@@ -68,6 +134,38 @@ export default function AdminCatalogPage() {
   const { data: vehicles = [], isLoading } = useAllVehicles()
   const { create, update, remove } = useVehicleMutations()
   const [editing, setEditing] = useState(null) // vehicle | 'new' | null
+  const qc = useQueryClient()
+  const [syncing, setSyncing] = useState(false)
+  const autoSyncedRef = useRef(false)
+
+  const runSync = async ({ silent = false } = {}) => {
+    setSyncing(true)
+    try {
+      const r = await syncVehiclesFromCrm()
+      qc.invalidateQueries({ queryKey: ['vehicles'] })
+      if (r.errors.length) {
+        toast.warning(`Sincronizado con ${r.errors.length} error(es). Ver consola.`)
+        console.warn('[crm-sync] errores:', r.errors)
+      } else if (!silent || r.created > 0 || r.updated > 0) {
+        toast.success(
+          `CRM sincronizado: ${r.created} nuevo(s), ${r.updated} actualizado(s), ${r.unchanged} sin cambios`
+        )
+      }
+    } catch (e) {
+      if (!silent) toast.error('No se pudo sincronizar con el CRM viejo: ' + e.message)
+      else console.warn('[crm-sync] auto-sync falló (silencioso):', e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Auto-sync best-effort al entrar al panel (una vez por sesión de la página)
+  useEffect(() => {
+    if (autoSyncedRef.current) return
+    autoSyncedRef.current = true
+    runSync({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Toolbar local (búsqueda / orden / filtros), independiente del catálogo público.
   const [search, setSearch] = useState('')
@@ -89,6 +187,11 @@ export default function AdminCatalogPage() {
     [vehicles, search, sort, filters]
   )
 
+  const [page, setPage] = useState(1)
+  useEffect(() => setPage(1), [search, sort, filters])
+  const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
+  const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
   const saving = create.isPending || update.isPending
 
   const onSave = async (payload) => {
@@ -97,8 +200,17 @@ export default function AdminCatalogPage() {
         await create.mutateAsync(payload)
         toast.success('Vehículo creado')
       } else {
+        const before = new Set([editing.main_image_url, ...(editing.images || [])].filter(Boolean))
+        const after = new Set([payload.main_image_url, ...(payload.images || [])].filter(Boolean))
+        const removed = [...before].filter((url) => !after.has(url))
+
         await update.mutateAsync({ id: editing.id, patch: payload })
         toast.success('Vehículo actualizado')
+
+        // Limpieza de fotos sacadas del auto (fire-and-forget, no bloquea el guardado)
+        removed.forEach((url) =>
+          deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
+        )
       }
       setEditing(null)
     } catch (e) {
@@ -110,6 +222,12 @@ export default function AdminCatalogPage() {
     if (!confirm(`¿Borrar ${v.brand} ${v.model}?`)) return
     await remove.mutateAsync(v.id)
     toast.success('Vehículo eliminado')
+
+    // Limpieza de todas sus fotos (fire-and-forget, no bloquea el borrado)
+    const urls = [...new Set([v.main_image_url, ...(v.images || [])].filter(Boolean))]
+    urls.forEach((url) =>
+      deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
+    )
   }
 
   const copyLink = async (v) => {
@@ -141,6 +259,14 @@ export default function AdminCatalogPage() {
           >
             <RefreshCw size={15} />
           </button>
+          <Button
+            variant="glass"
+            icon={DatabaseZap}
+            onClick={() => runSync()}
+            disabled={syncing}
+          >
+            {syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}
+          </Button>
           <Button icon={Plus} onClick={() => setEditing('new')}>
             Nuevo vehículo
           </Button>
@@ -176,8 +302,9 @@ export default function AdminCatalogPage() {
           <p className="text-ink-2">No hay vehículos con esos criterios.</p>
         </div>
       ) : (
+        <>
         <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-          {shown.map((v) => (
+          {pageItems.map((v) => (
             <GlassCard key={v.id} className="overflow-hidden">
               <div className="flex gap-3 p-3">
                 <div className="h-20 w-28 shrink-0 overflow-hidden rounded-xl bg-surface">
@@ -197,20 +324,33 @@ export default function AdminCatalogPage() {
                   <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
                     {v.brand}
                   </p>
-                  <p className="truncate font-display font-bold text-ink">{v.model}</p>
-                  <p className="text-sm font-extrabold text-ink">{formatUSD(v.price_usd)}</p>
+                  <p className="truncate font-display font-bold text-ink">
+                    {v.model}
+                    {v.version && <span className="text-ink-3"> {v.version}</span>}
+                  </p>
+                  <p className="text-sm font-extrabold text-ink">{formatVehiclePrice(v)}</p>
                   <p className="text-xs text-ink-3">
                     {v.year} · {formatKm(v.km)}
                   </p>
                 </div>
-                <span
-                  className={cn(
-                    'h-fit shrink-0 rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize',
-                    STATUS_STYLE[v.status] || STATUS_STYLE.disponible
+                <div className="flex h-fit shrink-0 flex-col items-end gap-1">
+                  <span
+                    className={cn(
+                      'rounded-full border px-2 py-0.5 text-[10px] font-semibold capitalize',
+                      STATUS_STYLE[v.status] || STATUS_STYLE.disponible
+                    )}
+                  >
+                    {v.status || 'disponible'}
+                  </span>
+                  {v.external_source === 'crm_viejo' && (
+                    <span
+                      title="Sincronizado desde el CRM viejo"
+                      className="rounded-full bg-ink/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-ink-3"
+                    >
+                      CRM
+                    </span>
                   )}
-                >
-                  {v.status || 'disponible'}
-                </span>
+                </div>
               </div>
               {/* Stats por vehículo */}
               {(() => {
@@ -239,6 +379,8 @@ export default function AdminCatalogPage() {
             </GlassCard>
           ))}
         </div>
+        <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+        </>
       )}
 
       <WideModal

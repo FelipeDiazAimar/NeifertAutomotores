@@ -37,6 +37,11 @@ export const LEAD_SOURCES = [
   'Facebook',
 ]
 
+/** Cotización aproximada ARS→USD, solo para ordenar/filtrar/analítica internamente
+ *  (el precio se MUESTRA siempre en su moneda original, sin convertir). Ajustar
+ *  a mano según el tipo de cambio vigente. */
+export const ARS_TO_USD_RATE = 1 / 1000
+
 export const FUEL_TYPES = ['Nafta', 'Eléctrico', 'Híbrido', 'Diésel']
 
 export const TRANSMISSIONS = ['Automática', 'Manual', 'PDK', 'M Steptronic', 'F1 Dual-Clutch']

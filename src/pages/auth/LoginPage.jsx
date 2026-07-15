@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Navigate, useLocation, useNavigate, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Mail, Lock, ArrowRight } from 'lucide-react'
+import { User, Lock, ArrowRight } from 'lucide-react'
 import { toast } from 'sonner'
 import Logo from '@/components/common/Logo'
 import Button from '@/components/common/Button'
@@ -13,9 +13,9 @@ export default function LoginPage() {
   const { signIn, isAuthenticated, isDemo, loading } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
-  const from = location.state?.from?.pathname || '/admin/crm'
+  const from = location.state?.from?.pathname || '/admin/catalogo'
 
-  const [email, setEmail] = useState('')
+  const [user, setUser] = useState('')
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
 
@@ -24,10 +24,10 @@ export default function LoginPage() {
   const handleSubmit = async (e) => {
     e.preventDefault()
     setSubmitting(true)
-    const { error } = await signIn(email, password)
+    const { error } = await signIn(user, password)
     setSubmitting(false)
     if (error) {
-      toast.error('No pudimos iniciar sesión. Revisá tus datos.')
+      toast.error(error.message || 'No pudimos iniciar sesión. Revisá tus datos.')
     } else {
       toast.success('Bienvenido a Neifert')
       navigate(from, { replace: true })
@@ -54,13 +54,13 @@ export default function LoginPage() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input
-            label="Email"
-            type="email"
-            icon={Mail}
-            placeholder="vos@neifert.com"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required={!isDemo}
+            label="Usuario"
+            type="text"
+            icon={User}
+            placeholder="Tu usuario del CRM"
+            value={user}
+            onChange={(e) => setUser(e.target.value)}
+            required
           />
           <Input
             label="Contraseña"
@@ -69,7 +69,7 @@ export default function LoginPage() {
             placeholder="••••••••"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            required={!isDemo}
+            required
           />
           <Button
             type="submit"
@@ -84,7 +84,8 @@ export default function LoginPage() {
 
         {isDemo && (
           <p className="mt-5 rounded-2xl bg-neifert/10 p-3 text-center text-xs text-ink-2">
-            Modo demo: ingresá con cualquier dato para explorar el panel.
+            Se valida contra el CRM viejo (mismo usuario y contraseña de siempre).
+            Los datos del catálogo siguen en modo demo hasta conectar Supabase.
           </p>
         )}
 

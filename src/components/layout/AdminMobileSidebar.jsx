@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Users, Car, LayoutTemplate, BarChart3, Home, UserCog, LogOut } from 'lucide-react'
+import { X, Car, LayoutTemplate, BarChart3, Home, UserCog, LogOut } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useUiStore } from '@/store/useUiStore'
@@ -8,7 +8,6 @@ import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/cn'
 
 const NAV = [
-  { to: '/admin/crm', label: 'Gestión CRM', icon: Users },
   { to: '/admin/catalogo', label: 'Catálogo', icon: Car },
   { to: '/admin/contenido', label: 'Contenido', icon: LayoutTemplate },
   { to: '/admin/estadisticas', label: 'Estadísticas', icon: BarChart3 },
