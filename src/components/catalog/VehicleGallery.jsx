@@ -27,7 +27,7 @@ export default function VehicleGallery({ images = [], alt = '', premium = false 
 
   if (pics.length === 0) {
     return (
-      <div className="grid aspect-[4/5] w-full place-items-center rounded-[24px] bg-gradient-to-br from-[#2a2a30] to-[#0b0b0f]">
+      <div className="grid aspect-square w-full place-items-center rounded-[24px] bg-gradient-to-br from-[#2a2a30] to-[#0b0b0f]">
         <span className="font-display text-2xl font-bold uppercase tracking-widest text-white/25">
           {alt}
         </span>
@@ -36,7 +36,7 @@ export default function VehicleGallery({ images = [], alt = '', premium = false 
   }
 
   return (
-    <div className="group relative aspect-[4/5] overflow-hidden rounded-[24px] shadow-glass">
+    <div className="group relative aspect-square overflow-hidden rounded-[24px] shadow-glass">
       <AnimatePresence initial={false} mode="popLayout">
         <motion.img
           key={idx}
