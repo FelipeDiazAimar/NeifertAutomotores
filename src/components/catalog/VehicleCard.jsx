@@ -7,6 +7,8 @@ import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
 import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
+import { trackEvent } from '@/services/events.service'
+import { detectSource } from '@/lib/provenance'
 import { useSiteStore } from '@/store/useSiteStore'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
@@ -105,7 +107,10 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       href={waHref}
       target="_blank"
       rel="noreferrer"
-      onClick={(e) => e.stopPropagation()}
+      onClick={(e) => {
+        e.stopPropagation()
+        trackEvent(vehicle.id, 'consulta', detectSource())
+      }}
       whileHover={{ scale: 1.1, rotate: -6 }}
       whileTap={{ scale: 0.95 }}
       aria-label="Consultar por WhatsApp"
@@ -123,6 +128,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
         e.preventDefault()
         e.stopPropagation()
         trackShareClick({ kind: 'vehicle', id: vehicle.id })
+        trackEvent(vehicle.id, 'compartir', detectSource())
         shareOrCopy({
           url: `/catalogo/${vehicle.id}?ref=share`,
           title: `${vehicle.brand} ${vehicle.model} — Neifert Automotores`,

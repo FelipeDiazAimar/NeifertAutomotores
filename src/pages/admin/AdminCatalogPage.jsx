@@ -12,6 +12,7 @@ import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { aggregateStats } from '@/lib/vehicleClicks'
 import { syncVehiclesFromCrm } from '@/services/crmVehicles.service'
 import { deleteMedia } from '@/services/media.service'
+import { trackEvent } from '@/services/events.service'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
@@ -206,6 +207,11 @@ export default function AdminCatalogPage() {
 
         await update.mutateAsync({ id: editing.id, patch: payload })
         toast.success('Vehículo actualizado')
+
+        // Pasó a "vendido" recién ahora: registra la venta real para el embudo.
+        if (payload.status === 'vendido' && editing.status !== 'vendido') {
+          trackEvent(editing.id, 'venta')
+        }
 
         // Limpieza de fotos sacadas del auto (fire-and-forget, no bloquea el guardado)
         removed.forEach((url) =>

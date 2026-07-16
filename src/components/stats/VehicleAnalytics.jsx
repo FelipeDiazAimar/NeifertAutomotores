@@ -15,9 +15,10 @@ import {
   Line,
   CartesianGrid,
 } from 'recharts'
-import { Eye, MessageCircle, TrendingUp, Radio, Share2 } from 'lucide-react'
+import { Eye, MessageCircle, TrendingUp, Radio, Share2, Expand } from 'lucide-react'
 import GlassCard from '@/components/common/GlassCard'
 import KpiCard from '@/components/crm/KpiCard'
+import TopVehiclesModal from '@/components/stats/TopVehiclesModal'
 import { fetchAllVehicles } from '@/services/vehicles.service'
 import { SOURCES, SOURCE_COLORS } from '@/lib/provenance'
 import {
@@ -31,6 +32,7 @@ import {
   shareTimeSeries,
 } from '@/lib/vehicleClicks'
 import { useChartColors } from '@/hooks/useChartColors'
+import { useEventStats } from '@/hooks/useEventStats'
 
 function CardHeader({ title, subtitle, right }) {
   return (
@@ -66,6 +68,12 @@ export default function VehicleAnalytics({ range = {} }) {
   const shortName = (id) => nameById[id] || id
 
   const r = { from: range.from ?? null, to: range.to ?? null }
+  const { data: real } = useEventStats(r)
+  const realViews = real?.totals.views
+  const realConversions = real?.totals.conversions
+  const realSales = real?.totals.sales
+  const realConvRate =
+    real && real.totals.views > 0 ? (real.totals.conversions / real.totals.views) * 100 : null
   const bySource = useMemo(() => aggregateBySource(r), [r.from, r.to])
   const stats = useMemo(() => aggregateStats(r), [r.from, r.to])
   const srcByVeh = useMemo(() => aggregateSourceByVehicleId(r), [r.from, r.to])
@@ -105,11 +113,56 @@ export default function VehicleAnalytics({ range = {} }) {
     [topIds, stats, nameById]
   )
 
+  // "Top vehículos" y "Procedencia × vehículo" en base a eventos reales
+  // (independiente de topIds/stackedData de arriba, que todavía usan datos
+  // mock — no comparten vehiculo_id con el mock, así que se arma aparte).
+  const realByVehicle = real?.byVehicle
+  const realSourceByVehicle = real?.sourceByVehicle
+  const realTopIds = useMemo(() => {
+    if (!realByVehicle) return null
+    return Object.entries(realByVehicle)
+      .sort((a, b) => b[1].views - a[1].views)
+      .slice(0, 6)
+      .map(([id]) => id)
+  }, [realByVehicle])
+
+  const realTopBarData = useMemo(() => {
+    if (!realTopIds) return null
+    return realTopIds.map((id) => ({
+      name: shortName(id),
+      vistas: realByVehicle[id].views,
+      consultas: realByVehicle[id].conversions,
+    }))
+  }, [realTopIds, realByVehicle, nameById])
+
+  const realStackedData = useMemo(() => {
+    if (!realTopIds) return null
+    return realTopIds.map((id) => {
+      const row = { name: shortName(id) }
+      const src = realSourceByVehicle?.[id] || {}
+      SOURCES.forEach((s) => (row[s] = src[s] || 0))
+      return row
+    })
+  }, [realTopIds, realSourceByVehicle, nameById])
+
+  const topVehiclesData = realTopBarData ?? topBarData
+  const stackedChartData = realStackedData ?? stackedData
+  const bySourceData = real?.bySource ?? bySource
+  const realTopSource = bySourceData.slice().sort((a, b) => b.value - a.value)[0]?.source || null
+  const shareStatsData = real?.shareStats ?? shareTot
+  const shareSeriesData = real?.shareSeries ?? shareSeries
+  const allByVehicle = realByVehicle ?? stats
+  const [showAllVehicles, setShowAllVehicles] = useState(false)
+
   const [selVeh, setSelVeh] = useState('all')
   const funnel =
     selVeh === 'all'
-      ? { views: tot.views, conversions: tot.conversions, sales: tot.sales }
-      : funnelMap[selVeh] || { views: 0, conversions: 0, sales: 0 }
+      ? {
+          views: realViews ?? tot.views,
+          conversions: realConversions ?? tot.conversions,
+          sales: realSales ?? tot.sales,
+        }
+      : (real?.byVehicle[selVeh] ?? funnelMap[selVeh] ?? { views: 0, conversions: 0, sales: 0 })
 
   const stages = [
     { label: 'Vistas', value: funnel.views, color: '#BE1E2D' },
@@ -122,23 +175,38 @@ export default function VehicleAnalytics({ range = {} }) {
     <div className="space-y-6">
       {/* KPIs reales de vistas/consultas */}
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiCard icon={Eye} accent="red" label="Vistas totales" value={tot.views.toLocaleString('es-AR')} />
-        <KpiCard icon={MessageCircle} accent="green" label="Consultas" value={tot.conversions.toLocaleString('es-AR')} />
-        <KpiCard icon={TrendingUp} accent="amber" label="Tasa de conversión" value={`${tot.convRate.toFixed(1)}%`} />
-        <KpiCard icon={Radio} accent="blue" label="Canal top" value={tot.topSource} />
+        <KpiCard
+          icon={Eye}
+          accent="red"
+          label="Vistas totales"
+          value={(realViews ?? tot.views).toLocaleString('es-AR')}
+        />
+        <KpiCard
+          icon={MessageCircle}
+          accent="green"
+          label="Consultas"
+          value={(realConversions ?? tot.conversions).toLocaleString('es-AR')}
+        />
+        <KpiCard
+          icon={TrendingUp}
+          accent="amber"
+          label="Tasa de conversión"
+          value={`${(realConvRate ?? tot.convRate).toFixed(1)}%`}
+        />
+        <KpiCard icon={Radio} accent="blue" label="Canal top" value={realTopSource || tot.topSource} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-2">
         {/* 1. Dona: vistas por procedencia */}
         <GlassCard className="p-5">
           <CardHeader title="Vistas por procedencia" subtitle="De dónde llegan las visitas" />
-          {bySource.length === 0 ? (
+          {bySourceData.length === 0 ? (
             <p className="py-16 text-center text-sm text-ink-3">Sin datos en este período.</p>
           ) : (
             <ResponsiveContainer width="100%" height={260}>
               <PieChart>
                 <Pie
-                  data={bySource}
+                  data={bySourceData}
                   dataKey="value"
                   nameKey="source"
                   innerRadius={58}
@@ -146,7 +214,7 @@ export default function VehicleAnalytics({ range = {} }) {
                   paddingAngle={2}
                   stroke="none"
                 >
-                  {bySource.map((e) => (
+                  {bySourceData.map((e) => (
                     <Cell key={e.source} fill={SOURCE_COLORS[e.source]} />
                   ))}
                 </Pie>
@@ -163,35 +231,39 @@ export default function VehicleAnalytics({ range = {} }) {
         {/* 2. Barras apiladas: procedencia × vehículo */}
         <GlassCard className="p-5">
           <CardHeader title="Procedencia × vehículo" subtitle="Top vehículos y de qué canal vinieron" />
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={stackedData} layout="vertical" margin={{ left: 8, right: 16, top: 4 }}>
-              <XAxis type="number" hide />
-              <YAxis
-                type="category"
-                dataKey="name"
-                stroke={c.muted}
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-                width={116}
-              />
-              <Tooltip cursor={{ fill: c.grid }} contentStyle={tooltipStyle(c)} />
-              {SOURCES.map((s, i) => (
-                <Bar
-                  key={s}
-                  dataKey={s}
-                  stackId="a"
-                  fill={SOURCE_COLORS[s]}
-                  radius={i === SOURCES.length - 1 ? [0, 6, 6, 0] : 0}
-                  barSize={16}
+          {stackedChartData.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-3">Sin datos en este período.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={stackedChartData} layout="vertical" margin={{ left: 8, right: 16, top: 4 }}>
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke={c.muted}
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  width={116}
                 />
-              ))}
-              <Legend
-                iconType="circle"
-                formatter={(val) => <span style={{ color: c.inkSoft, fontSize: 11 }}>{val}</span>}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+                <Tooltip cursor={{ fill: c.grid }} contentStyle={tooltipStyle(c)} />
+                {SOURCES.map((s, i) => (
+                  <Bar
+                    key={s}
+                    dataKey={s}
+                    stackId="a"
+                    fill={SOURCE_COLORS[s]}
+                    radius={i === SOURCES.length - 1 ? [0, 6, 6, 0] : 0}
+                    barSize={16}
+                  />
+                ))}
+                <Legend
+                  iconType="circle"
+                  formatter={(val) => <span style={{ color: c.inkSoft, fontSize: 11 }}>{val}</span>}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </GlassCard>
       </div>
 
@@ -250,28 +322,43 @@ export default function VehicleAnalytics({ range = {} }) {
 
         {/* 4a. Top vehículos: vistas vs consultas */}
         <GlassCard className="p-5">
-          <CardHeader title="Top vehículos" subtitle="Vistas vs. consultas por unidad" />
-          <ResponsiveContainer width="100%" height={260}>
-            <BarChart data={topBarData} layout="vertical" margin={{ left: 8, right: 16, top: 4 }}>
-              <XAxis type="number" hide />
-              <YAxis
-                type="category"
-                dataKey="name"
-                stroke={c.muted}
-                fontSize={11}
-                tickLine={false}
-                axisLine={false}
-                width={116}
-              />
-              <Tooltip cursor={{ fill: c.grid }} contentStyle={tooltipStyle(c)} />
-              <Bar dataKey="vistas" fill={c.red} radius={[0, 6, 6, 0]} barSize={9} />
-              <Bar dataKey="consultas" fill="#10B981" radius={[0, 6, 6, 0]} barSize={9} />
-              <Legend
-                iconType="circle"
-                formatter={(val) => <span style={{ color: c.inkSoft, fontSize: 11 }}>{val}</span>}
-              />
-            </BarChart>
-          </ResponsiveContainer>
+          <CardHeader
+            title="Top vehículos"
+            subtitle="Vistas vs. consultas por unidad"
+            right={
+              <button
+                onClick={() => setShowAllVehicles(true)}
+                className="flex items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:text-neifert"
+              >
+                <Expand size={13} /> Ver todos
+              </button>
+            }
+          />
+          {topVehiclesData.length === 0 ? (
+            <p className="py-16 text-center text-sm text-ink-3">Sin datos en este período.</p>
+          ) : (
+            <ResponsiveContainer width="100%" height={260}>
+              <BarChart data={topVehiclesData} layout="vertical" margin={{ left: 8, right: 16, top: 4 }}>
+                <XAxis type="number" hide />
+                <YAxis
+                  type="category"
+                  dataKey="name"
+                  stroke={c.muted}
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  width={116}
+                />
+                <Tooltip cursor={{ fill: c.grid }} contentStyle={tooltipStyle(c)} />
+                <Bar dataKey="vistas" fill={c.red} radius={[0, 6, 6, 0]} barSize={9} />
+                <Bar dataKey="consultas" fill="#10B981" radius={[0, 6, 6, 0]} barSize={9} />
+                <Legend
+                  iconType="circle"
+                  formatter={(val) => <span style={{ color: c.inkSoft, fontSize: 11 }}>{val}</span>}
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
         </GlassCard>
       </div>
 
@@ -279,7 +366,7 @@ export default function VehicleAnalytics({ range = {} }) {
       <GlassCard className="p-5">
         <CardHeader title="Vistas y consultas en el tiempo" subtitle="Evolución diaria" />
         <ResponsiveContainer width="100%" height={260}>
-          <LineChart data={series} margin={{ left: -12, right: 12, top: 4 }}>
+          <LineChart data={real?.series ?? series} margin={{ left: -12, right: 12, top: 4 }}>
             <CartesianGrid strokeDasharray="3 3" stroke={c.grid} vertical={false} />
             <XAxis dataKey="label" stroke={c.muted} fontSize={11} tickLine={false} axisLine={false} minTickGap={24} />
             <YAxis stroke={c.muted} fontSize={11} tickLine={false} axisLine={false} width={36} />
@@ -301,7 +388,7 @@ export default function VehicleAnalytics({ range = {} }) {
           subtitle="Toques en compartir vs. visitas que llegaron por un link compartido"
           right={
             <span className="inline-flex items-center gap-1.5 rounded-full bg-neifert/10 px-3 py-1 text-xs font-semibold text-neifert">
-              <Share2 size={13} /> {shareTot.rate.toFixed(0)}% conversión
+              <Share2 size={13} /> {shareStatsData.rate.toFixed(0)}% conversión
             </span>
           }
         />
@@ -309,19 +396,19 @@ export default function VehicleAnalytics({ range = {} }) {
           <div className="flex gap-4 md:flex-col md:gap-3">
             <div>
               <p className="font-display text-2xl font-extrabold text-ink">
-                {shareTot.shares.toLocaleString('es-AR')}
+                {shareStatsData.shares.toLocaleString('es-AR')}
               </p>
               <p className="text-xs text-ink-3">Compartidos</p>
             </div>
             <div>
               <p className="font-display text-2xl font-extrabold text-neifert">
-                {shareTot.visits.toLocaleString('es-AR')}
+                {shareStatsData.visits.toLocaleString('es-AR')}
               </p>
               <p className="text-xs text-ink-3">Ingresos por link</p>
             </div>
           </div>
           <ResponsiveContainer width="100%" height={220}>
-            <LineChart data={shareSeries} margin={{ left: -12, right: 12, top: 4 }}>
+            <LineChart data={shareSeriesData} margin={{ left: -12, right: 12, top: 4 }}>
               <CartesianGrid strokeDasharray="3 3" stroke={c.grid} vertical={false} />
               <XAxis dataKey="label" stroke={c.muted} fontSize={11} tickLine={false} axisLine={false} minTickGap={24} />
               <YAxis stroke={c.muted} fontSize={11} tickLine={false} axisLine={false} width={36} />
@@ -336,6 +423,13 @@ export default function VehicleAnalytics({ range = {} }) {
           </ResponsiveContainer>
         </div>
       </GlassCard>
+
+      <TopVehiclesModal
+        open={showAllVehicles}
+        onClose={() => setShowAllVehicles(false)}
+        vehicles={vehicles}
+        byVehicle={allByVehicle}
+      />
     </div>
   )
 }

@@ -1,17 +1,22 @@
 /** Procedencia de una visita: de qué canal llegó la persona.
  *  Prioridad: parámetro ?ref → referrer → first-touch de la sesión → 'Directo'. */
 
-export const SOURCES = ['Instagram', 'Facebook', 'WhatsApp', 'Web', 'Directo']
+export const SOURCES = ['Instagram', 'Facebook', 'WhatsApp', 'Web', 'Compartido', 'Directo']
 
 export const SOURCE_COLORS = {
   Instagram: '#E1306C',
   Facebook: '#1877F2',
   WhatsApp: '#25D366',
   Web: '#BE1E2D',
+  Compartido: '#F59E0B',
   Directo: '#9AA0A8',
 }
 
-/** Mapea el valor de ?ref= a un canal canónico. */
+/** Mapea el valor de ?ref= a un canal canónico. `share`/`compartido` son los
+ *  links que salen del botón "Compartir" (share nativo o copiar link): no
+ *  sabemos a qué red terminan yendo (lo decide el usuario fuera de la web),
+ *  así que se cuentan aparte y no se mezclan con "Web" (tráfico orgánico
+ *  real desde otro sitio/nota de prensa). */
 const REF_MAP = {
   ig: 'Instagram',
   instagram: 'Instagram',
@@ -21,8 +26,8 @@ const REF_MAP = {
   whatsapp: 'WhatsApp',
   wsp: 'WhatsApp',
   web: 'Web',
-  share: 'Web',
-  compartido: 'Web',
+  share: 'Compartido',
+  compartido: 'Compartido',
 }
 
 const SESSION_KEY = 'nf-provenance'

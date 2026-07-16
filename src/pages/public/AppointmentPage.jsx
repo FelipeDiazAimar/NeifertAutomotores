@@ -7,6 +7,8 @@ import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import { useSiteStore } from '@/store/useSiteStore'
 import { waLink } from '@/lib/whatsapp'
+import { trackEvent } from '@/services/events.service'
+import { detectSource } from '@/lib/provenance'
 import { fadeUp, staggerContainer } from '@/lib/animations'
 
 const MAPS_URL = 'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+898+San+Francisco+C%C3%B3rdoba+Argentina'
@@ -29,6 +31,7 @@ export default function AppointmentPage() {
 
   const onSubmit = (e) => {
     e.preventDefault()
+    trackEvent(null, 'consulta', detectSource())
     window.open(waLink(socials.whatsappPhone, buildMessage()), '_blank', 'noopener')
   }
 
@@ -151,6 +154,7 @@ export default function AppointmentPage() {
             href={waLink(socials.whatsappPhone, 'Hola! Quería hacer una consulta.')}
             target="_blank"
             rel="noreferrer"
+            onClick={() => trackEvent(null, 'consulta', detectSource())}
             className="block"
           >
             <GlassCard className="flex items-center gap-3 p-5 transition-colors hover:border-whatsapp">

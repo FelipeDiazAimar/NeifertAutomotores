@@ -11,6 +11,8 @@ import Spinner from '@/components/common/Spinner'
 import Button from '@/components/common/Button'
 import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
+import { trackEvent } from '@/services/events.service'
+import { detectSource } from '@/lib/provenance'
 import { useVehicles } from '@/hooks/useVehicles'
 
 export default function CatalogPage() {
@@ -44,6 +46,7 @@ export default function CatalogPage() {
             type="button"
             onClick={() => {
               trackShareClick({ kind: 'catalog' })
+              trackEvent(null, 'compartir', detectSource())
               shareOrCopy({
                 url: '/catalogo?ref=share',
                 title: 'Catálogo — Neifert Automotores',

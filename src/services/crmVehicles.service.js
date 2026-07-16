@@ -1,4 +1,5 @@
 import { fetchAllVehicles, createVehicle, updateVehicle } from './vehicles.service'
+import { trackEvent } from './events.service'
 import { ARS_TO_USD_RATE } from '@/lib/constants'
 import { useSiteStore, slugify } from '@/store/useSiteStore'
 
@@ -126,6 +127,13 @@ export async function syncVehiclesFromCrm() {
       } else {
         unchanged++
       }
+
+      // El CRM viejo lo marcó vendido recién ahora: registra la venta real
+      // para el embudo, igual que si se marcara a mano en nuestro panel.
+      if (patch.status === 'vendido' && local.status !== 'vendido') {
+        trackEvent(local.id, 'venta')
+      }
+
       await updateVehicle(local.id, {
         ...patch,
         external_snapshot: mapped.external_snapshot,

@@ -7,6 +7,7 @@ import { useVehicle } from '@/hooks/useVehicles'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
 import { trackVehicleClick, trackVehicleConversion, trackShareClick } from '@/lib/vehicleClicks'
+import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { shareOrCopy } from '@/lib/share'
 import { useSiteStore } from '@/store/useSiteStore'
@@ -42,6 +43,7 @@ export default function VehicleDetailPage() {
     if (id) {
       sourceRef.current = detectSource()
       trackVehicleClick(id, sourceRef.current)
+      trackEvent(id, 'vista', sourceRef.current)
     }
   }, [id])
 
@@ -77,6 +79,7 @@ export default function VehicleDetailPage() {
 
   const onShare = () => {
     trackShareClick({ kind: 'vehicle', id: v.id, source: sourceRef.current })
+    trackEvent(v.id, 'compartir', sourceRef.current)
     shareOrCopy({
       url: `/catalogo/${v.id}?ref=share`,
       title: `${v.brand} ${v.model} — Neifert Automotores`,
@@ -156,7 +159,10 @@ export default function VehicleDetailPage() {
               href={waHref}
               target="_blank"
               rel="noreferrer"
-              onClick={() => trackVehicleConversion(id, sourceRef.current)}
+              onClick={() => {
+                trackVehicleConversion(id, sourceRef.current)
+                trackVehicleEvent(id, 'consulta', sourceRef.current)
+              }}
             >
               <Button variant="whatsapp" size="lg" icon={WhatsAppIcon}>
                 {available ? 'Consultar por WhatsApp' : 'Quiero uno similar'}

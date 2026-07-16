@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import StatsDateFilter from '@/components/stats/StatsDateFilter'
 import VehicleAnalytics from '@/components/stats/VehicleAnalytics'
+import ShareLinksCard from '@/components/stats/ShareLinksCard'
 
 export default function StatsPage() {
   const [range, setRange] = useState({ from: null, to: null, label: 'Todo el período' })
@@ -20,6 +21,7 @@ export default function StatsPage() {
       </header>
 
       <VehicleAnalytics range={range} />
+      <ShareLinksCard />
     </div>
   )
 }

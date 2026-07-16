@@ -118,6 +118,29 @@ create table if not exists public.contenido_sitio (
   actualizado_en timestamptz not null default now()
 );
 
+-- Eventos reales de vehículos (vista/consulta/venta) para el dashboard de
+-- estadísticas. Un evento por interacción, con procedencia — alimenta el
+-- total de vistas y, a futuro, los gráficos por canal / serie temporal /
+-- embudo que ya están armados en /admin/estadisticas.
+create table if not exists public.eventos_vehiculo (
+  id          uuid primary key default gen_random_uuid(),
+  vehiculo_id uuid references public.vehiculos (id) on delete cascade,
+  tipo        text not null check (tipo in ('vista','consulta','venta','compartir')),
+  origen      text not null default 'Directo'
+                check (origen in ('Instagram','Facebook','WhatsApp','Web','Compartido','Directo')),
+  creado_en   timestamptz not null default now()
+);
+
+-- Amplía los checks de `tipo`/`origen` en instalaciones ya existentes
+-- (create table if not exists no reaplica constraints a una tabla que ya
+-- estaba creada).
+alter table public.eventos_vehiculo drop constraint if exists eventos_vehiculo_tipo_check;
+alter table public.eventos_vehiculo add constraint eventos_vehiculo_tipo_check
+  check (tipo in ('vista','consulta','venta','compartir'));
+alter table public.eventos_vehiculo drop constraint if exists eventos_vehiculo_origen_check;
+alter table public.eventos_vehiculo add constraint eventos_vehiculo_origen_check
+  check (origen in ('Instagram','Facebook','WhatsApp','Web','Compartido','Directo'));
+
 -- ----------------------------------------------------------------------------
 --  ÍNDICES
 -- ----------------------------------------------------------------------------
@@ -131,6 +154,9 @@ create unique index if not exists idx_prospectos_id_externo
 -- Dedup de vehículos ingeridos del CRM viejo (upsert por id_externo)
 create unique index if not exists idx_vehiculos_id_externo
   on public.vehiculos (id_externo) where id_externo is not null;
+create index if not exists idx_eventos_vehiculo_tipo    on public.eventos_vehiculo (tipo);
+create index if not exists idx_eventos_vehiculo_creado  on public.eventos_vehiculo (creado_en desc);
+create index if not exists idx_eventos_vehiculo_veh     on public.eventos_vehiculo (vehiculo_id);
 
 -- ----------------------------------------------------------------------------
 --  TRIGGERS: actualizado_en automático + alta de perfil al iniciar sesión
@@ -226,6 +252,7 @@ alter table public.prospectos      enable row level security;
 alter table public.historias       enable row level security;
 alter table public.trafico_diario  enable row level security;
 alter table public.contenido_sitio enable row level security;
+alter table public.eventos_vehiculo enable row level security;
 
 -- perfiles: cualquier usuario autenticado lee; cada uno edita el suyo
 drop policy if exists perfiles_select on public.perfiles;
@@ -279,6 +306,15 @@ create policy contenido_lectura_publica on public.contenido_sitio
 drop policy if exists contenido_admin_escritura on public.contenido_sitio;
 create policy contenido_admin_escritura on public.contenido_sitio
   for all to authenticated using (true) with check (true);
+
+-- eventos_vehiculo: insert anónimo permitido (registra vistas/consultas desde
+-- la web pública); solo admin lee (dashboard de estadísticas)
+drop policy if exists eventos_insert_publico on public.eventos_vehiculo;
+create policy eventos_insert_publico on public.eventos_vehiculo
+  for insert to anon, authenticated with check (true);
+drop policy if exists eventos_admin_select on public.eventos_vehiculo;
+create policy eventos_admin_select on public.eventos_vehiculo
+  for select to authenticated using (true);
 
 -- ----------------------------------------------------------------------------
 --  STORAGE (buckets públicos para imágenes/videos)
