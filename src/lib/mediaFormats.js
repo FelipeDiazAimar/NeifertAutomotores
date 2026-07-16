@@ -33,8 +33,6 @@ export const toMb = (bytes) => bytes / (1024 * 1024)
 export function validateImageFile(file) {
   if (!IMAGE_MIME.includes(file.type))
     return `Formato no soportado (${file.type || 'desconocido'}). Usá JPG, PNG o WebP.`
-  if (toMb(file.size) > MAX_IMAGE_MB)
-    return `La imagen pesa ${toMb(file.size).toFixed(1)}MB. Máximo ${MAX_IMAGE_MB}MB.`
   return null
 }
 
@@ -79,26 +77,53 @@ export function readImageSize(file) {
 
 /** Comprime/redimensiona una imagen a un dataURL WebP (mantiene aspecto,
  *  limita el lado más largo a maxEdge). Reduce mucho el peso para storage. */
-export async function compressImage(file, { maxEdge = IMAGE_MAX_EDGE, quality = IMAGE_QUALITY } = {}) {
+export async function compressImage(
+  file,
+  { maxEdge = IMAGE_MAX_EDGE, quality = IMAGE_QUALITY, maxBytes = MAX_IMAGE_MB * 1024 * 1024 } = {}
+) {
   const bitmap = await createImageBitmap(file)
-  let { width, height } = bitmap
-  const scale = Math.min(1, maxEdge / Math.max(width, height))
-  width = Math.round(width * scale)
-  height = Math.round(height * scale)
+  const originalWidth = bitmap.width
+  const originalHeight = bitmap.height
+  let edge = Math.min(maxEdge, Math.max(originalWidth, originalHeight))
+  let output
 
-  const canvas = document.createElement('canvas')
-  canvas.width = width
-  canvas.height = height
-  const ctx = canvas.getContext('2d')
-  ctx.drawImage(bitmap, 0, 0, width, height)
-  bitmap.close?.()
-
-  let dataUrl = canvas.toDataURL('image/webp', quality)
-  // Fallback si el navegador no soporta WebP en canvas.
-  if (!dataUrl.startsWith('data:image/webp')) {
-    dataUrl = canvas.toDataURL('image/jpeg', quality)
+  // Baja primero la calidad y, solo si hace falta, las dimensiones.
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const scale = edge / Math.max(originalWidth, originalHeight)
+    const width = Math.max(1, Math.round(originalWidth * scale))
+    const height = Math.max(1, Math.round(originalHeight * scale))
+    const canvas = document.createElement('canvas')
+    canvas.width = width
+    canvas.height = height
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, width, height)
+    const attemptQuality = Math.max(0.5, quality - attempt * 0.05)
+    const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', attemptQuality))
+    if (!blob) throw new Error('El navegador no pudo comprimir la imagen.')
+    output = { blob, width, height }
+    if (blob.size <= maxBytes) break
+    edge = Math.round(edge * 0.82)
   }
-  return { dataUrl, width, height }
+  bitmap.close?.()
+  if (!output || output.blob.size > maxBytes)
+    throw new Error(`No se pudo reducir la imagen a ${MAX_IMAGE_MB}MB.`)
+  return output
+}
+
+/** Recorta una imagen con un cuadro 1:1 y devuelve un archivo WebP. */
+export async function cropImageToSquare(file, { x = 0.5, y = 0.5, zoom = 1 } = {}) {
+  const bitmap = await createImageBitmap(file)
+  const side = Math.min(bitmap.width, bitmap.height) / zoom
+  const sx = Math.max(0, Math.min(bitmap.width - side, x * (bitmap.width - side)))
+  const sy = Math.max(0, Math.min(bitmap.height - side, y * (bitmap.height - side)))
+  const outputSide = Math.min(IMAGE_MAX_EDGE, Math.round(side))
+  const canvas = document.createElement('canvas')
+  canvas.width = outputSide
+  canvas.height = outputSide
+  canvas.getContext('2d').drawImage(bitmap, sx, sy, side, side, 0, 0, outputSide, outputSide)
+  bitmap.close?.()
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.94))
+  if (!blob) throw new Error('El navegador no pudo recortar la imagen.')
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'imagen'}.webp`, { type: 'image/webp' })
 }
 
 /** Metadata de un video (dimensiones + duración). Devuelve también la object

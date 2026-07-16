@@ -34,6 +34,15 @@ function extFor(file) {
   return map[file.type] || 'bin'
 }
 
+function blobToDataUrl(blob) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result)
+    reader.onerror = () => reject(reader.error)
+    reader.readAsDataURL(blob)
+  })
+}
+
 /** Sube un blob a R2 vía URL firmada, con progreso real (XHR: fetch no expone
  *  upload progress). Devuelve la URL pública, o null si R2 no está configurado. */
 function uploadToR2(path, blob, contentType, onProgress) {
@@ -78,8 +87,7 @@ export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress 
       : null
 
   onProgress?.(0.3)
-  const { dataUrl, width: cw, height: ch } = await compressImage(file)
-  const blob = await (await fetch(dataUrl)).blob()
+  const { blob, width: cw, height: ch } = await compressImage(file)
   onProgress?.(0.5)
 
   const path = `${bucket}/${Date.now()}-${uid()}.webp`
@@ -88,7 +96,7 @@ export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress 
 
   if (!isSupabaseConfigured) {
     onProgress?.(1)
-    return { url: dataUrl, width: cw, height: ch, ratio: ratio.id, warning, demo: true }
+    return { url: await blobToDataUrl(blob), width: cw, height: ch, ratio: ratio.id, warning, demo: true }
   }
 
   const { error } = await supabase.storage
