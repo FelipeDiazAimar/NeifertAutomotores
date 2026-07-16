@@ -5,7 +5,7 @@ import { ArrowLeft, Gauge, Fuel, Settings2, Calendar, Share2, AlertCircle } from
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { useVehicle } from '@/hooks/useVehicles'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
-import { vehicleWaLink } from '@/lib/whatsapp'
+import { similarVehicleMessage, vehicleWaLink } from '@/lib/whatsapp'
 import { trackVehicleClick, trackVehicleConversion, trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
@@ -74,7 +74,7 @@ export default function VehicleDetailPage() {
 
   const waMessage = available
     ? undefined
-    : `Hola! Vi el ${v.brand} ${v.model} (${statusLabel}). ¿Tenés algo similar disponible?`
+    : similarVehicleMessage(v, statusLabel)
   const waHref = vehicleWaLink(phone, v, waMessage)
 
   const onShare = () => {
@@ -161,7 +161,7 @@ export default function VehicleDetailPage() {
               rel="noreferrer"
               onClick={() => {
                 trackVehicleConversion(id, sourceRef.current)
-                trackVehicleEvent(id, 'consulta', sourceRef.current)
+                trackEvent(id, 'consulta', sourceRef.current)
               }}
             >
               <Button variant="whatsapp" size="lg" icon={WhatsAppIcon}>

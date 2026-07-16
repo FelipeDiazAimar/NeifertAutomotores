@@ -6,7 +6,7 @@ import Input from '@/components/common/Input'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import { useSiteStore } from '@/store/useSiteStore'
-import { waLink } from '@/lib/whatsapp'
+import { appointmentMessage, CONTACT_INQUIRY_MESSAGE, waLink } from '@/lib/whatsapp'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { fadeUp, staggerContainer } from '@/lib/animations'
@@ -20,13 +20,13 @@ export default function AppointmentPage() {
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
   const buildMessage = () => {
-    const lines = ['Hola! Quería coordinar una cita en Neifert Automotores.', '']
+    const lines = []
     if (form.name)    lines.push(`👤 Nombre: ${form.name}`)
     if (form.phone)   lines.push(`📞 Teléfono: ${form.phone}`)
     if (form.when)    lines.push(`🗓️ Preferencia: ${form.when}`)
     if (form.vehicle) lines.push(`🚗 Vehículo de interés: ${form.vehicle}`)
     if (form.notes)   lines.push('', form.notes)
-    return lines.join('\n')
+    return appointmentMessage(lines.join('\n'))
   }
 
   const onSubmit = (e) => {
@@ -151,7 +151,7 @@ export default function AppointmentPage() {
 
           {/* WhatsApp directo */}
           <a
-            href={waLink(socials.whatsappPhone, 'Hola! Quería hacer una consulta.')}
+            href={waLink(socials.whatsappPhone, CONTACT_INQUIRY_MESSAGE)}
             target="_blank"
             rel="noreferrer"
             onClick={() => trackEvent(null, 'consulta', detectSource())}

@@ -5,6 +5,7 @@ import GlassCard from '@/components/common/GlassCard'
 import { LEAD_STATUSES, WHATSAPP_PHONE } from '@/lib/constants'
 import { formatRelative } from '@/lib/formatters'
 import { cn } from '@/lib/cn'
+import { leadFollowUpMessage } from '@/lib/whatsapp'
 
 function Avatar({ lead }) {
   return (
@@ -23,7 +24,7 @@ function Avatar({ lead }) {
 
 export default function LeadCard({ lead }) {
   const waHref = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(
-    `Hola ${lead.full_name}, te contacto de Neifert Automotores.`
+    leadFollowUpMessage(lead)
   )}`
   const status = LEAD_STATUSES[lead.status]
 

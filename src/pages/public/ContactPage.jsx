@@ -2,7 +2,7 @@ import { Mail, MapPin, Phone, ExternalLink } from 'lucide-react'
 import { FacebookIcon, InstagramIcon, WhatsAppIcon } from '@/components/common/SocialIcons'
 import GlassCard from '@/components/common/GlassCard'
 import { useSiteStore } from '@/store/useSiteStore'
-import { waLink } from '@/lib/whatsapp'
+import { CONTACT_INQUIRY_MESSAGE, waLink } from '@/lib/whatsapp'
 
 const mapsUrl = 'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+898+San+Francisco+C%C3%B3rdoba+Argentina'
 
@@ -12,7 +12,7 @@ export default function ContactPage() {
   const email = socials.email || 'neifertsanfrancisco@gmail.com'
   const address = socials.address || 'Av. Urquiza 898, San Francisco, Córdoba'
   const contacts = [
-    { label: 'WhatsApp', detail: '+54 3564 562413', href: waLink(socials.whatsappPhone, 'Hola! Quería hacer una consulta.'), icon: WhatsAppIcon, external: true, color: 'text-whatsapp' },
+    { label: 'WhatsApp', detail: '+54 3564 562413', href: waLink(socials.whatsappPhone, CONTACT_INQUIRY_MESSAGE), icon: WhatsAppIcon, external: true, color: 'text-whatsapp' },
     { label: 'Teléfono', detail: phone, href: `tel:${phone.replace(/\D/g, '')}`, icon: Phone, color: 'text-neifert' },
     { label: 'Correo electrónico', detail: email, href: `mailto:${email}`, icon: Mail, color: 'text-neifert' },
     { label: 'Instagram', detail: '@neifertautomotores', href: socials.instagram, icon: InstagramIcon, external: true, color: 'text-neifert' },

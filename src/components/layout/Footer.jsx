@@ -3,7 +3,7 @@ import { MapPin } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import { InstagramIcon, FacebookIcon, WhatsAppIcon, XIcon } from '@/components/common/SocialIcons'
 import { useSiteStore } from '@/store/useSiteStore'
-import { waLink } from '@/lib/whatsapp'
+import { CONTACT_INQUIRY_MESSAGE, waLink } from '@/lib/whatsapp'
 
 const MAPS_URL =
   'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+898+San+Francisco+C%C3%B3rdoba+Argentina'
@@ -72,7 +72,7 @@ export default function Footer() {
               )}
               {socials.whatsappPhone && (
                 <a
-                  href={waLink(socials.whatsappPhone, 'Hola! Quería hacer una consulta.')}
+                  href={waLink(socials.whatsappPhone, CONTACT_INQUIRY_MESSAGE)}
                   target="_blank"
                   rel="noreferrer"
                   aria-label="WhatsApp"

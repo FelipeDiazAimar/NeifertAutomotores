@@ -1,13 +1,13 @@
 import { motion } from 'framer-motion'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
-import { waLink } from '@/lib/whatsapp'
+import { GENERAL_INQUIRY_MESSAGE, waLink } from '@/lib/whatsapp'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { useSiteStore } from '@/store/useSiteStore'
 
 /** Botón flotante de WhatsApp. Sobre el tab-bar en mobile. */
 export default function WhatsAppFab({
-  message = 'Hola! Quería consultar por un vehículo de Neifert Automotores.',
+  message = GENERAL_INQUIRY_MESSAGE,
 }) {
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const href = waLink(phone, message)

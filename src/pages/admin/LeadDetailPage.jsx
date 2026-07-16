@@ -8,6 +8,7 @@ import Spinner from '@/components/common/Spinner'
 import LeadStatusBadge from '@/components/crm/LeadStatusBadge'
 import { formatDateTime } from '@/lib/formatters'
 import { WHATSAPP_PHONE } from '@/lib/constants'
+import { leadFollowUpMessage } from '@/lib/whatsapp'
 
 function Row({ icon: Icon, label, value }) {
   return (
@@ -47,7 +48,7 @@ export default function LeadDetailPage() {
   }
 
   const waHref = `https://wa.me/${WHATSAPP_PHONE}?text=${encodeURIComponent(
-    `Hola ${lead.full_name}, te contacto de Neifert Automotores.`
+    leadFollowUpMessage(lead)
   )}`
 
   return (

@@ -21,7 +21,7 @@ import SortDropdown from '@/components/catalog/SortDropdown'
 import FilterPanel from '@/components/catalog/FilterPanel'
 import { useAllVehicles, useVehicleMutations } from '@/hooks/useVehicles'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
-import { vehicleMessage } from '@/lib/whatsapp'
+import { vehicleOfferMessage } from '@/lib/whatsapp'
 import {
   EMPTY_FILTERS,
   countActiveFilters,
@@ -243,8 +243,8 @@ export default function AdminCatalogPage() {
   }
 
   const copyWa = async (v) => {
-    await navigator.clipboard.writeText(vehicleMessage(v, { origin: window.location.origin }))
-    toast.success('Mensaje de WhatsApp copiado')
+    await navigator.clipboard.writeText(vehicleOfferMessage(v, { origin: window.location.origin }))
+    toast.success('Mensaje comercial de WhatsApp copiado')
   }
 
   return (
