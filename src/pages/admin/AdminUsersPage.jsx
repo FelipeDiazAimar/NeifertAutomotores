@@ -1,47 +1,19 @@
-import { useState } from 'react'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { motion } from 'framer-motion'
-import { UserPlus, Mail, Shield, ShieldCheck, Trash2, KeyRound, Info } from 'lucide-react'
+import { Shield, ShieldCheck, Trash2, Info, IdCard } from 'lucide-react'
 import { toast } from 'sonner'
 import GlassCard from '@/components/common/GlassCard'
-import Button from '@/components/common/Button'
-import Badge from '@/components/common/Badge'
+import Spinner from '@/components/common/Spinner'
 import { useAuth } from '@/hooks/useAuth'
+import { fetchUsers, deleteUser } from '@/services/users.service'
 import { cn } from '@/lib/cn'
 import { fadeUp, staggerContainer } from '@/lib/animations'
 
-const ROLE_LABEL = { gerente: 'Gerente', vendedor: 'Vendedor' }
-const ROLE_ICON = { gerente: ShieldCheck, vendedor: Shield }
-
-// Usuarios de demostración. Con Supabase real se consulta la tabla `profiles`.
-const DEMO_USERS = [
-  {
-    id: 'u1',
-    full_name: 'Marcos Neifert',
-    email: 'marcos@neifertautomotores.com',
-    role: 'gerente',
-    created_at: '2024-01-15',
-    avatar_url: null,
-  },
-  {
-    id: 'u2',
-    full_name: 'Ana García',
-    email: 'ana@neifertautomotores.com',
-    role: 'vendedor',
-    created_at: '2024-03-20',
-    avatar_url: null,
-  },
-  {
-    id: 'u3',
-    full_name: 'Carlos Ibáñez',
-    email: 'carlos@neifertautomotores.com',
-    role: 'vendedor',
-    created_at: '2024-06-01',
-    avatar_url: null,
-  },
-]
+const ROLE_LABEL = { admin: 'Admin', vendedor: 'Vendedor' }
+const ROLE_ICON = { admin: ShieldCheck, vendedor: Shield }
 
 function Avatar({ user, size = 40 }) {
-  const initials = (user.full_name || user.email || '?')
+  const initials = (user.full_name || user.crm_user || '?')
     .split(' ')
     .slice(0, 2)
     .map((w) => w[0])
@@ -64,176 +36,140 @@ function Avatar({ user, size = 40 }) {
   )
 }
 
-function InviteModal({ onClose }) {
-  const [email, setEmail] = useState('')
-  const [role, setRole] = useState('vendedor')
-
-  const send = (e) => {
-    e.preventDefault()
-    toast.info('Modo demo: la invitación no se envía. Conectá Supabase Auth para habilitar esta función.')
-    onClose()
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 grid place-items-center p-4">
-      <div className="fixed inset-0 bg-black/50 backdrop-blur-sm" onClick={onClose} />
-      <motion.div
-        initial={{ scale: 0.95, opacity: 0 }}
-        animate={{ scale: 1, opacity: 1 }}
-        exit={{ scale: 0.95, opacity: 0 }}
-        className="glass relative z-10 w-full max-w-sm rounded-[20px] p-6 shadow-glass"
-      >
-        <h3 className="mb-4 font-display text-lg font-bold text-ink">Invitar usuario</h3>
-        <form onSubmit={send} className="space-y-4">
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-2">Email</label>
-            <input
-              type="email"
-              required
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              placeholder="usuario@empresa.com"
-              className="glass w-full rounded-xl px-4 py-2.5 text-sm text-ink outline-none placeholder:text-ink-3 focus:ring-2 focus:ring-neifert/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs font-semibold text-ink-2">Rol</label>
-            <div className="flex gap-2">
-              {['gerente', 'vendedor'].map((r) => (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => setRole(r)}
-                  className={cn(
-                    'flex-1 rounded-xl border py-2 text-sm font-medium transition-colors',
-                    role === r
-                      ? 'border-neifert bg-neifert/10 text-neifert'
-                      : 'border-line text-ink-2 hover:border-neifert/40'
-                  )}
-                >
-                  {ROLE_LABEL[r]}
-                </button>
-              ))}
-            </div>
-          </div>
-          <div className="flex gap-2 pt-1">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-xl border border-line py-2.5 text-sm font-medium text-ink-2 transition-colors hover:border-neifert/40"
-            >
-              Cancelar
-            </button>
-            <Button type="submit" icon={Mail} className="flex-1">
-              Enviar invitación
-            </Button>
-          </div>
-        </form>
-      </motion.div>
-    </div>
-  )
-}
-
 export default function AdminUsersPage() {
-  const { profile } = useAuth()
-  const [showInvite, setShowInvite] = useState(false)
+  const { session, isDemo } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data: users = [], isLoading } = useQuery({ queryKey: ['perfiles'], queryFn: fetchUsers })
+
+  const removeMutation = useMutation({
+    mutationFn: deleteUser,
+    onSuccess: () => {
+      toast.success('Usuario eliminado')
+      queryClient.invalidateQueries({ queryKey: ['perfiles'] })
+    },
+    onError: (e) => toast.error('No se pudo eliminar: ' + e.message),
+  })
 
   const onDelete = (u) => {
-    toast.info('Modo demo: no se pueden eliminar usuarios. Conectá Supabase Auth.')
-  }
-
-  const onResetPassword = (u) => {
-    toast.info('Modo demo: el reseteo de contraseña requiere Supabase Auth configurado.')
+    if (!confirm(`¿Eliminar el acceso de ${u.full_name}? Si vuelve a entrar con credenciales válidas del CRM, se le crea de nuevo.`)) return
+    removeMutation.mutate(u.id)
   }
 
   return (
     <section>
-      <motion.div
-        variants={staggerContainer(0.06)}
-        initial="hidden"
-        animate="show"
-      >
-        <motion.div variants={fadeUp} className="mb-6 flex items-end justify-between gap-4">
-          <div>
-            <p className="text-xs font-bold uppercase tracking-wider text-neifert">Administración</p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Usuarios</h1>
-            <p className="mt-1 text-sm text-ink-3">Gestioná quién tiene acceso al panel admin</p>
-          </div>
-          <Button icon={UserPlus} onClick={() => setShowInvite(true)}>
-            Invitar usuario
-          </Button>
+      <motion.div variants={staggerContainer(0.06)} initial="hidden" animate="show">
+        <motion.div variants={fadeUp} className="mb-6">
+          <p className="text-xs font-bold uppercase tracking-wider text-neifert">Administración</p>
+          <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Usuarios</h1>
+          <p className="mt-1 text-sm text-ink-3">Quién tiene acceso al panel admin</p>
         </motion.div>
 
-        {/* Banner modo demo */}
+        {isDemo && (
+          <motion.div variants={fadeUp}>
+            <GlassCard className="mb-6 flex items-start gap-3 p-4">
+              <Info size={18} className="mt-0.5 shrink-0 text-neifert" />
+              <div className="text-sm text-ink-2">
+                <span className="font-semibold text-ink">Modo demo activo.</span> Los usuarios
+                mostrados son de muestra. Conectá Supabase (.env) para ver los reales.
+              </div>
+            </GlassCard>
+          </motion.div>
+        )}
+
+        {/* Cómo se suma alguien: no hay invitación, el CRM viejo es la única
+         *  fuente de identidad — el perfil se crea solo en el primer login. */}
         <motion.div variants={fadeUp}>
           <GlassCard className="mb-6 flex items-start gap-3 p-4">
-            <Info size={18} className="mt-0.5 shrink-0 text-neifert" />
+            <IdCard size={18} className="mt-0.5 shrink-0 text-neifert" />
             <div className="text-sm text-ink-2">
-              <span className="font-semibold text-ink">Modo demo activo.</span> Los usuarios mostrados son de muestra. Para gestionar accesos reales conectá{' '}
-              <span className="font-semibold">Supabase Auth</span> con las variables de entorno.
+              <span className="font-semibold text-ink">¿Cómo se suma un usuario nuevo?</span> No
+              hay que invitarlo desde acá: el ingreso al panel se hace con el usuario y contraseña
+              del CRM viejo (neifertcrm.com). En cuanto esa persona inicia sesión por primera vez
+              con credenciales válidas, aparece automáticamente en esta lista.
             </div>
           </GlassCard>
         </motion.div>
 
-        {/* Lista de usuarios */}
-        <motion.div variants={fadeUp} className="space-y-3">
-          {DEMO_USERS.map((u) => {
-            const RoleIcon = ROLE_ICON[u.role] || Shield
-            const isCurrentUser = profile?.email === u.email
-            return (
-              <GlassCard key={u.id} className="flex items-center gap-4 p-4">
-                <Avatar user={u} size={44} />
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-2">
-                    <p className="font-semibold text-ink">{u.full_name}</p>
-                    {isCurrentUser && (
-                      <span className="rounded-full bg-neifert/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neifert">
-                        Tú
-                      </span>
+        {isLoading ? (
+          <div className="grid place-items-center py-16">
+            <Spinner size={28} />
+          </div>
+        ) : (
+          <motion.div variants={fadeUp} className="space-y-3">
+            {users.map((u) => {
+              const RoleIcon = ROLE_ICON[u.role] || Shield
+              const isCurrentUser = session?.user?.id === u.id
+              return (
+                <GlassCard key={u.id} className="flex items-center gap-4 p-4">
+                  <Avatar user={u} size={44} />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-ink">{u.full_name}</p>
+                      {isCurrentUser && (
+                        <span className="rounded-full bg-neifert/10 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider text-neifert">
+                          Tú
+                        </span>
+                      )}
+                    </div>
+                    {u.crm_user && <p className="text-sm text-ink-3">Usuario CRM: {u.crm_user}</p>}
+                    {u.created_at && (
+                      <p className="mt-0.5 text-xs text-ink-3">
+                        Desde{' '}
+                        {new Date(u.created_at).toLocaleDateString('es-AR', {
+                          day: 'numeric',
+                          month: 'long',
+                          year: 'numeric',
+                        })}
+                      </p>
                     )}
                   </div>
-                  <p className="text-sm text-ink-3">{u.email}</p>
-                  <p className="mt-0.5 text-xs text-ink-3">
-                    Desde {new Date(u.created_at).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })}
-                  </p>
-                </div>
-                <div className="flex shrink-0 items-center gap-2">
-                  <span className={cn(
-                    'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
-                    u.role === 'gerente'
-                      ? 'bg-neifert/10 text-neifert'
-                      : 'bg-surface text-ink-2'
-                  )}>
-                    <RoleIcon size={12} /> {ROLE_LABEL[u.role]}
-                  </span>
-                  <button
-                    onClick={() => onResetPassword(u)}
-                    title="Resetear contraseña"
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-ink"
-                  >
-                    <KeyRound size={15} />
-                  </button>
-                  {!isCurrentUser && (
-                    <button
-                      onClick={() => onDelete(u)}
-                      title="Eliminar usuario"
-                      className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
+                  <div className="flex shrink-0 items-center gap-2">
+                    <span
+                      title="El rol lo define el CRM viejo en cada login"
+                      className={cn(
+                        'flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold',
+                        u.role === 'admin' ? 'bg-neifert/10 text-neifert' : 'bg-surface text-ink-2'
+                      )}
                     >
-                      <Trash2 size={15} />
-                    </button>
-                  )}
-                </div>
-              </GlassCard>
-            )
-          })}
-        </motion.div>
+                      <RoleIcon size={12} /> {ROLE_LABEL[u.role] || u.role || 'Sin rol'}
+                    </span>
+                    {!isCurrentUser && (
+                      <button
+                        onClick={() => onDelete(u)}
+                        disabled={removeMutation.isPending}
+                        title="Eliminar acceso"
+                        className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert disabled:opacity-50"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    )}
+                  </div>
+                </GlassCard>
+              )
+            })}
+            {users.length === 0 && (
+              <p className="py-10 text-center text-sm text-ink-3">
+                Todavía nadie inició sesión en el panel.
+              </p>
+            )}
+          </motion.div>
+        )}
 
         {/* Resumen de roles */}
         <motion.div variants={fadeUp} className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3">
           {[
-            { label: 'Usuarios totales', value: DEMO_USERS.length, color: 'text-ink' },
-            { label: 'Gerentes', value: DEMO_USERS.filter((u) => u.role === 'gerente').length, color: 'text-neifert' },
-            { label: 'Vendedores', value: DEMO_USERS.filter((u) => u.role === 'vendedor').length, color: 'text-ink-2' },
+            { label: 'Usuarios totales', value: users.length, color: 'text-ink' },
+            {
+              label: 'Admins',
+              value: users.filter((u) => u.role === 'admin').length,
+              color: 'text-neifert',
+            },
+            {
+              label: 'Vendedores',
+              value: users.filter((u) => u.role === 'vendedor').length,
+              color: 'text-ink-2',
+            },
           ].map(({ label, value, color }) => (
             <GlassCard key={label} className="p-4 text-center">
               <p className={cn('text-3xl font-extrabold font-display', color)}>{value}</p>
@@ -242,8 +178,6 @@ export default function AdminUsersPage() {
           ))}
         </motion.div>
       </motion.div>
-
-      {showInvite && <InviteModal onClose={() => setShowInvite(false)} />}
     </section>
   )
 }

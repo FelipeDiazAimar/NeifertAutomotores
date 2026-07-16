@@ -5,6 +5,7 @@ import path from 'node:path'
 import { instagramProxyPlugin } from './src/plugins/instagramProxy.js'
 import { crmProxyPlugin } from './src/plugins/crmProxy.js'
 import { r2ProxyPlugin } from './src/plugins/r2Proxy.js'
+import { usersProxyPlugin } from './src/plugins/usersProxy.js'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -30,6 +31,10 @@ export default defineConfig(({ mode }) => {
         bucket: env.R2_BUCKET_NAME,
         endpoint: env.R2_ENDPOINT,
         publicUrlBase: env.R2_PUBLIC_URL,
+      }),
+      usersProxyPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL,
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
       }),
     ],
     resolve: {

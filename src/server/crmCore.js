@@ -95,8 +95,10 @@ export async function bridgeCrmSession({ supabaseUrl, supabaseServiceRoleKey, us
     userId = created.user.id
   }
 
-  // Mantiene el perfil al día con lo que dice el CRM viejo (nombre/rol)
-  await admin.from('perfiles').upsert({ id: userId, nombre_completo: nombre, rol: role }, { onConflict: 'id' })
+  // Mantiene el perfil al día con lo que dice el CRM viejo (nombre/rol/usuario)
+  await admin
+    .from('perfiles')
+    .upsert({ id: userId, nombre_completo: nombre, rol: role, usuario_crm: user }, { onConflict: 'id' })
 
   const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: 'magiclink', email })
   if (linkErr) throw linkErr

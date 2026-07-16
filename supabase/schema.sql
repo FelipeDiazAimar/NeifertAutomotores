@@ -22,8 +22,14 @@ create table if not exists public.perfiles (
   nombre_completo text not null default 'Usuario',
   rol            text not null default 'vendedor',
   foto_url       text,
+  -- Usuario del CRM viejo con el que inició sesión (puente). Es informativo:
+  -- el rol y la contraseña reales siguen viviendo en el CRM viejo, no acá.
+  usuario_crm    text,
   creado_en      timestamptz not null default now()
 );
+
+-- Agrega la columna en instalaciones ya existentes.
+alter table public.perfiles add column if not exists usuario_crm text;
 
 -- Inventario de vehículos. Se completa sincronizando con el CRM viejo
 -- (marca/modelo/precio/estado/etc.); fotos y descripción de marketing son
