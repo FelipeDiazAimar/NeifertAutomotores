@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { Check, Loader2, Star, UploadCloud, X } from 'lucide-react'
+import { Check, Loader2, RotateCw, Star, UploadCloud, X } from 'lucide-react'
 import { uploadImageMedia } from '@/services/media.service'
-import { MAX_IMAGE_MB, cropImageToSquare } from '@/lib/mediaFormats'
+import { MAX_IMAGE_MB, cropImageToSquare, rotateImageClockwise } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 
 /** Carga fotos de vehículos: recorte 1:1 obligatorio y compresión WebP a 5 MB. */
@@ -103,18 +103,16 @@ export default function ImageUploader({ value = [], onChange, multiple = true })
     })
   }
 
-  const zoomWithWheel = (event) => {
-    event.preventDefault()
-    if (!cropImageSize) return
-    setCrop((state) => {
-      const nextZoom = Math.max(1, Math.min(3, state.zoom * (event.deltaY > 0 ? 0.9 : 1.1)))
-      const minSide = Math.min(cropImageSize.width, cropImageSize.height)
-      const oldSide = minSide / state.zoom
-      const nextSide = minSide / nextZoom
-      const centerX = state.x * (cropImageSize.width - oldSide) + oldSide / 2
-      const centerY = state.y * (cropImageSize.height - oldSide) + oldSide / 2
-      return { zoom: nextZoom, x: clampCrop((centerX - nextSide / 2) / Math.max(1, cropImageSize.width - nextSide), nextZoom, cropImageSize.width), y: clampCrop((centerY - nextSide / 2) / Math.max(1, cropImageSize.height - nextSide), nextZoom, cropImageSize.height) }
-    })
+  const rotateCropImage = async () => {
+    if (!cropFile) return
+    try {
+      const rotated = await rotateImageClockwise(cropFile)
+      setCrop({ x: 0.5, y: 0.5, zoom: 1 })
+      setCropImageSize(null)
+      setCropQueue((queue) => [rotated, ...queue.slice(1)])
+    } catch (error) {
+      toast.error(error.message || 'No se pudo rotar la imagen')
+    }
   }
 
   const cancelCrop = () => {
@@ -137,13 +135,17 @@ export default function ImageUploader({ value = [], onChange, multiple = true })
       {cropFile && createPortal(<div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={(event) => { event.stopPropagation(); cancelCrop() }}>
         <div className="w-full max-w-md rounded-2xl border border-neifert bg-white p-5 shadow-2xl" onClick={(event) => event.stopPropagation()}>
           <h3 className="text-base font-bold text-ink">Recortá la foto</h3>
-          <p className="mt-1 text-sm text-ink-3">Arrastrá la foto para encuadrarla y usá la rueda del mouse para ajustar el zoom.</p>
-          <div className="relative mx-auto mt-4 h-[360px] w-full max-w-[360px] touch-none overflow-hidden rounded-xl bg-black/80 cursor-grab active:cursor-grabbing" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={() => { dragRef.current = null }} onPointerCancel={() => { dragRef.current = null }} onWheel={zoomWithWheel}>
+          <p className="mt-1 text-sm text-ink-3">Arrastrá la foto para encuadrarla. Usá los controles para el zoom y la rotación.</p>
+          <div className="relative mx-auto mt-4 h-[360px] w-full max-w-[360px] touch-none overflow-hidden rounded-xl bg-black/80 cursor-grab active:cursor-grabbing" onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={() => { dragRef.current = null }} onPointerCancel={() => { dragRef.current = null }}>
             <img src={cropPreview} alt="Imagen para recortar" draggable="false" onLoad={(event) => setCropImageSize({ width: event.currentTarget.naturalWidth, height: event.currentTarget.naturalHeight })} className="absolute max-w-none select-none opacity-40" style={imageStyle} />
             {cropImageSize && <div className="absolute overflow-hidden border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,.25)]" style={{ left: cropLeft, top: cropTop, width: cropSide, height: cropSide }}>
               <img src={cropPreview} alt="Vista previa del recorte" draggable="false" className="absolute max-w-none select-none" style={{ ...imageStyle, left: -sourceX * imageScale, top: -sourceY * imageScale }} />
             </div>}
             <div className="pointer-events-none absolute inset-0 rounded-xl border border-white/20" />
+          </div>
+          <div className="mt-4 flex items-center gap-3">
+            <label className="flex flex-1 items-center gap-3 text-xs font-medium text-ink-3">Zoom <input className="flex-1 accent-neifert" type="range" min="1" max="3" step="0.05" value={crop.zoom} onChange={(event) => setCrop((state) => ({ ...state, zoom: Number(event.target.value) }))} /></label>
+            <button type="button" onClick={rotateCropImage} className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-line px-3 text-xs font-semibold text-ink transition-colors hover:border-neifert hover:text-neifert" title="Rotar 90°"><RotateCw size={15} /> Rotar</button>
           </div>
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" className="rounded-lg px-3 py-2 text-sm text-ink-3" onClick={cancelCrop}>Cancelar</button>

@@ -126,6 +126,22 @@ export async function cropImageToSquare(file, { x = 0.5, y = 0.5, zoom = 1 } = {
   return new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'imagen'}.webp`, { type: 'image/webp' })
 }
 
+/** Gira una imagen 90° en sentido horario y la conserva como WebP. */
+export async function rotateImageClockwise(file) {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.height
+  canvas.height = bitmap.width
+  const context = canvas.getContext('2d')
+  context.translate(canvas.width, 0)
+  context.rotate(Math.PI / 2)
+  context.drawImage(bitmap, 0, 0)
+  bitmap.close?.()
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.94))
+  if (!blob) throw new Error('El navegador no pudo rotar la imagen.')
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'imagen'}.webp`, { type: 'image/webp' })
+}
+
 /** Metadata de un video (dimensiones + duración). Devuelve también la object
  *  URL creada para preview; el caller decide cuándo revocarla. */
 export function readVideoMeta(file) {
