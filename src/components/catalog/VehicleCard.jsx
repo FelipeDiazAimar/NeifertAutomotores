@@ -208,9 +208,9 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           <span className="absolute left-3 top-3 z-10 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
             {vehicle.year}
           </span>
-          {vehicle.is_premium && (
+          {vehicle.is_new && (
             <span className="absolute right-3 top-3 z-10 rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-              Premium
+              Nuevo
             </span>
           )}
         </div>

@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn'
 /** Carrusel de fotos del vehículo: autoplay con crossfade + indicadores de
  *  puntos (transparente / rojo activo). Si el usuario toca un punto o una
  *  flecha, se fija esa imagen y se detiene el autoplay. */
-export default function VehicleGallery({ images = [], alt = '', premium = false }) {
+export default function VehicleGallery({ images = [], alt = '', isNew = false }) {
   const pics = images.filter(Boolean)
   const [idx, setIdx] = useState(0)
   const [locked, setLocked] = useState(false)
@@ -58,9 +58,9 @@ export default function VehicleGallery({ images = [], alt = '', premium = false 
         </div>
       )}
 
-      {premium && (
+      {isNew && (
         <span className="absolute right-4 top-4 z-10 rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-          Premium
+          Nuevo
         </span>
       )}
 

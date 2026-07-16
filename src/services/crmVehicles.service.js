@@ -16,7 +16,7 @@ import { useSiteStore, slugify } from '@/store/useSiteStore'
 const EXTERNAL_SOURCE = 'crm_viejo'
 
 // Campos que sí trae y actualiza el CRM viejo (el resto — fotos, descripción,
-// is_premium, fuel_type — quedan siempre a cargo del admin de nuestro sitio).
+// is_new, fuel_type — quedan siempre a cargo del admin de nuestro sitio).
 const SYNCED_FIELDS = [
   'brand', 'model', 'version', 'color', 'year', 'km',
   'transmission', 'category', 'status', 'currency', 'price_amount', 'price_usd',
@@ -103,7 +103,7 @@ export async function syncVehiclesFromCrm() {
         await createVehicle({
           ...mapped,
           fuel_type: 'Nafta', // el CRM viejo no distingue combustible; ajustable a mano
-          is_premium: false,
+          is_new: false,
           images: [],
           description: '',
         })

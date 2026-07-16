@@ -19,7 +19,7 @@ const FIELD_MAP = {
   id: 'id', brand: 'marca', model: 'modelo', version: 'version', color: 'color',
   year: 'anio', currency: 'moneda', price_amount: 'precio', price_usd: 'precio_usd',
   km: 'km', fuel_type: 'combustible', transmission: 'transmision', engine: 'motor',
-  category: 'categoria', is_premium: 'es_premium', status: 'estado',
+  category: 'categoria', is_new: 'es_nuevo', status: 'estado',
   main_image_url: 'imagen_principal', images: 'imagenes', description: 'descripcion',
   view_count: 'vistas', external_id: 'id_externo', external_source: 'origen_externo',
   external_snapshot: 'snapshot_externo', external_synced_at: 'sincronizado_en',
@@ -162,7 +162,7 @@ export async function createVehicle(payload) {
     const vehicle = {
       id: uid(),
       status: 'disponible',
-      is_premium: false,
+      is_new: false,
       images: [],
       created_at: new Date().toISOString(),
       ...payload,

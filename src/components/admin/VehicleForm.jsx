@@ -44,7 +44,7 @@ const EMPTY = {
   engine: '',
   category: 'suv',
   status: 'disponible',
-  is_premium: false,
+  is_new: false,
   description: '',
   images: [],
 }
@@ -164,11 +164,11 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
       <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
         <input
           type="checkbox"
-          checked={form.is_premium}
-          onChange={(e) => set('is_premium', e.target.checked)}
+          checked={form.is_new}
+          onChange={(e) => set('is_new', e.target.checked)}
           className="h-4 w-4 accent-[color:var(--c-neifert,#BE1E2D)]"
         />
-        <span className="text-sm text-ink">Destacar como Premium</span>
+        <span className="text-sm text-ink">Destacar como Nuevo</span>
       </label>
 
       <Field label="Fotos" full>

@@ -104,7 +104,7 @@ export default function VehicleDetailPage() {
           className="relative"
         >
           <div className={available ? '' : 'opacity-90 grayscale-[35%]'}>
-            <VehicleGallery images={gallery} alt={`${v.brand} ${v.model}`} premium={v.is_premium} />
+            <VehicleGallery images={gallery} alt={`${v.brand} ${v.model}`} isNew={v.is_new} />
           </div>
           {!available && (
             <span className="absolute left-4 top-4 z-20 rounded-full bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-bg shadow-glass">

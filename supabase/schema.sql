@@ -51,7 +51,7 @@ create table if not exists public.vehiculos (
   transmision     text,
   motor           text,
   categoria       text not null,  -- categorías dinámicas (editables desde /admin/contenido)
-  es_premium      boolean not null default false,
+  es_nuevo        boolean not null default false, -- destacado como "Nuevo" (antes "Premium")
   estado          text not null default 'disponible' check (estado in ('disponible','reservado','vendido')),
   imagen_principal text,
   imagenes        jsonb not null default '[]'::jsonb,
@@ -65,6 +65,12 @@ create table if not exists public.vehiculos (
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now()
 );
+
+-- Renombra la columna en instalaciones ya existentes (create table if not
+-- exists no reaplica cambios de columnas a una tabla que ya estaba creada).
+do $$ begin
+  alter table public.vehiculos rename column es_premium to es_nuevo;
+exception when undefined_column then null; end $$;
 
 -- Prospectos (leads) del mini-CRM: propios (web/IG/FB/catálogo) + los que se
 -- ingieran del CRM viejo (WhatsApp de la empresa, gente que va al salón).

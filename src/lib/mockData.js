@@ -23,7 +23,7 @@ const RAW_VEHICLES = [
     transmission: 'Automática',
     engine: 'Dual Motor',
     category: 'electrico',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1610768764270-790fbec18178?auto=format&fit=crop&w=800&q=80',
@@ -40,7 +40,7 @@ const RAW_VEHICLES = [
     transmission: 'PDK',
     engine: '3.0L Flat-6',
     category: 'sport',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=800&q=80',
@@ -57,7 +57,7 @@ const RAW_VEHICLES = [
     transmission: 'M Steptronic',
     engine: '4.4L V8 Biturbo',
     category: 'suv',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1555215695-3004980ad54e?auto=format&fit=crop&w=800&q=80',
@@ -74,7 +74,7 @@ const RAW_VEHICLES = [
     transmission: 'AMG Speedshift',
     engine: '4.0L V8 Biturbo',
     category: 'suv',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1520031441872-265e4ff70366?auto=format&fit=crop&w=800&q=80',
@@ -91,7 +91,7 @@ const RAW_VEHICLES = [
     transmission: 'Automática',
     engine: '3.0L i6 MHEV',
     category: 'suv',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1606664515524-ed2f786a0bd6?auto=format&fit=crop&w=800&q=80',
@@ -108,7 +108,7 @@ const RAW_VEHICLES = [
     transmission: 'F1 Dual-Clutch',
     engine: '3.9L V8 Turbo',
     category: 'coupe',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1592198084033-aade902d1aae?auto=format&fit=crop&w=800&q=80',
@@ -125,7 +125,7 @@ const RAW_VEHICLES = [
     transmission: 'Automática',
     engine: '3.0L V6 Nettuno',
     category: 'suv',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1617469767053-d3b523a0b982?auto=format&fit=crop&w=800&q=80',
@@ -142,7 +142,7 @@ const RAW_VEHICLES = [
     transmission: 'Automática',
     engine: 'Tri Motor',
     category: 'electrico',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1617788138017-80ad40651399?auto=format&fit=crop&w=800&q=80',
@@ -159,7 +159,7 @@ const RAW_VEHICLES = [
     transmission: 'M Steptronic',
     engine: '3.0L Twin-Turbo',
     category: 'coupe',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1617814076367-b759c7d7e738?auto=format&fit=crop&w=800&q=80',
@@ -176,7 +176,7 @@ const RAW_VEHICLES = [
     transmission: 'Tiptronic',
     engine: '4.0L V8 TFSI',
     category: 'sport',
-    is_premium: true,
+    is_new: true,
     status: 'disponible',
     main_image_url:
       'https://images.unsplash.com/photo-1606220945770-b5b6c2c55bf1?auto=format&fit=crop&w=800&q=80',

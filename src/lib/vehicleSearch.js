@@ -5,8 +5,7 @@ const DEFAULT_CAT_LABEL = Object.fromEntries(VEHICLE_CATEGORIES.map((c) => [c.id
 /** Sinónimos / intención → función que puntúa un vehículo. */
 const INTENTS = [
   { words: ['barato', 'economico', 'económico', 'accesible'], score: (v, ctx) => (v.price_usd <= ctx.priceMid ? 2 : 0) },
-  { words: ['caro', 'lujo', 'lujoso', 'premium', 'exclusivo', 'top'], score: (v) => (v.is_premium ? 2 : 0) },
-  { words: ['nuevo', '0km', 'okm', 'cero'], score: (v) => (v.km === 0 ? 2 : 0) },
+  { words: ['nuevo', '0km', 'okm', 'cero'], score: (v) => (v.km === 0 || v.is_new ? 2 : 0) },
   { words: ['usado', 'km'], score: (v) => (v.km > 0 ? 1 : 0) },
   { words: ['electrico', 'eléctrico', 'ev'], score: (v) => (v.fuel_type === 'Eléctrico' ? 3 : 0) },
   { words: ['hibrido', 'híbrido'], score: (v) => (v.fuel_type === 'Híbrido' ? 3 : 0) },
@@ -43,7 +42,7 @@ function haystack(v, catLabel) {
       v.km,
       v.description,
       STATUS_WORDS[v.status] || v.status,
-      v.is_premium ? 'premium' : '',
+      v.is_new ? 'nuevo' : '',
     ]
       .filter((x) => x !== null && x !== undefined && x !== '')
       .join(' ')
