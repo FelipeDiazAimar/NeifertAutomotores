@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
@@ -92,9 +92,91 @@ function HomeTab() {
   const addStory = useSiteStore((s) => s.addStory)
   const updateStory = useSiteStore((s) => s.updateStory)
   const removeStory = useSiteStore((s) => s.removeStory)
+  const heroSlides = useSiteStore((s) => s.heroSlides)
+  const addHeroSlide = useSiteStore((s) => s.addHeroSlide)
+  const updateHeroSlide = useSiteStore((s) => s.updateHeroSlide)
+  const removeHeroSlide = useSiteStore((s) => s.removeHeroSlide)
+  const reorderHeroSlide = useSiteStore((s) => s.reorderHeroSlide)
 
   return (
     <div className="space-y-5">
+      <Section
+        title="Carrusel del hero"
+        desc="Imágenes que rotan solas arriba de todo en la home, con su propio texto centrado. Se reproduce en automático; si el visitante lo desliza, se pausa 1 minuto."
+        action={
+          <Button
+            size="sm"
+            variant="glass"
+            icon={Plus}
+            onClick={() => addHeroSlide({ title: '', subtitle: '', image: '' })}
+          >
+            Agregar imagen
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          {heroSlides.map((slide, i) => (
+            <div key={slide.id} className="rounded-xl border border-line p-3">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-xs font-bold uppercase tracking-wider text-neifert">
+                  Imagen {i + 1}
+                </span>
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => reorderHeroSlide(slide.id, -1)}
+                    disabled={i === 0}
+                    className="text-ink-3 transition-colors hover:text-neifert disabled:opacity-30"
+                    aria-label="Mover antes"
+                  >
+                    <ArrowUp size={15} />
+                  </button>
+                  <button
+                    onClick={() => reorderHeroSlide(slide.id, 1)}
+                    disabled={i === heroSlides.length - 1}
+                    className="text-ink-3 transition-colors hover:text-neifert disabled:opacity-30"
+                    aria-label="Mover después"
+                  >
+                    <ArrowDown size={15} />
+                  </button>
+                  <button
+                    onClick={() => removeHeroSlide(slide.id)}
+                    className="ml-2 text-ink-3 transition-colors hover:text-neifert"
+                    aria-label="Borrar"
+                  >
+                    <Trash2 size={15} />
+                  </button>
+                </div>
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <TextField
+                  label="Título"
+                  value={slide.title}
+                  onChange={(v) => updateHeroSlide(slide.id, { title: v })}
+                />
+                <TextField
+                  label="Subtítulo"
+                  value={slide.subtitle}
+                  onChange={(v) => updateHeroSlide(slide.id, { subtitle: v })}
+                />
+                <div className="sm:col-span-2">
+                  <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">
+                    Imagen
+                  </span>
+                  <ImageUploader
+                    multiple={false}
+                    value={slide.image ? [slide.image] : []}
+                    onChange={(urls) => updateHeroSlide(slide.id, { image: urls[0] || '' })}
+                  />
+                </div>
+              </div>
+            </div>
+          ))}
+          {heroSlides.length === 0 && (
+            <p className="text-sm text-ink-3">No hay imágenes en el carrusel. Agregá una arriba.</p>
+          )}
+        </div>
+      </Section>
+
       <Section title="Encabezado (Hero)">
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Badge" value={home.heroBadge} onChange={(v) => setHome({ heroBadge: v })} />

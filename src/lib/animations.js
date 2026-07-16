@@ -7,6 +7,17 @@ export const fadeUp = {
   show: { opacity: 1, y: 0, transition: { duration: 0.6, ease: EASE } },
 }
 
+/** Entran deslizándose desde el costado (para secciones editoriales tipo
+ *  zig-zag: cada columna aparece desde "su" lateral). */
+export const slideInLeft = {
+  hidden: { opacity: 0, x: -72 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.7, ease: EASE } },
+}
+export const slideInRight = {
+  hidden: { opacity: 0, x: 72 },
+  show: { opacity: 1, x: 0, transition: { duration: 0.7, ease: EASE } },
+}
+
 export const fadeIn = {
   hidden: { opacity: 0 },
   show: { opacity: 1, transition: { duration: 0.5, ease: EASE } },
