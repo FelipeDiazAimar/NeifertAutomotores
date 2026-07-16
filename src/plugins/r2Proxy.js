@@ -1,4 +1,4 @@
-import { createR2Client, presignR2Upload, deleteR2Object } from '../server/r2Core.js'
+import { createR2Client, presignR2Upload, deleteR2Object, listR2Objects } from '../server/r2Core.js'
 
 /**
  * Plugin de Vite que expone el proxy de Cloudflare R2 en el servidor de
@@ -9,6 +9,7 @@ import { createR2Client, presignR2Upload, deleteR2Object } from '../server/r2Cor
  *   -> { ok:true, uploadUrl, publicUrl } | { ok:false, error }
  * POST /api/r2/delete  body: { url }
  *   -> { ok:true } | { ok:false, error }
+ * GET  /api/r2/stats   -> { ok:true, imageCount, imageSize, videoCount, videoSize, ... }
  */
 
 function readJsonBody(req) {
@@ -33,9 +34,10 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload))
 }
 
-export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, publicUrlBase } = {}) {
+export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, publicUrlBase, storageLimitGB } = {}) {
   const configured = Boolean(accessKeyId && secretAccessKey && bucket && endpoint && publicUrlBase)
   const client = configured ? createR2Client({ accessKeyId, secretAccessKey, endpoint }) : null
+  const limitBytes = (storageLimitGB || 10) * 1024 * 1024 * 1024
 
   return {
     name: 'r2-proxy',
@@ -69,6 +71,44 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
           sendJson(res, 200, result)
         } catch (e) {
           console.error('[r2-proxy] delete:', e.message)
+          sendJson(res, 500, { ok: false, error: e.message })
+        }
+      })
+
+      server.middlewares.use('/api/r2/stats', async (req, res) => {
+        if (req.method !== 'GET') return sendJson(res, 405, { ok: false, error: 'Method not allowed' })
+        if (!configured) {
+          return sendJson(res, 501, { ok: false, error: 'Cloudflare R2 no configurado en el servidor.' })
+        }
+        try {
+          const objects = await listR2Objects(client, { bucket })
+
+          const imageExts = /\.(jpg|jpeg|png|gif|webp|svg|bmp|avif)$/i
+          const videoExts = /\.(mp4|webm|mov|avi|mkv|ogg|m4v)$/i
+
+          let imageCount = 0, imageSize = 0
+          let videoCount = 0, videoSize = 0
+          let otherCount = 0, otherSize = 0
+
+          for (const obj of objects) {
+            if (imageExts.test(obj.key)) { imageCount++; imageSize += obj.size }
+            else if (videoExts.test(obj.key)) { videoCount++; videoSize += obj.size }
+            else { otherCount++; otherSize += obj.size }
+          }
+
+          const totalSize = imageSize + videoSize + otherSize
+
+          sendJson(res, 200, {
+            ok: true,
+            imageCount, imageSize,
+            videoCount, videoSize,
+            otherCount, otherSize,
+            totalObjects: objects.length,
+            totalSize,
+            limitBytes,
+          })
+        } catch (e) {
+          console.error('[r2-proxy] stats:', e.message)
           sendJson(res, 500, { ok: false, error: e.message })
         }
       })

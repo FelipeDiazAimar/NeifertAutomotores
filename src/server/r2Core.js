@@ -1,4 +1,4 @@
-import { S3Client, PutObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, DeleteObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner'
 
 /**
@@ -52,4 +52,34 @@ export async function deleteR2Object(client, { bucket, url, publicUrlBase }) {
   const key = decodeURIComponent(url.slice(base.length + 1))
   await client.send(new DeleteObjectCommand({ Bucket: bucket, Key: key }))
   return { ok: true }
+}
+
+/** Lista todos los objetos de un bucket (pagina automáticamente). */
+export async function listR2Objects(client, { bucket, prefix } = {}) {
+  let allObjects = []
+  let continuationToken = undefined
+
+  do {
+    const command = new ListObjectsV2Command({
+      Bucket: bucket,
+      Prefix: prefix,
+      MaxKeys: 1000,
+      ContinuationToken: continuationToken,
+    })
+    const response = await client.send(command)
+
+    if (response.Contents) {
+      for (const obj of response.Contents) {
+        allObjects.push({
+          key: obj.Key,
+          size: obj.Size || 0,
+          lastModified: obj.LastModified,
+        })
+      }
+    }
+
+    continuationToken = response.IsTruncated ? response.NextContinuationToken : undefined
+  } while (continuationToken)
+
+  return allObjects
 }

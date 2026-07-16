@@ -33,6 +33,7 @@ export default defineConfig(({ mode }) => {
         bucket: env.R2_BUCKET_NAME,
         endpoint: env.R2_ENDPOINT,
         publicUrlBase: env.R2_PUBLIC_URL,
+        storageLimitGB: parseInt(env.R2_STORAGE_LIMIT_GB || '0') || 10,
       }),
       usersProxyPlugin({
         supabaseUrl: env.VITE_SUPABASE_URL,

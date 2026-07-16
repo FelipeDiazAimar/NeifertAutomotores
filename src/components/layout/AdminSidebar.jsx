@@ -1,5 +1,5 @@
 import { Link, NavLink } from 'react-router-dom'
-import { Home, Car, BarChart3, LayoutTemplate, LogOut, UserCog } from 'lucide-react'
+import { Home, Car, BarChart3, LayoutTemplate, LogOut, UserCog, HardDrive } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { useAuth } from '@/hooks/useAuth'
@@ -10,6 +10,7 @@ const NAV = [
   { to: '/admin/contenido', label: 'Contenido', icon: LayoutTemplate },
   { to: '/admin/estadisticas', label: 'Estadísticas', icon: BarChart3 },
   { to: '/admin/usuarios', label: 'Usuarios', icon: UserCog },
+  { to: '/admin/almacenamiento', label: 'Almacenamiento', icon: HardDrive },
   { to: '/', label: 'Ver sitio', icon: Home, end: true },
 ]
 
