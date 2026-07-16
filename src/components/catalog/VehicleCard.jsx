@@ -197,7 +197,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       className="group glass overflow-hidden rounded-[20px] shadow-glass"
     >
       <Link to={`/catalogo/${vehicle.id}`} className="block">
-        <div className="relative aspect-[4/5] overflow-hidden">
+        <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} />
           <span className="absolute left-3 top-3 z-10 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
             {vehicle.year}
