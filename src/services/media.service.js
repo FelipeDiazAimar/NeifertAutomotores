@@ -50,11 +50,16 @@ function uploadToR2(path, blob, contentType, onProgress) {
     fetch('/api/r2/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: path, contentType }),
+      body: JSON.stringify({ filename: path, contentType, fileSize: blob.size }),
     })
       .then((r) => r.json())
       .then((presign) => {
-        if (!presign.ok) return resolve(null) // R2 no configurado -> fallback
+        if (!presign.ok) {
+          if (presign.error?.includes('Límite de almacenamiento')) {
+            return reject(new Error(presign.error))
+          }
+          return resolve(null) // R2 no configurado -> fallback
+        }
 
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', presign.uploadUrl)

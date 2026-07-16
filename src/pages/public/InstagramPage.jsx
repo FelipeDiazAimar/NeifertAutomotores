@@ -25,8 +25,7 @@ function GalleryItem({ item, profileUrl }) {
       href={item.link || profileUrl}
       target="_blank"
       rel="noreferrer"
-      whileHover={{ y: -4 }}
-      className="group relative aspect-square overflow-hidden rounded-[18px] bg-surface shadow-glass"
+      className="group relative aspect-[3/4] overflow-hidden bg-line"
     >
       {item.url ? (
         <img
@@ -34,7 +33,7 @@ function GalleryItem({ item, profileUrl }) {
           alt={item.caption ? item.caption.slice(0, 80) : 'Instagram post'}
           loading="lazy"
           decoding="async"
-          className="h-full w-full object-cover transition-transform duration-700 group-hover:scale-110"
+          className="h-full w-full object-cover transition-opacity duration-200 group-hover:opacity-80"
           onError={(e) => {
             e.currentTarget.style.display = 'none'
             e.currentTarget.nextSibling?.classList?.remove('hidden')
@@ -43,68 +42,75 @@ function GalleryItem({ item, profileUrl }) {
       ) : null}
       <div
         className={cn(
-          'absolute inset-0 flex items-center justify-center bg-gradient-to-br from-[#1a1a20] to-[#0b0b0f]',
+          'absolute inset-0 flex items-center justify-center bg-line',
           item.url ? 'hidden' : ''
         )}
       >
-        <InstagramIcon size={28} className="opacity-30 text-white" />
+        <InstagramIcon size={28} className="opacity-20 text-ink-3" />
       </div>
 
       <TypeBadge type={item.type} />
-
-      <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
-      <div className="absolute inset-x-3 bottom-3 translate-y-2 opacity-0 transition-all duration-300 group-hover:translate-y-0 group-hover:opacity-100">
-        {item.caption && (
-          <p className="line-clamp-3 text-xs font-medium leading-relaxed text-white drop-shadow">
-            {item.caption}
-          </p>
-        )}
-        <div className="mt-1.5 flex items-center justify-end gap-1 text-white/70">
-          <ExternalLink size={12} />
-          <span className="text-[10px]">Ver en Instagram</span>
-        </div>
-      </div>
     </motion.a>
   )
 }
 
 function SkeletonItem() {
-  return <div className="aspect-square animate-pulse rounded-[18px] bg-surface/60" />
+  return <div className="aspect-[3/4] animate-pulse bg-line" />
 }
 
-/** Paginación numerada simple sobre el array ya sincronizado (sin cursores:
- *  los posteos vienen de nuestro storage, no de un scrape en vivo). */
 function Pagination({ page, totalPages, onChange }) {
   if (totalPages <= 1) return null
   const pillBase =
-    'grid h-9 min-w-9 place-items-center rounded-full px-3 text-sm font-semibold transition-colors'
+    'grid h-9 shrink-0 place-items-center rounded-full px-3 text-sm font-semibold transition-colors'
+
+  const visible = []
+  if (totalPages <= 7) {
+    for (let i = 1; i <= totalPages; i++) visible.push(i)
+  } else {
+    visible.push(1)
+    if (page > 3) visible.push('...')
+    const start = Math.max(2, page - 1)
+    const end = Math.min(totalPages - 1, page + 1)
+    for (let i = start; i <= end; i++) visible.push(i)
+    if (page < totalPages - 2) visible.push('...')
+    visible.push(totalPages)
+  }
+
   return (
-    <div className="mt-10 flex flex-wrap items-center justify-center gap-2">
+    <div className="mt-8 flex items-center justify-center gap-1 overflow-x-auto px-2">
       <button
         onClick={() => onChange(page - 1)}
         disabled={page === 1}
         aria-label="Página anterior"
-        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-40')}
+        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-30')}
       >
         <ChevronLeft size={18} />
       </button>
-      {Array.from({ length: totalPages }, (_, i) => i + 1).map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={cn(
-            pillBase,
-            p === page ? 'bg-neifert text-white shadow-glow-red' : 'glass text-ink-2 hover:text-neifert'
-          )}
-        >
-          {p}
-        </button>
-      ))}
+      {visible.map((p, i) =>
+        p === '...' ? (
+          <span key={`dots-${i}`} className="grid h-9 w-9 shrink-0 place-items-center text-xs text-ink-3">
+            ...
+          </span>
+        ) : (
+          <button
+            key={p}
+            onClick={() => onChange(p)}
+            className={cn(
+              pillBase,
+              p === page
+                ? 'bg-neifert text-white shadow-glow-red'
+                : 'glass text-ink-2 hover:text-neifert'
+            )}
+          >
+            {p}
+          </button>
+        )
+      )}
       <button
         onClick={() => onChange(page + 1)}
         disabled={page === totalPages}
         aria-label="Página siguiente"
-        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-40')}
+        className={cn(pillBase, 'glass text-ink-2 hover:text-neifert disabled:opacity-30')}
       >
         <ChevronRight size={18} />
       </button>
@@ -140,14 +146,12 @@ export default function InstagramPage() {
     setRefreshing(false)
   }
 
-  // Si el feed se sincronizó recién y esta pestaña ya estaba abierta, refresca sola.
   useEffect(() => {
     setPage(1)
   }, [items.length])
 
   return (
-    <section className="mx-auto max-w-7xl px-4 py-12 md:px-8">
-      {/* Encabezado */}
+    <section className="mx-auto max-w-[1130px] px-4 py-12 md:px-8">
       <motion.div
         variants={staggerContainer(0.1, 0.05)}
         initial="hidden"
@@ -201,19 +205,20 @@ export default function InstagramPage() {
         </AnimatePresence>
       </motion.div>
 
-      {/* Grid */}
       <div ref={gridRef} className="mt-12 scroll-mt-24">
         {refreshing ? (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4">
-            {Array.from({ length: 12 }).map((_, i) => <SkeletonItem key={i} />)}
+          <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-4">
+            {Array.from({ length: 12 }).map((_, i) => (
+              <SkeletonItem key={i} />
+            ))}
           </div>
         ) : pageItems.length > 0 ? (
           <motion.div
             key={page}
-            variants={staggerContainer(0.03)}
+            variants={staggerContainer(0.015)}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:gap-4 lg:grid-cols-4"
+            className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-4"
           >
             {pageItems.map((item) => (
               <GalleryItem key={item.id} item={item} profileUrl={profileUrl} />

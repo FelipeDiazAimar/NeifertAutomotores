@@ -39,6 +39,21 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
   const client = configured ? createR2Client({ accessKeyId, secretAccessKey, endpoint }) : null
   const limitBytes = (storageLimitGB || 10) * 1024 * 1024 * 1024
 
+  let cachedTotalSize = null
+  let cacheExpiry = 0
+
+  async function getTotalSize() {
+    if (cachedTotalSize !== null && Date.now() < cacheExpiry) return cachedTotalSize
+    const objects = await listR2Objects(client, { bucket })
+    cachedTotalSize = objects.reduce((sum, o) => sum + o.size, 0)
+    cacheExpiry = Date.now() + 60_000
+    return cachedTotalSize
+  }
+
+  function bumpCache(bytes) {
+    if (cachedTotalSize !== null) cachedTotalSize += bytes
+  }
+
   return {
     name: 'r2-proxy',
     configureServer(server) {
@@ -51,8 +66,19 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
           })
         }
         try {
-          const { filename, contentType } = await readJsonBody(req)
+          const { filename, contentType, fileSize } = await readJsonBody(req)
+          const currentSize = await getTotalSize()
+          const incoming = fileSize || 0
+          if (currentSize + incoming > limitBytes * 0.95) {
+            return sendJson(res, 413, {
+              ok: false,
+              error: 'Límite de almacenamiento alcanzado. No se pueden subir más archivos.',
+              totalSize: currentSize,
+              limitBytes,
+            })
+          }
           const result = await presignR2Upload(client, { bucket, filename, contentType, publicUrlBase })
+          bumpCache(incoming)
           sendJson(res, 200, { ok: true, ...result })
         } catch (e) {
           console.error('[r2-proxy] presign:', e.message)
@@ -68,6 +94,7 @@ export function r2ProxyPlugin({ accessKeyId, secretAccessKey, bucket, endpoint, 
         try {
           const { url } = await readJsonBody(req)
           const result = await deleteR2Object(client, { bucket, url, publicUrlBase })
+          if (result.ok) cachedTotalSize = null
           sendJson(res, 200, result)
         } catch (e) {
           console.error('[r2-proxy] delete:', e.message)

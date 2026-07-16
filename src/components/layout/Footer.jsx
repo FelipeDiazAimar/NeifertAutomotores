@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { MapPin } from 'lucide-react'
+import { MapPin, Clock } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import { InstagramIcon, FacebookIcon, WhatsAppIcon, XIcon } from '@/components/common/SocialIcons'
 import { useSiteStore } from '@/store/useSiteStore'
@@ -93,6 +93,12 @@ export default function Footer() {
                 </a>
               )}
             </div>
+            {socials.hours && (
+              <div className="mt-3 flex items-start gap-1.5 text-xs text-ink-3">
+                <Clock size={13} className="mt-0.5 shrink-0 text-neifert" />
+                <span>{socials.hours}</span>
+              </div>
+            )}
           </div>
 
           {footer.columns.map((col) => (

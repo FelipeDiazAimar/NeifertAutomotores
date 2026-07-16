@@ -1,4 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
+import { useEffect, useRef } from 'react'
+import { toast } from 'sonner'
 import { Image, Film, HardDrive, AlertTriangle, Server } from 'lucide-react'
 import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
@@ -36,6 +38,25 @@ export default function StoragePage() {
   const freePct = data ? Math.max(0, 100 - imagePct - videoPct - otherPct) : 100
 
   const usagePct = data ? ((data.totalSize / data.limitBytes) * 100).toFixed(1) : 0
+  const isWarning = Number(usagePct) >= 95
+  const isFull = Number(usagePct) >= 100
+
+  const warnedRef = useRef(false)
+  useEffect(() => {
+    if (isWarning && !warnedRef.current) {
+      warnedRef.current = true
+      toast.warning(
+        isFull
+          ? 'El almacenamiento R2 está lleno. No se aceptarán más archivos hasta liberar espacio.'
+          : `Almacenamiento R2 al ${usagePct}%. Queda poco espacio.`,
+        { id: 'r2-storage-warning', duration: Infinity, dismissible: true }
+      )
+    }
+    if (!isWarning) {
+      warnedRef.current = false
+      toast.dismiss('r2-storage-warning')
+    }
+  }, [isWarning, isFull, usagePct])
 
   return (
     <div className="space-y-6">
@@ -79,6 +100,34 @@ export default function StoragePage() {
 
       {configured && data && (
         <>
+          {isWarning && (
+            <GlassCard
+              className={cn(
+                'flex items-start gap-4 p-5',
+                isFull
+                  ? 'border-2 border-red-500/50 bg-red-500/10'
+                  : 'border-2 border-amber-500/50 bg-amber-500/10'
+              )}
+            >
+              <AlertTriangle
+                className={cn('mt-0.5 shrink-0', isFull ? 'text-red-500' : 'text-amber-500')}
+                size={24}
+              />
+              <div>
+                <h3 className={cn('font-semibold', isFull ? 'text-red-600' : 'text-amber-600')}>
+                  {isFull
+                    ? 'Almacenamiento lleno'
+                    : 'Almacenamiento casi lleno'}
+                </h3>
+                <p className="mt-1 text-sm text-ink-3">
+                  {isFull
+                    ? 'Se alcanzó el límite de almacenamiento en Cloudflare R2. No se permiten nuevas subidas de archivos hasta que se libere espacio eliminando imágenes o videos innecesarios.'
+                    : `El almacenamiento de Cloudflare R2 está al ${usagePct}%. Cuando llegue al 100% se bloquearán las subidas de nuevos archivos.`}
+                </p>
+              </div>
+            </GlassCard>
+          )}
+
           {/* Total usage bar */}
           <GlassCard className="space-y-4 p-6">
             <div className="flex items-center justify-between">
