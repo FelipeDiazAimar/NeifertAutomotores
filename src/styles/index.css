@@ -98,24 +98,17 @@
     color: #fff;
   }
 
-  /* Scrollbar personalizada — track transparente, thumb rojo */
+  /* Scrollbar nativa oculta del todo — la reemplaza <ScrollProgressBar>,
+     un indicador propio que flota sobre el contenido sin reservar su
+     franja de color sólido (la nativa no puede evitar ese fondo). */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
-  }
-  ::-webkit-scrollbar-track {
-    background: transparent;
-  }
-  ::-webkit-scrollbar-thumb {
-    background: #be1e2d;
-    border-radius: 999px;
-  }
-  ::-webkit-scrollbar-thumb:hover {
-    background: #9e1623;
+    display: none;
+    width: 0;
+    height: 0;
   }
   * {
-    scrollbar-width: thin;
-    scrollbar-color: #be1e2d transparent;
+    scrollbar-width: none !important;
+    -ms-overflow-style: none;
   }
 
   /* Lenis maneja el smooth scroll; desactivamos el nativo para no duplicar */

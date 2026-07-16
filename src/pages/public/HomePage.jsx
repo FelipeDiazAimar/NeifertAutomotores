@@ -1,3 +1,4 @@
+import HeroCarousel from '@/components/home/HeroCarousel'
 import StoryHero from '@/components/home/StoryHero'
 import ZigZagSection from '@/components/home/ZigZagSection'
 import StoryCTA from '@/components/home/StoryCTA'
@@ -11,11 +12,17 @@ export default function HomePage() {
   )
 
   return (
-    <div className="mx-auto max-w-7xl px-4 md:px-8">
-      <StoryHero />
-      <ZigZagSection stories={ordered} />
-      <StoryCTA />
-      <MapSection />
+    <div>
+      {/* Full-bleed: se sale del contenedor para ir de borde a borde y
+       *  quedar debajo del header (que lo tapa gracias a su z-index). */}
+      <HeroCarousel />
+
+      <div className="mx-auto max-w-7xl px-4 md:px-8">
+        <StoryHero />
+        <ZigZagSection stories={ordered} />
+        <StoryCTA />
+        <MapSection />
+      </div>
     </div>
   )
 }

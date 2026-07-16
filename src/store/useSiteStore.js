@@ -61,6 +61,29 @@ const DEFAULT_CONTENT = {
     ctaImage:
       'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1400&q=80',
   },
+  heroSlides: [
+    {
+      id: 'hs1',
+      image:
+        'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80',
+      title: 'Explorá nuestra colección',
+      subtitle: 'Vehículos de alta gama, peritados y listos para entrega.',
+    },
+    {
+      id: 'hs2',
+      image:
+        'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1600&q=80',
+      title: 'Excelencia en cada detalle',
+      subtitle: 'Encontrá el auto que soñás con la transparencia que merecés.',
+    },
+    {
+      id: 'hs3',
+      image:
+        'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=1600&q=80',
+      title: 'Tu próximo destino te espera',
+      subtitle: 'Stock disponible para ver en el salón o coordinar tu cita.',
+    },
+  ],
   stories: MOCK_STORIES.map((s) => ({ ...s })),
   instagram: {
     headline: 'Seguinos en Instagram',
@@ -196,6 +219,33 @@ export const useSiteStore = create(
         set((s) => ({ stories: s.stories.filter((it) => it.id !== id) }))
       },
 
+      // Carrusel del hero (imagen + texto propio por slide)
+      addHeroSlide: (slide) =>
+        set((s) => ({
+          heroSlides: [...s.heroSlides, { id: uid(), title: '', subtitle: '', image: '', ...slide }],
+        })),
+      updateHeroSlide: (id, partial) => {
+        const current = get().heroSlides.find((it) => it.id === id)
+        if (current && 'image' in partial && partial.image !== current.image) cleanupMedia(current.image)
+        set((s) => ({
+          heroSlides: s.heroSlides.map((it) => (it.id === id ? { ...it, ...partial } : it)),
+        }))
+      },
+      removeHeroSlide: (id) => {
+        const current = get().heroSlides.find((it) => it.id === id)
+        if (current) cleanupMedia(current.image)
+        set((s) => ({ heroSlides: s.heroSlides.filter((it) => it.id !== id) }))
+      },
+      reorderHeroSlide: (id, dir) =>
+        set((s) => {
+          const i = s.heroSlides.findIndex((it) => it.id === id)
+          const j = i + dir
+          if (i === -1 || j < 0 || j >= s.heroSlides.length) return {}
+          const next = [...s.heroSlides]
+          ;[next[i], next[j]] = [next[j], next[i]]
+          return { heroSlides: next }
+        }),
+
       // Galería de Instagram
       addIgItem: (item) =>
         set((s) => ({
@@ -229,6 +279,7 @@ export const useSiteStore = create(
 
       resetContent: () => {
         const s = get()
+        s.heroSlides.forEach((it) => cleanupMedia(it.image))
         s.stories.forEach((it) => {
           cleanupMedia(it.video_url)
           cleanupMedia(it.poster_url)

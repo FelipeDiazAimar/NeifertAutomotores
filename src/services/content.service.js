@@ -2,7 +2,7 @@ import { supabase, isSupabaseConfigured } from './supabaseClient'
 
 /** Secciones de contenido del sitio que persisten en public.contenido_sitio
  *  (clave → JSON). Coinciden con los slices editables de useSiteStore. */
-export const CONTENT_KEYS = ['home', 'socials', 'footer', 'instagram', 'stories', 'categories']
+export const CONTENT_KEYS = ['home', 'socials', 'footer', 'instagram', 'stories', 'categories', 'heroSlides']
 
 /** Trae todo el contenido → { home, socials, footer, instagram, stories }.
  *  En modo demo devuelve null (el store usa sus defaults de localStorage). */

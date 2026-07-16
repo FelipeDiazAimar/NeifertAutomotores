@@ -76,9 +76,6 @@ export default function StoryCard({ story }) {
   return (
     <motion.div
       ref={cardRef}
-      initial="rest"
-      whileHover="hover"
-      animate="rest"
       onClick={isVideo ? togglePlay : undefined}
       className={`group relative aspect-[4/5] overflow-hidden rounded-[20px] shadow-glass ${
         isVideo ? 'cursor-pointer' : ''
@@ -147,13 +144,12 @@ export default function StoryCard({ story }) {
 
       {/* Botón play para "video" sin archivo real (teaser/placeholder) */}
       {story.kind === 'video' && !story.video_url && (
-        <motion.button
-          variants={{ rest: { scale: 1 }, hover: { scale: 1.12 } }}
+        <button
           aria-label={`Reproducir: ${story.title}`}
-          className="absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/40 bg-white/15 text-white backdrop-blur-md"
+          className="absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/40 bg-white/15 text-white backdrop-blur-md transition-transform duration-300 group-hover:scale-110"
         >
           <Play size={24} className="ml-1" fill="currentColor" />
-        </motion.button>
+        </button>
       )}
 
       <div className="absolute inset-x-4 bottom-4 z-10">
