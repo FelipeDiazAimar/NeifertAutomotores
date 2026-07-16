@@ -6,7 +6,7 @@ export default function CatalogSearch() {
   const setSearch = useCatalogStore((s) => s.setSearch)
 
   return (
-    <div className="glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3 md:flex-none">
+    <div className="glass flex h-10 min-w-0 basis-full items-center gap-2 rounded-xl px-3 sm:basis-auto sm:flex-1 md:flex-none">
       <Search size={16} className="shrink-0 text-ink-3" />
       <input
         value={search}

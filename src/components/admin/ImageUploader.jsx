@@ -97,18 +97,15 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   return (
     <div>
       {!multiple && value.length > 0 ? (
-        <div className="flex gap-4">
-          <div className="flex w-1/2 items-center justify-center rounded-xl border border-glassborder bg-black/5 p-2">
+        <div className="flex flex-col gap-4 sm:flex-row">
+          <div className="flex min-w-0 flex-1 items-center justify-center rounded-xl border border-glassborder bg-black/5 p-2">
             {value[0] && (
-              <img
-                src={value[0]}
-                alt=""
-                className="h-full w-full rounded-lg object-cover"
-                style={{ aspectRatio: `${aW}/${aH}` }}
-              />
+              <div className="w-full overflow-hidden rounded-lg" style={{ aspectRatio: `${aW}/${aH}` }}>
+                <img src={value[0]} alt="" className="h-full w-full object-cover" />
+              </div>
             )}
           </div>
-          <div className="w-1/2">{dropZone}</div>
+          <div className="min-w-0 flex-1">{dropZone}</div>
         </div>
       ) : (
         dropZone

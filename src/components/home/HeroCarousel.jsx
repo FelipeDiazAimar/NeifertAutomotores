@@ -79,8 +79,8 @@ export default function HeroCarousel() {
 
   return (
     <section
-      className="relative w-full overflow-hidden bg-ink"
-      style={{ marginTop: -HEADER_H, height: `calc(86vh + ${HEADER_H}px)`, minHeight: 560 + HEADER_H }}
+      className="relative h-[calc(86dvh+76px)] min-h-[calc(86dvh+76px)] w-full overflow-hidden bg-ink md:min-h-[636px]"
+      style={{ marginTop: -HEADER_H }}
     >
       <AnimatePresence initial={false} custom={direction}>
         <motion.div

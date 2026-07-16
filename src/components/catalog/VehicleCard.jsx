@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { ChevronLeft, ChevronRight, Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
@@ -23,40 +23,77 @@ function ImgPlaceholder({ brand }) {
   )
 }
 
-/** Imagen de la card que rota a otra foto del mismo vehículo al hacer hover. */
+/** Imagen de la card que rota automáticamente cada 2,5 s solo cuando la
+ *  card es la principal visible en pantalla. En desktop vuelve a la
+ *  primera al salir el mouse. En mobile avanza con swipe. */
 function CardImage({ vehicle, rounded, isHovered }) {
   const all = (vehicle.images?.length ? vehicle.images : [vehicle.main_image_url]).filter(
     Boolean
   )
+  const cardRef = useRef(null)
+  const touchRef = useRef(null)
   const [idx, setIdx] = useState(0)
   const [failed, setFailed] = useState(false)
-  const [manualPaused, setManualPaused] = useState(false)
+  const [paused, setPaused] = useState(false)
+  const [inView, setInView] = useState(true)
 
+  // Volver a la primera imagen al salir el mouse (solo desktop, sin pausa manual)
   useEffect(() => {
-    if (!isHovered) {
-      setIdx(0)
-      return undefined
-    }
-    setManualPaused(false)
-  }, [isHovered])
+    if (!isHovered && !paused) setIdx(0)
+  }, [isHovered, paused])
 
+  // Solo la card centrada/principalmente visible reproduce el carrusel
   useEffect(() => {
-    if (!isHovered || manualPaused || all.length < 2) return undefined
+    const el = cardRef.current
+    if (!el || all.length < 2) return
+    const observer = new IntersectionObserver(
+      ([entry]) => setInView(entry.isIntersecting),
+      { threshold: 0.5 }
+    )
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [all.length])
+
+  // Autoplay — activo mientras la card esté en vista y no pausada
+  useEffect(() => {
+    if (paused || !inView || all.length < 2) return undefined
     const timer = setInterval(() => setIdx((i) => (i + 1) % all.length), 2500)
     return () => clearInterval(timer)
-  }, [all.length, isHovered, manualPaused])
+  }, [all.length, paused, inView])
 
-  const showImage = (direction, event) => {
-    event.preventDefault()
-    event.stopPropagation()
-    setManualPaused(true)
+  const go = (direction, event) => {
+    if (event) {
+      event.preventDefault()
+      event.stopPropagation()
+    }
+    setPaused(true)
     setIdx((i) => (i + direction + all.length) % all.length)
+  }
+
+  const onTouchStart = (e) => {
+    touchRef.current = e.touches[0].clientX
+  }
+  const onTouchEnd = (e) => {
+    const start = touchRef.current
+    touchRef.current = null
+    if (start == null || all.length < 2) return
+    const end = e.changedTouches[0].clientX
+    const delta = end - start
+    if (Math.abs(delta) > 50) {
+      e.preventDefault()
+      go(delta > 0 ? -1 : 1)
+    }
   }
 
   if (failed || all.length === 0) return <ImgPlaceholder brand={vehicle.brand} />
 
   return (
-    <div className={cn('absolute inset-0', rounded)}>
+    <div
+      ref={cardRef}
+      className={cn('absolute inset-0', rounded)}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
+    >
       <AnimatePresence initial={false} mode="popLayout">
         <motion.img
           key={idx}
@@ -68,7 +105,7 @@ function CardImage({ vehicle, rounded, isHovered }) {
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="absolute inset-0 h-full w-full object-cover"
+          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
         />
       </AnimatePresence>
       {all.length > 1 && (
@@ -76,16 +113,16 @@ function CardImage({ vehicle, rounded, isHovered }) {
           <button
             type="button"
             aria-label="Ver imagen anterior"
-            onClick={(event) => showImage(-1, event)}
-            className="absolute left-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-0 backdrop-blur-sm transition hover:bg-black/55 group-hover:opacity-100 focus:opacity-100"
+            onClick={(event) => go(-1, event)}
+            className="absolute left-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
             <ChevronLeft size={18} />
           </button>
           <button
             type="button"
             aria-label="Ver imagen siguiente"
-            onClick={(event) => showImage(1, event)}
-            className="absolute right-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-0 backdrop-blur-sm transition hover:bg-black/55 group-hover:opacity-100 focus:opacity-100"
+            onClick={(event) => go(1, event)}
+            className="absolute right-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
             <ChevronRight size={18} />
           </button>
@@ -173,7 +210,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
   )
 
   const actions = (
-    <div className="flex items-center gap-2">
+    <div className="flex flex-wrap items-center gap-2">
       {shareButton}
       {waButton}
     </div>
@@ -193,18 +230,18 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
         {...layoutProps}
         onMouseEnter={() => setIsCardHovered(true)}
         onMouseLeave={() => setIsCardHovered(false)}
-        className="group glass flex gap-4 overflow-hidden rounded-[20px] p-3 shadow-glass"
+        className="group glass flex flex-col gap-4 overflow-hidden rounded-[20px] p-3 shadow-glass sm:flex-row"
       >
         <Link
           to={`/catalogo/${vehicle.id}`}
-          className="relative h-28 w-44 shrink-0 overflow-hidden rounded-2xl"
+          className="relative h-44 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
         >
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
           <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2.5 py-0.5 text-xs font-semibold text-[#0b0b0f]">
             {vehicle.year}
           </span>
         </Link>
-        <div className="flex flex-1 flex-col justify-between py-1">
+        <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
           <Link to={`/catalogo/${vehicle.id}`}>
             <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
               {vehicle.brand}
@@ -216,7 +253,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           </Link>
           {specs}
         </div>
-        <div className="flex flex-col items-end justify-between py-1">
+        <div className="flex flex-row items-end justify-between gap-3 py-1 sm:flex-col sm:gap-0">
           <p className="font-display text-xl font-extrabold text-ink">
             {formatVehiclePrice(vehicle)}
           </p>

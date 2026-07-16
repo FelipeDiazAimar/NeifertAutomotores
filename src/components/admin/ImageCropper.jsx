@@ -4,17 +4,18 @@ import { toast } from 'sonner'
 import { Check, RotateCw } from 'lucide-react'
 import { cropImage, rotateImageClockwise } from '@/lib/mediaFormats'
 
-const STAGE_W = 540
-const STAGE_H = 340
+const DEFAULT_STAGE = { w: 540, h: 340 }
 const CROP_MARGIN = 0.88
 
 export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onConfirm, onCancel }) {
   const dragRef = useRef(null)
   const urlRef = useRef(null)
+  const stageRef = useRef(null)
   const [preview, setPreview] = useState(null)
   const [activeFile, setActiveFile] = useState(null)
   const [crop, setCrop] = useState({ x: 0.5, y: 0.5, zoom: 1 })
   const [imageSize, setImageSize] = useState(null)
+  const [stage, setStage] = useState(DEFAULT_STAGE)
 
   useEffect(() => {
     const next = file || null
@@ -25,26 +26,37 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
     return () => { if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null } }
   }, [file])
 
+  useEffect(() => {
+    const element = stageRef.current
+    if (!element) return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      if (width && height) setStage({ w: width, h: height })
+    })
+    observer.observe(element)
+    return () => observer.disconnect()
+  }, [])
+
   const { w: aW, h: aH } = aspectRatio
   const cropRatio = aW / aH
 
   // Crop area dimensions (centered within the stage)
   const cropArea = useMemo(() => {
-    const stageRatio = STAGE_W / STAGE_H
+    const stageRatio = stage.w / stage.h
     let w, h
     if (cropRatio >= stageRatio) {
-      w = STAGE_W * CROP_MARGIN
+      w = stage.w * CROP_MARGIN
       h = w / cropRatio
     } else {
-      h = STAGE_H * CROP_MARGIN
+      h = stage.h * CROP_MARGIN
       w = h * cropRatio
     }
     return {
       w, h,
-      left: (STAGE_W - w) / 2,
-      top: (STAGE_H - h) / 2,
+      left: (stage.w - w) / 2,
+      top: (stage.h - h) / 2,
     }
-  }, [cropRatio])
+  }, [cropRatio, stage])
 
   // Source region in image pixels for the given zoom
   const sourceSize = useMemo(() => {
@@ -133,9 +145,9 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   const ratioLabel = `${aW}:${aH}`
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4" onClick={handleCancel}>
+    <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4" onClick={handleCancel}>
       <div
-        className="w-full max-w-[640px] rounded-2xl border border-neifert bg-white p-5 shadow-2xl"
+        className="my-auto w-full max-w-[640px] rounded-2xl border border-neifert bg-white p-4 shadow-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-base font-bold text-ink">Recortá la imagen</h3>
@@ -145,8 +157,8 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
 
         {/* Stage */}
         <div
-          className="relative mx-auto mt-4 touch-none overflow-hidden rounded-xl bg-black/90 cursor-grab active:cursor-grabbing"
-          style={{ width: STAGE_W, height: STAGE_H }}
+          ref={stageRef}
+          className="relative mx-auto mt-4 aspect-[27/17] w-full max-w-[540px] touch-none overflow-hidden rounded-xl bg-black/90 cursor-grab active:cursor-grabbing"
           onPointerDown={startDrag}
           onPointerMove={moveDrag}
           onPointerUp={endDrag}
@@ -166,11 +178,11 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
           {/* Top overlay */}
           <div className="pointer-events-none absolute bg-black/55" style={{ top: 0, left: 0, right: 0, height: cropArea.top }} />
           {/* Bottom overlay */}
-          <div className="pointer-events-none absolute bg-black/55" style={{ bottom: 0, left: 0, right: 0, height: STAGE_H - cropArea.top - cropArea.h }} />
+          <div className="pointer-events-none absolute bg-black/55" style={{ bottom: 0, left: 0, right: 0, height: stage.h - cropArea.top - cropArea.h }} />
           {/* Left overlay */}
           <div className="pointer-events-none absolute bg-black/55" style={{ top: cropArea.top, left: 0, width: cropArea.left, height: cropArea.h }} />
           {/* Right overlay */}
-          <div className="pointer-events-none absolute bg-black/55" style={{ top: cropArea.top, right: 0, width: STAGE_W - cropArea.left - cropArea.w, height: cropArea.h }} />
+          <div className="pointer-events-none absolute bg-black/55" style={{ top: cropArea.top, right: 0, width: stage.w - cropArea.left - cropArea.w, height: cropArea.h }} />
 
           {/* Crop area border */}
           {imageSize && (
@@ -183,8 +195,8 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
           <div className="pointer-events-none absolute inset-0 rounded-xl border border-white/20" />
         </div>
 
-        <div className="mt-4 flex items-center gap-3">
-          <label className="flex flex-1 items-center gap-3 text-xs font-medium text-ink-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
+          <label className="flex min-w-0 flex-1 items-center gap-3 text-xs font-medium text-ink-3">
             Zoom
             <input
               className="flex-1 accent-neifert"
