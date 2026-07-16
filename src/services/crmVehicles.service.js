@@ -1,5 +1,6 @@
 import { fetchAllVehicles, createVehicle, updateVehicle } from './vehicles.service'
 import { trackEvent } from './events.service'
+import { saveSiteContent } from './content.service'
 import { ARS_TO_USD_RATE } from '@/lib/constants'
 import { useSiteStore, slugify } from '@/store/useSiteStore'
 
@@ -42,14 +43,20 @@ export async function fetchExternalVehicles() {
 }
 
 /** Busca la categoría cuyo id coincide con el slug del tipo; si no existe la
- *  crea (evita duplicar categorías ya existentes como "sedan"/"suv"/"pickup"). */
+ *  crea (evita duplicar categorías ya existentes como "sedan"/"suv"/"pickup").
+ *  La guarda de una — esto corre en el sync del CRM, no en /admin/contenido,
+ *  así que no depende de su botón "Guardar cambios". */
 function resolveCategoryId(tipo) {
   const label = TIPO_LABELS[tipo] || tipo || 'Otros'
   const slug = slugify(label)
   const store = useSiteStore.getState()
   if (store.categories.some((c) => c.id === slug)) return slug
   store.addCategory(label)
-  return useSiteStore.getState().categories.find((c) => c.id === slug)?.id || slug
+  const categories = useSiteStore.getState().categories
+  saveSiteContent('categories', categories).catch((e) =>
+    console.warn('[categorías] no se pudo guardar la nueva categoría:', e.message)
+  )
+  return categories.find((c) => c.id === slug)?.id || slug
 }
 
 /** Mapea un vehículo crudo del CRM viejo a nuestro shape (solo campos públicos). */

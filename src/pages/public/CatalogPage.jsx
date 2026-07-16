@@ -28,16 +28,18 @@ export default function CatalogPage() {
         </span>
       </div>
 
-      <div className="flex flex-col gap-5 md:flex-row md:items-end md:justify-between">
+      <div className="flex flex-col gap-5">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-neifert">
             — Stock Disponible
           </p>
           <h1 className="mt-1 font-display text-4xl font-extrabold leading-tight text-ink md:text-5xl">
-            Encontrá tu próximo <span className="text-ink-3">destino.</span>
+            Encontrá tu próximo
+            <br />
+            <span className="text-ink-3">destino.</span>
           </h1>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:justify-end">
           <CatalogSearch />
           <FilterPanel />
           <ViewToggle />

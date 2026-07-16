@@ -10,6 +10,7 @@ import { trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { useSiteStore } from '@/store/useSiteStore'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
 
@@ -23,13 +24,15 @@ function ImgPlaceholder({ brand }) {
   )
 }
 
-/** Imagen de la card que rota automáticamente cada 2,5 s solo cuando la
- *  card es la principal visible en pantalla. En desktop vuelve a la
- *  primera al salir el mouse. En mobile avanza con swipe. */
+/** Imagen de la card. En desktop, el carrusel solo avanza automáticamente
+ *  mientras el mouse está sobre esa card puntual (y vuelve a la primera al
+ *  salir). En mobile, sigue avanzando sola cuando la card está en vista y
+ *  se puede navegar con swipe. */
 function CardImage({ vehicle, rounded, isHovered }) {
   const all = (vehicle.images?.length ? vehicle.images : [vehicle.main_image_url]).filter(
     Boolean
   )
+  const isDesktop = useIsDesktop()
   const cardRef = useRef(null)
   const touchRef = useRef(null)
   const [idx, setIdx] = useState(0)
@@ -42,7 +45,7 @@ function CardImage({ vehicle, rounded, isHovered }) {
     if (!isHovered && !paused) setIdx(0)
   }, [isHovered, paused])
 
-  // Solo la card centrada/principalmente visible reproduce el carrusel
+  // Solo la card centrada/principalmente visible reproduce el carrusel (mobile)
   useEffect(() => {
     const el = cardRef.current
     if (!el || all.length < 2) return
@@ -54,12 +57,14 @@ function CardImage({ vehicle, rounded, isHovered }) {
     return () => observer.disconnect()
   }, [all.length])
 
-  // Autoplay — activo mientras la card esté en vista y no pausada
+  // Autoplay: en desktop, solo con hover sobre la card; en mobile, en vista.
   useEffect(() => {
-    if (paused || !inView || all.length < 2) return undefined
+    if (paused || all.length < 2) return undefined
+    const shouldPlay = isDesktop ? isHovered : inView
+    if (!shouldPlay) return undefined
     const timer = setInterval(() => setIdx((i) => (i + 1) % all.length), 2500)
     return () => clearInterval(timer)
-  }, [all.length, paused, inView])
+  }, [all.length, paused, inView, isDesktop, isHovered])
 
   const go = (direction, event) => {
     if (event) {

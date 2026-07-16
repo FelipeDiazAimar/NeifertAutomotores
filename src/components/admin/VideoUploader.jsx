@@ -31,7 +31,7 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
       <video src={value} className="h-full w-full bg-black object-cover" controls muted playsInline />
     )
     return aspectRatio ? (
-      <div className="relative overflow-hidden rounded-2xl border border-glassborder">
+      <div className="relative mx-auto w-full max-w-[200px] overflow-hidden rounded-2xl border border-glassborder">
         <div className="relative mx-auto" style={{ aspectRatio: `${aspectRatio.w}/${aspectRatio.h}` }}>
           {vid}
         </div>

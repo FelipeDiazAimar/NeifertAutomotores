@@ -147,7 +147,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto p-3 sm:items-center sm:p-4" onClick={handleCancel}>
       <div
-        className="my-auto w-full max-w-[640px] rounded-2xl border border-neifert bg-white p-4 shadow-2xl sm:p-5"
+        className="my-auto w-full max-w-[640px] rounded-2xl border border-neifert bg-surface-solid p-4 shadow-2xl sm:p-5"
         onClick={(e) => e.stopPropagation()}
       >
         <h3 className="text-base font-bold text-ink">Recortá la imagen</h3>

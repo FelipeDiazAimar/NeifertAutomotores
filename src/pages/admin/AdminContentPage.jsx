@@ -1,19 +1,17 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
-import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, RefreshCw, Layout, Settings, Camera, Footprints, Share2 } from 'lucide-react'
+import { Plus, Trash2, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, Layout, Settings, Footprints, Share2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
+import ContentSaveBar from '@/components/admin/ContentSaveBar'
 import { TextField, Section, inputCls } from '@/components/admin/ContentFields'
 import { useSiteStore } from '@/store/useSiteStore'
-import { syncInstagramFeed } from '@/services/instagramSync.service'
 import { HOME_ASPECT_RATIOS, HOME_MAX_IMAGE_MB, HOME_MAX_VIDEO_MB } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 
 const TABS = [
   { id: 'home', label: 'Home', icon: Layout },
   { id: 'categorias', label: 'Catálogo', icon: Settings },
-  { id: 'instagram', label: 'Instagram', icon: Camera },
   { id: 'footer', label: 'Footer', icon: Footprints },
   { id: 'redes', label: 'Redes & Contacto', icon: Share2 },
 ]
@@ -51,7 +49,7 @@ function SimpleListEditor({ title, desc, placeholder, items, onAdd, onRemove }) 
         {items.map((item) => (
           <span
             key={item}
-            className="inline-flex items-center gap-2 rounded-full border border-line bg-white px-3 py-1.5 text-sm text-ink shadow-xs transition-shadow hover:shadow-sm"
+            className="inline-flex items-center gap-2 rounded-full border border-line bg-surface-solid px-3 py-1.5 text-sm text-ink shadow-xs transition-shadow hover:shadow-sm"
           >
             {item}
             <button
@@ -107,7 +105,7 @@ function CatalogTab() {
 
         <div className="mt-4 space-y-2">
           {categories.map((c) => (
-            <div key={c.id} className="flex items-center gap-3 rounded-xl border border-line bg-white px-3 py-2.5 transition-shadow hover:shadow-xs">
+            <div key={c.id} className="flex items-center gap-3 rounded-xl border border-line bg-surface-solid px-3 py-2.5 transition-shadow hover:shadow-xs">
               <input
                 className={cn(inputCls, 'h-10 border-0 bg-transparent px-2')}
                 value={c.label}
@@ -176,7 +174,7 @@ function HomeTab() {
       >
         <div className="space-y-3">
           {heroSlides.map((slide, i) => (
-            <div key={slide.id} className="rounded-xl border border-line bg-white p-4 shadow-xs transition-shadow hover:shadow-sm">
+            <div key={slide.id} className="rounded-xl border border-line bg-surface-solid p-4 shadow-xs transition-shadow hover:shadow-sm">
               <div className="mb-3 flex items-center justify-between">
                 <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neifert">
                   <ImageIcon size={14} />
@@ -201,7 +199,7 @@ function HomeTab() {
                   </button>
                   <button
                     onClick={() => removeHeroSlide(slide.id)}
-                    className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-red-50 hover:text-neifert"
+                    className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
                     aria-label="Borrar"
                   >
                     <Trash2 size={14} />
@@ -285,7 +283,7 @@ function HomeTab() {
               <div
                 key={st.id}
                 className={cn(
-                  'rounded-xl border border-line bg-white shadow-xs transition-shadow hover:shadow-sm',
+                  'rounded-xl border border-line bg-surface-solid shadow-xs transition-shadow hover:shadow-sm',
                   'border-l-4', ks.border
                 )}
               >
@@ -296,7 +294,7 @@ function HomeTab() {
                   </span>
                   <button
                     onClick={() => removeStory(st.id)}
-                    className="grid h-7 w-7 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-red-50 hover:text-neifert"
+                    className="grid h-7 w-7 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
                     aria-label="Borrar"
                   >
                     <Trash2 size={13} />
@@ -363,64 +361,6 @@ function HomeTab() {
             </div>
           )}
         </div>
-      </Section>
-    </div>
-  )
-}
-
-const isLocalDev =
-  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
-
-function InstagramTab() {
-  const ig = useSiteStore((s) => s.instagram)
-  const [syncing, setSyncing] = useState(false)
-
-  const runSync = async () => {
-    setSyncing(true)
-    try {
-      const result = await syncInstagramFeed()
-      if (result.added > 0) toast.success(result.message)
-      else toast.info(result.message)
-    } catch (e) {
-      toast.error(e.message)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  return (
-    <div className="space-y-6">
-      <Section title="Feed de Instagram" desc="Sincronizado automáticamente desde el perfil de Instagram de la concesionaria.">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <p className="text-sm text-ink-2">
-            <span className="font-semibold text-ink">{ig.items.length}</span> posteos guardados.
-            Se ven en{' '}
-            <a href="/instagram" target="_blank" rel="noreferrer" className="font-medium text-neifert underline underline-offset-2 hover:no-underline">
-              /instagram
-            </a>
-            .
-          </p>
-          {isLocalDev ? (
-            <Button icon={RefreshCw} onClick={runSync} disabled={syncing}>
-              {syncing ? 'Sincronizando…' : 'Sincronizar ahora'}
-            </Button>
-          ) : (
-            <p className="max-w-xs text-xs text-ink-3">
-              La sincronización solo funciona en local. Corré{' '}
-              <code className="rounded bg-line px-1 font-mono text-[11px]">npm run sync:instagram</code>.
-            </p>
-          )}
-        </div>
-
-        {ig.items.length > 0 && (
-          <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-            {ig.items.map((item) => (
-              <div key={item.id} className="aspect-square overflow-hidden rounded-lg bg-black/5">
-                <img src={item.url} alt={item.caption || ''} className="h-full w-full object-cover" />
-              </div>
-            ))}
-          </div>
-        )}
       </Section>
     </div>
   )
@@ -506,27 +446,16 @@ function RedesTab() {
 
 export default function AdminContentPage() {
   const [tab, setTab] = useState('home')
-  const resetContent = useSiteStore((s) => s.resetContent)
-
-  const onReset = () => {
-    if (confirm('¿Restablecer todo el contenido a los valores por defecto?')) {
-      resetContent()
-      toast.success('Contenido restablecido')
-    }
-  }
 
   return (
     <section>
-      <div className="mb-8 rounded-2xl border border-line bg-white p-6 shadow-xs">
+      <div className="mb-8 rounded-2xl border border-line bg-surface-solid p-6 shadow-xs">
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-neifert">Gestión</p>
             <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Contenido</h1>
-            <p className="mt-1 text-sm text-ink-3">Los cambios se guardan automáticamente.</p>
+            <p className="mt-1 text-sm text-ink-3">Guardá los cambios con el botón de abajo a la derecha.</p>
           </div>
-          <Button variant="ghost" size="sm" icon={RotateCcw} onClick={onReset}>
-            Restablecer
-          </Button>
         </div>
 
         <div className="mt-6 flex flex-wrap gap-1.5 border-t border-line pt-4">
@@ -553,9 +482,10 @@ export default function AdminContentPage() {
 
       {tab === 'home' && <HomeTab />}
       {tab === 'categorias' && <CatalogTab />}
-      {tab === 'instagram' && <InstagramTab />}
       {tab === 'footer' && <FooterTab />}
       {tab === 'redes' && <RedesTab />}
+
+      <ContentSaveBar />
     </section>
   )
 }

@@ -10,7 +10,6 @@ pnpm-debug.log*
 node_modules
 dist
 dist-ssr
-dist-agent
 *.local
 
 # Environment (nunca commitear credenciales)
@@ -34,4 +33,4 @@ scraping/
 
 
 
-scrap/
+scrap/.waylog/

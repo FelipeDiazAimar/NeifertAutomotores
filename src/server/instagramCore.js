@@ -1,14 +1,13 @@
 /**
  * Orquestación de la sync de Instagram: usa el scraping puro de
  * instagramScraper.js y lo sube a nuestro storage real (R2 + Supabase).
- * Sin dependencias de Vite ni Vercel, para poder llamarse desde el plugin de
- * dev (src/plugins/instagramSyncProxy.js) y desde funciones serverless de
- * producción (api/instagram/*.js).
+ * Sin dependencias de Vite ni Vercel, para poder llamarse desde
+ * scripts/syncInstagram.mjs y desde funciones serverless de producción
+ * (api/instagram/*.js).
  *
  * runInstagramSync(...) → trae posteos nuevos + los sube a R2 + Supabase
- *   (usada por scripts/syncInstagram.mjs y por el botón de
- *   src/plugins/instagramSyncProxy.js — ambos corren LOCAL, nunca en
- *   Vercel: Instagram bloquea el scraping desde IPs de datacenter).
+ *   (usada por scripts/syncInstagram.mjs — corre LOCAL, nunca en Vercel:
+ *   Instagram bloquea el scraping desde IPs de datacenter).
  * mergeAndSaveInstagramItems(...) → guarda posteos ya subidos a R2 (usada
  *   también por api/instagram/report-sync.js, que recibe lo que encuentra
  *   el agente/ejecutable de un empleado corriendo en su compu).
