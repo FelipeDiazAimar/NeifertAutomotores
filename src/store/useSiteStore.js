@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
 import { MOCK_STORIES } from '@/lib/mockData'
-import { WHATSAPP_PHONE } from '@/lib/constants'
+import { WHATSAPP_PHONE, FUEL_TYPES, TRANSMISSIONS } from '@/lib/constants'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
 import { fetchSiteContent, saveSiteContent, CONTENT_KEYS } from '@/services/content.service'
 import { deleteMedia } from '@/services/media.service'
@@ -36,6 +36,8 @@ const DEFAULT_CATEGORIES = [
 
 const DEFAULT_CONTENT = {
   categories: DEFAULT_CATEGORIES.map((c) => ({ ...c })),
+  fuelTypes: [...FUEL_TYPES],
+  transmissions: [...TRANSMISSIONS],
   socials: {
     instagram: 'https://instagram.com/neifertautomotores',
     facebook: 'https://facebook.com/neifertautomotores',
@@ -180,6 +182,26 @@ export const useSiteStore = create(
         })),
       removeCategory: (id) =>
         set((s) => ({ categories: s.categories.filter((c) => c.id !== id) })),
+
+      // Tipos de combustible y de caja (listas simples, sin id separado del
+      // texto — a diferencia de las categorías, acá el valor mostrado ES el
+      // dato que se guarda en cada vehículo).
+      addFuelType: (value) =>
+        set((s) => {
+          const v = String(value || '').trim()
+          if (!v || s.fuelTypes.includes(v)) return {}
+          return { fuelTypes: [...s.fuelTypes, v] }
+        }),
+      removeFuelType: (value) =>
+        set((s) => ({ fuelTypes: s.fuelTypes.filter((f) => f !== value) })),
+      addTransmission: (value) =>
+        set((s) => {
+          const v = String(value || '').trim()
+          if (!v || s.transmissions.includes(v)) return {}
+          return { transmissions: [...s.transmissions, v] }
+        }),
+      removeTransmission: (value) =>
+        set((s) => ({ transmissions: s.transmissions.filter((t) => t !== value) })),
 
       setSocials: (partial) =>
         set((s) => ({ socials: { ...s.socials, ...partial } })),

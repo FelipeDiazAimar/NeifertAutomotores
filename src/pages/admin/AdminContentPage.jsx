@@ -10,19 +10,83 @@ import { cn } from '@/lib/cn'
 
 const TABS = [
   { id: 'home', label: 'Home' },
-  { id: 'categorias', label: 'Categorías' },
+  { id: 'categorias', label: 'Catálogo' },
   { id: 'instagram', label: 'Instagram' },
   { id: 'footer', label: 'Footer' },
   { id: 'redes', label: 'Redes & Contacto' },
 ]
 
-/* ---------------------------- CATEGORÍAS ----------------------------- */
-function CategoriesTab() {
+/** Lista simple de texto (sin id separado del valor): agregar/borrar. Usada
+ *  para tipos de combustible y de caja — a diferencia de las categorías, acá
+ *  el texto mostrado ES el dato que se guarda en cada vehículo, así que no
+ *  hay edición en el lugar (evita dejar autos con un valor "huérfano"). */
+function SimpleListEditor({ title, desc, placeholder, items, onAdd, onRemove }) {
+  const [value, setValue] = useState('')
+
+  const add = () => {
+    const v = value.trim()
+    if (!v) return
+    onAdd(v)
+    setValue('')
+  }
+
+  return (
+    <Section title={title} desc={desc}>
+      <div className="mb-4 flex gap-2">
+        <input
+          className={inputCls}
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault()
+              add()
+            }
+          }}
+          placeholder={placeholder}
+        />
+        <Button size="sm" variant="glass" icon={Plus} onClick={add}>
+          Agregar
+        </Button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {items.map((item) => (
+          <span
+            key={item}
+            className="glass flex items-center gap-2 rounded-full py-1.5 pl-3 pr-2 text-sm text-ink"
+          >
+            {item}
+            <button
+              onClick={() => onRemove(item)}
+              className="text-ink-3 transition-colors hover:text-neifert"
+              aria-label={`Borrar ${item}`}
+            >
+              <Trash2 size={13} />
+            </button>
+          </span>
+        ))}
+        {items.length === 0 && <p className="text-sm text-ink-3">Vacío. Agregá uno arriba.</p>}
+      </div>
+    </Section>
+  )
+}
+
+/* ---------------------- CATÁLOGO (categorías + combustible + caja) ---------------------- */
+function CatalogTab() {
   const categories = useSiteStore((s) => s.categories)
   const addCategory = useSiteStore((s) => s.addCategory)
   const updateCategory = useSiteStore((s) => s.updateCategory)
   const removeCategory = useSiteStore((s) => s.removeCategory)
   const [newLabel, setNewLabel] = useState('')
+
+  const fuelTypes = useSiteStore((s) => s.fuelTypes)
+  const addFuelType = useSiteStore((s) => s.addFuelType)
+  const removeFuelType = useSiteStore((s) => s.removeFuelType)
+
+  const transmissions = useSiteStore((s) => s.transmissions)
+  const addTransmission = useSiteStore((s) => s.addTransmission)
+  const removeTransmission = useSiteStore((s) => s.removeTransmission)
 
   const add = () => {
     const label = newLabel.trim()
@@ -80,6 +144,24 @@ function CategoriesTab() {
           )}
         </div>
       </Section>
+
+      <SimpleListEditor
+        title="Tipos de combustible"
+        desc="Opciones del select de combustible al cargar/editar un vehículo."
+        placeholder="Nuevo tipo (ej: GNC)"
+        items={fuelTypes}
+        onAdd={addFuelType}
+        onRemove={removeFuelType}
+      />
+
+      <SimpleListEditor
+        title="Tipos de caja"
+        desc="Opciones del select de transmisión al cargar/editar un vehículo."
+        placeholder="Nuevo tipo (ej: CVT)"
+        items={transmissions}
+        onAdd={addTransmission}
+        onRemove={removeTransmission}
+      />
     </div>
   )
 }
@@ -482,7 +564,7 @@ export default function AdminContentPage() {
       </div>
 
       {tab === 'home' && <HomeTab />}
-      {tab === 'categorias' && <CategoriesTab />}
+      {tab === 'categorias' && <CatalogTab />}
       {tab === 'instagram' && <InstagramTab />}
       {tab === 'footer' && <FooterTab />}
       {tab === 'redes' && <RedesTab />}

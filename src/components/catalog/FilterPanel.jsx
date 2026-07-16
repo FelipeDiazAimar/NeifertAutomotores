@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { SlidersHorizontal, X } from 'lucide-react'
-import { FUEL_TYPES, TRANSMISSIONS } from '@/lib/constants'
+import { useSiteStore } from '@/store/useSiteStore'
 import { useCatalogStore } from '@/store/useCatalogStore'
 import { cn } from '@/lib/cn'
 
@@ -55,6 +55,8 @@ export default function FilterPanel(props) {
   const storeSetFilters = useCatalogStore((s) => s.setFilters)
   const storeClear = useCatalogStore((s) => s.clearFilters)
   const storeCount = useCatalogStore((s) => s.activeFilterCount())
+  const fuelTypes = useSiteStore((s) => s.fuelTypes)
+  const transmissions = useSiteStore((s) => s.transmissions)
 
   // Permite usar estado propio (panel admin) o el store del catálogo público.
   const filters = props.filters ?? storeFilters
@@ -118,7 +120,7 @@ export default function FilterPanel(props) {
                   Combustible
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {FUEL_TYPES.map((f) => (
+                  {fuelTypes.map((f) => (
                     <Chip
                       key={f}
                       active={filters.fuels.includes(f)}
@@ -135,7 +137,7 @@ export default function FilterPanel(props) {
                   Tipo de caja
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {TRANSMISSIONS.map((t) => (
+                  {transmissions.map((t) => (
                     <Chip
                       key={t}
                       active={filters.transmissions.includes(t)}

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import Button from '@/components/common/Button'
 import ImageUploader from './ImageUploader'
-import { FUEL_TYPES, TRANSMISSIONS, ARS_TO_USD_RATE } from '@/lib/constants'
+import { ARS_TO_USD_RATE } from '@/lib/constants'
 import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
@@ -51,6 +51,8 @@ const EMPTY = {
 
 export default function VehicleForm({ initial, onSave, onCancel, saving }) {
   const categories = useSiteStore((s) => s.categories)
+  const fuelTypes = useSiteStore((s) => s.fuelTypes)
+  const transmissions = useSiteStore((s) => s.transmissions)
   const [form, setForm] = useState(() => ({
     ...EMPTY,
     category: initial?.category ?? categories[0]?.id ?? '',
@@ -124,14 +126,14 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
       </Field>
       <Field label="Combustible">
         <select className={fieldCls} value={form.fuel_type} onChange={(e) => set('fuel_type', e.target.value)}>
-          {FUEL_TYPES.map((f) => (
+          {fuelTypes.map((f) => (
             <option key={f} value={f}>{f}</option>
           ))}
         </select>
       </Field>
       <Field label="Tipo de caja">
         <select className={fieldCls} value={form.transmission} onChange={(e) => set('transmission', e.target.value)}>
-          {TRANSMISSIONS.map((t) => (
+          {transmissions.map((t) => (
             <option key={t} value={t}>{t}</option>
           ))}
         </select>
