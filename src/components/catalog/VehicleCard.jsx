@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
@@ -24,32 +24,39 @@ function ImgPlaceholder({ brand }) {
 }
 
 /** Imagen de la card que rota a otra foto del mismo vehículo al hacer hover. */
-function CardImage({ vehicle, rounded }) {
+function CardImage({ vehicle, rounded, isHovered }) {
   const all = (vehicle.images?.length ? vehicle.images : [vehicle.main_image_url]).filter(
     Boolean
   )
   const [idx, setIdx] = useState(0)
   const [failed, setFailed] = useState(false)
-  const timer = useRef(null)
+  const [manualPaused, setManualPaused] = useState(false)
 
-  const startCycle = () => {
-    if (all.length < 2) return
-    timer.current = setInterval(() => setIdx((i) => (i + 1) % all.length), 900)
+  useEffect(() => {
+    if (!isHovered) {
+      setIdx(0)
+      return undefined
+    }
+    setManualPaused(false)
+  }, [isHovered])
+
+  useEffect(() => {
+    if (!isHovered || manualPaused || all.length < 2) return undefined
+    const timer = setInterval(() => setIdx((i) => (i + 1) % all.length), 2500)
+    return () => clearInterval(timer)
+  }, [all.length, isHovered, manualPaused])
+
+  const showImage = (direction, event) => {
+    event.preventDefault()
+    event.stopPropagation()
+    setManualPaused(true)
+    setIdx((i) => (i + direction + all.length) % all.length)
   }
-  const stopCycle = () => {
-    clearInterval(timer.current)
-    setIdx(0)
-  }
-  useEffect(() => () => clearInterval(timer.current), [])
 
   if (failed || all.length === 0) return <ImgPlaceholder brand={vehicle.brand} />
 
   return (
-    <div
-      className={cn('absolute inset-0', rounded)}
-      onMouseEnter={startCycle}
-      onMouseLeave={stopCycle}
-    >
+    <div className={cn('absolute inset-0', rounded)}>
       <AnimatePresence initial={false} mode="popLayout">
         <motion.img
           key={idx}
@@ -64,6 +71,26 @@ function CardImage({ vehicle, rounded }) {
           className="absolute inset-0 h-full w-full object-cover"
         />
       </AnimatePresence>
+      {all.length > 1 && (
+        <>
+          <button
+            type="button"
+            aria-label="Ver imagen anterior"
+            onClick={(event) => showImage(-1, event)}
+            className="absolute left-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-0 backdrop-blur-sm transition hover:bg-black/55 group-hover:opacity-100 focus:opacity-100"
+          >
+            <ChevronLeft size={18} />
+          </button>
+          <button
+            type="button"
+            aria-label="Ver imagen siguiente"
+            onClick={(event) => showImage(1, event)}
+            className="absolute right-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-0 backdrop-blur-sm transition hover:bg-black/55 group-hover:opacity-100 focus:opacity-100"
+          >
+            <ChevronRight size={18} />
+          </button>
+        </>
+      )}
       {all.length > 1 && (
         <div className="pointer-events-none absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
           {all.map((_, i) => (
@@ -93,6 +120,7 @@ function Spec({ icon: Icon, children }) {
 export default function VehicleCard({ vehicle, view = 'grid' }) {
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const waHref = vehicleWaLink(phone, vehicle)
+  const [isCardHovered, setIsCardHovered] = useState(false)
 
   const specs = (
     <div className="flex flex-wrap gap-x-4 gap-y-1.5">
@@ -163,13 +191,15 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
     return (
       <motion.div
         {...layoutProps}
+        onMouseEnter={() => setIsCardHovered(true)}
+        onMouseLeave={() => setIsCardHovered(false)}
         className="group glass flex gap-4 overflow-hidden rounded-[20px] p-3 shadow-glass"
       >
         <Link
           to={`/catalogo/${vehicle.id}`}
           className="relative h-28 w-44 shrink-0 overflow-hidden rounded-2xl"
         >
-          <CardImage vehicle={vehicle} />
+          <CardImage vehicle={vehicle} isHovered={isCardHovered} />
           <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2.5 py-0.5 text-xs font-semibold text-[#0b0b0f]">
             {vehicle.year}
           </span>
@@ -200,11 +230,13 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
     <motion.div
       {...layoutProps}
       whileHover={{ y: -8 }}
+      onMouseEnter={() => setIsCardHovered(true)}
+      onMouseLeave={() => setIsCardHovered(false)}
       className="group glass overflow-hidden rounded-[20px] shadow-glass"
     >
       <Link to={`/catalogo/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
-          <CardImage vehicle={vehicle} />
+          <CardImage vehicle={vehicle} isHovered={isCardHovered} />
           <span className="absolute left-3 top-3 z-10 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
             {vehicle.year}
           </span>
