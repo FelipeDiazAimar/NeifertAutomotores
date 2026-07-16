@@ -499,7 +499,7 @@ function RedesTab() {
     <div className="space-y-5">
       <Section title="Contacto" desc="El teléfono se usa en todos los botones de WhatsApp del sitio.">
         <div className="grid gap-4 sm:grid-cols-2">
-          <TextField label="WhatsApp (con código de país)" value={socials.whatsappPhone} onChange={(v) => setSocials({ whatsappPhone: v })} placeholder="5491100000000" />
+          <TextField label="WhatsApp (con código de país)" value={socials.whatsappPhone} onChange={(v) => setSocials({ whatsappPhone: v })} placeholder="543564562413" />
           <div />
           <TextField label="Dirección" value={socials.address} onChange={(v) => setSocials({ address: v })} />
           <TextField label="Horarios" value={socials.hours} onChange={(v) => setSocials({ hours: v })} />

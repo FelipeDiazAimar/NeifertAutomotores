@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom'
 import { MapPin } from 'lucide-react'
 import Logo from '@/components/common/Logo'
-import { InstagramIcon, FacebookIcon, XIcon } from '@/components/common/SocialIcons'
+import { InstagramIcon, FacebookIcon, WhatsAppIcon, XIcon } from '@/components/common/SocialIcons'
 import { useSiteStore } from '@/store/useSiteStore'
+import { waLink } from '@/lib/whatsapp'
 
 const MAPS_URL =
   'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+898+San+Francisco+C%C3%B3rdoba+Argentina'
@@ -12,19 +13,23 @@ function FooterCol({ title, items }) {
     <div>
       <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-3">{title}</h4>
       <ul className="space-y-2">
-        {items.map(({ label, href }) => (
+        {items.map(({ label, href }) => {
+          const legalRoutes = { Términos: '/terminos', Privacidad: '/privacidad', Cookies: '/cookies', Contacto: '/contacto' }
+          const resolvedHref = title.toLowerCase() === 'legal' && legalRoutes[label] ? legalRoutes[label] : href
+          return (
           <li key={label}>
-            {href.startsWith('/') ? (
-              <Link to={href} className="text-sm text-ink-2 transition-colors hover:text-neifert">
+            {resolvedHref.startsWith('/') ? (
+              <Link to={resolvedHref} onClick={() => window.scrollTo({ top: 0, behavior: 'auto' })} className="text-sm text-ink-2 transition-colors hover:text-neifert">
                 {label}
               </Link>
             ) : (
-              <a href={href} className="text-sm text-ink-2 transition-colors hover:text-neifert">
+              <a href={resolvedHref} className="text-sm text-ink-2 transition-colors hover:text-neifert">
                 {label}
               </a>
             )}
           </li>
-        ))}
+          )
+        })}
       </ul>
     </div>
   )
@@ -63,6 +68,17 @@ export default function Footer() {
                   className="transition-colors hover:text-neifert"
                 >
                   <FacebookIcon size={18} />
+                </a>
+              )}
+              {socials.whatsappPhone && (
+                <a
+                  href={waLink(socials.whatsappPhone, 'Hola! Quería hacer una consulta.')}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="WhatsApp"
+                  className="transition-colors hover:text-whatsapp"
+                >
+                  <WhatsAppIcon size={18} />
                 </a>
               )}
               {socials.x && (

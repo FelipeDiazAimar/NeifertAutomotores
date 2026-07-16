@@ -47,7 +47,7 @@ export const FUEL_TYPES = ['Nafta', 'Eléctrico', 'Híbrido', 'Diésel']
 export const TRANSMISSIONS = ['Automática', 'Manual', 'PDK', 'M Steptronic', 'F1 Dual-Clutch']
 
 /** Teléfono de WhatsApp del salón (formato internacional sin + ni espacios). */
-export const WHATSAPP_PHONE = import.meta.env.VITE_WHATSAPP_PHONE || '5491100000000'
+export const WHATSAPP_PHONE = '543564562413'
 
 /** Navegación principal (tab-bar mobile + accesos). */
 export const NAV_ITEMS = [

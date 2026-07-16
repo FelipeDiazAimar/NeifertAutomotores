@@ -10,6 +10,8 @@ const CatalogPage = lazy(() => import('@/pages/public/CatalogPage'))
 const VehicleDetailPage = lazy(() => import('@/pages/public/VehicleDetailPage'))
 const InstagramPage = lazy(() => import('@/pages/public/InstagramPage'))
 const AppointmentPage = lazy(() => import('@/pages/public/AppointmentPage'))
+const LegalPage = lazy(() => import('@/pages/public/LegalPage'))
+const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
 const LoginPage = lazy(() => import('@/pages/auth/LoginPage'))
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'))
 const AdminCatalogPage = lazy(() => import('@/pages/admin/AdminCatalogPage'))
@@ -26,6 +28,10 @@ export default function AppRouter() {
         <Route path="/catalogo/:id" element={<VehicleDetailPage />} />
         <Route path="/instagram" element={<InstagramPage />} />
         <Route path="/cita" element={<AppointmentPage />} />
+        <Route path="/terminos" element={<LegalPage type="terms" />} />
+        <Route path="/privacidad" element={<LegalPage type="privacy" />} />
+        <Route path="/cookies" element={<LegalPage type="cookies" />} />
+        <Route path="/contacto" element={<ContactPage />} />
       </Route>
 
       <Route path="/login" element={<LoginPage />} />

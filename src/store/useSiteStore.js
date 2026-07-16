@@ -39,10 +39,10 @@ const DEFAULT_CONTENT = {
   fuelTypes: [...FUEL_TYPES],
   transmissions: [...TRANSMISSIONS],
   socials: {
-    instagram: 'https://instagram.com/neifertautomotores',
-    facebook: 'https://facebook.com/neifertautomotores',
+    instagram: 'https://www.instagram.com/neifertautomotores',
+    facebook: 'https://www.facebook.com/neifertautomotores',
     x: '',
-    whatsappPhone: WHATSAPP_PHONE,
+    whatsappPhone: '543564562413',
     address: 'Av. Urquiza 898, San Francisco, Córdoba',
     hours: 'Lun a Vie · 8 a 12:30 h y 16 a 20 h · Sáb 9 a 13 h',
     email: 'neifertsanfrancisco@gmail.com',
@@ -145,10 +145,10 @@ const DEFAULT_CONTENT = {
       {
         title: 'Legal',
         items: [
-          { label: 'Términos', href: '#' },
-          { label: 'Privacidad', href: '#' },
-          { label: 'Cookies', href: '#' },
-          { label: 'Contacto', href: '/cita' },
+          { label: 'Términos', href: '/terminos' },
+          { label: 'Privacidad', href: '/privacidad' },
+          { label: 'Cookies', href: '/cookies' },
+          { label: 'Contacto', href: '/contacto' },
         ],
       },
     ],
@@ -279,7 +279,11 @@ export const useSiteStore = create(
     }),
     {
       name: 'nf-site-content',
-      version: 1,
+      version: 2,
+      migrate: (persistedState) => ({
+        ...persistedState,
+        socials: { ...persistedState.socials, whatsappPhone: '543564562413' },
+      }),
     }
   )
 )
