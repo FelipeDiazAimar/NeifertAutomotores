@@ -6,6 +6,8 @@ import { instagramProxyPlugin } from './src/plugins/instagramProxy.js'
 import { crmProxyPlugin } from './src/plugins/crmProxy.js'
 import { r2ProxyPlugin } from './src/plugins/r2Proxy.js'
 import { usersProxyPlugin } from './src/plugins/usersProxy.js'
+import { instagramSyncProxyPlugin } from './src/plugins/instagramSyncProxy.js'
+import { instagramReportSyncProxyPlugin } from './src/plugins/instagramReportSyncProxy.js'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -35,6 +37,21 @@ export default defineConfig(({ mode }) => {
       usersProxyPlugin({
         supabaseUrl: env.VITE_SUPABASE_URL,
         supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      }),
+      instagramSyncProxyPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL,
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+        r2AccessKeyId: env.R2_ACCESS_KEY_ID,
+        r2SecretAccessKey: env.R2_SECRET_ACCESS_KEY,
+        r2Bucket: env.R2_BUCKET_NAME,
+        r2Endpoint: env.R2_ENDPOINT,
+        r2PublicUrl: env.R2_PUBLIC_URL,
+      }),
+      instagramReportSyncProxyPlugin({
+        supabaseUrl: env.VITE_SUPABASE_URL,
+        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
+        agentToken: env.INSTAGRAM_AGENT_TOKEN,
+        r2PublicUrl: env.R2_PUBLIC_URL,
       }),
     ],
     resolve: {

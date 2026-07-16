@@ -1,11 +1,12 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown } from 'lucide-react'
+import { Plus, Trash2, RotateCcw, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, RefreshCw } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
 import { TextField, Section, inputCls } from '@/components/admin/ContentFields'
 import { useSiteStore } from '@/store/useSiteStore'
+import { syncInstagramFeed } from '@/services/instagramSync.service'
 import { cn } from '@/lib/cn'
 
 const TABS = [
@@ -375,65 +376,57 @@ function HomeTab() {
 }
 
 /* ----------------------------- INSTAGRAM ----------------------------- */
+// El botón pega a /api/instagram/sync, que solo existe como plugin de Vite
+// en `npm run dev` — no hay función serverless equivalente en Vercel a
+// propósito (Instagram bloquea el scraping desde IPs de datacenter). Fuera
+// de localhost no tiene forma de funcionar, así que ni se muestra.
+const isLocalDev =
+  typeof window !== 'undefined' && ['localhost', '127.0.0.1'].includes(window.location.hostname)
+
 function InstagramTab() {
   const ig = useSiteStore((s) => s.instagram)
-  const setMeta = useSiteStore((s) => s.setInstagramMeta)
-  const addIgItem = useSiteStore((s) => s.addIgItem)
-  const updateIgItem = useSiteStore((s) => s.updateIgItem)
-  const removeIgItem = useSiteStore((s) => s.removeIgItem)
+  const [syncing, setSyncing] = useState(false)
+
+  const runSync = async () => {
+    setSyncing(true)
+    try {
+      const result = await syncInstagramFeed()
+      if (result.added > 0) toast.success(result.message)
+      else toast.info(result.message)
+    } catch (e) {
+      toast.error(e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
 
   return (
     <div className="space-y-5">
-      <Section title="Encabezado de la página">
-        <div className="grid gap-4">
-          <TextField label="Título" value={ig.headline} onChange={(v) => setMeta({ headline: v })} />
-          <TextField label="Subtítulo" value={ig.subtitle} onChange={(v) => setMeta({ subtitle: v })} textarea />
-        </div>
-      </Section>
-
       <Section
-        title="Galería"
-        desc="Capturas, fotos y videos del perfil. Tocá una para ir a tu Instagram."
-        action={
-          <div className="flex gap-2">
-            <Button size="sm" variant="glass" icon={ImageIcon} onClick={() => addIgItem({ type: 'image', url: '', caption: '' })}>
-              Imagen
-            </Button>
-            <Button size="sm" variant="glass" icon={Video} onClick={() => addIgItem({ type: 'video', url: '', caption: '' })}>
-              Video
-            </Button>
-          </div>
-        }
+        title="Feed de Instagram"
+        desc="La galería ya no se edita a mano acá — se actualiza corriendo la sincronización real, que trae los últimos posteos del perfil."
       >
-        <div className="grid gap-3 sm:grid-cols-2">
-          {ig.items.map((it) => (
-            <div key={it.id} className="rounded-xl border border-line p-3">
-              <div className="mb-2 flex items-center justify-between">
-                <span className="text-xs font-bold uppercase tracking-wider text-neifert">
-                  {it.type === 'video' ? 'Video' : 'Imagen'}
-                </span>
-                <button onClick={() => removeIgItem(it.id)} className="text-ink-3 hover:text-neifert" aria-label="Borrar">
-                  <Trash2 size={15} />
-                </button>
-              </div>
-              {it.type === 'video' ? (
-                <VideoUploader
-                  value={it.url}
-                  onChange={(url) => updateIgItem(it.id, { url })}
-                />
-              ) : (
-                <ImageUploader
-                  multiple={false}
-                  value={it.url ? [it.url] : []}
-                  onChange={(urls) => updateIgItem(it.id, { url: urls[0] || '' })}
-                />
-              )}
-              <div className="mt-3 grid gap-3">
-                <TextField label="Caption" value={it.caption} onChange={(v) => updateIgItem(it.id, { caption: v })} />
-                <TextField label="Enlace (opcional)" value={it.link} onChange={(v) => updateIgItem(it.id, { link: v })} placeholder="https://instagram.com/p/…" />
-              </div>
-            </div>
-          ))}
+        <div className="flex flex-wrap items-center justify-between gap-4">
+          <p className="text-sm text-ink-2">
+            Hay <span className="font-semibold text-ink">{ig.items.length}</span> posteos guardados.
+            Se ven en{' '}
+            <a href="/instagram" target="_blank" rel="noreferrer" className="text-neifert underline">
+              /instagram
+            </a>
+            .
+          </p>
+          {isLocalDev ? (
+            <Button icon={RefreshCw} onClick={runSync} disabled={syncing}>
+              {syncing ? 'Sincronizando…' : 'Actualizar Instagram'}
+            </Button>
+          ) : (
+            <p className="max-w-xs text-xs text-ink-3">
+              El botón de sincronizar solo aparece corriendo el proyecto local (
+              <code className="font-mono">npm run dev</code>). Instagram bloquea el scraping desde
+              servidores como los de Vercel, así que acá no puede funcionar — corré{' '}
+              <code className="font-mono">npm run sync:instagram</code> desde tu computadora.
+            </p>
+          )}
         </div>
       </Section>
     </div>

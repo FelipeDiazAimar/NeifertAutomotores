@@ -210,8 +210,6 @@ export const useSiteStore = create(
         if ('ctaImage' in partial && partial.ctaImage !== current.ctaImage) cleanupMedia(current.ctaImage)
         set((s) => ({ home: { ...s.home, ...partial } }))
       },
-      setInstagramMeta: (partial) =>
-        set((s) => ({ instagram: { ...s.instagram, ...partial } })),
       setFooter: (partial) => set((s) => ({ footer: { ...s.footer, ...partial } })),
 
       // Historias / testimonios
@@ -267,37 +265,6 @@ export const useSiteStore = create(
           ;[next[i], next[j]] = [next[j], next[i]]
           return { heroSlides: next }
         }),
-
-      // Galería de Instagram
-      addIgItem: (item) =>
-        set((s) => ({
-          instagram: {
-            ...s.instagram,
-            items: [...s.instagram.items, { id: uid(), type: 'image', ...item }],
-          },
-        })),
-      updateIgItem: (id, partial) => {
-        const current = get().instagram.items.find((it) => it.id === id)
-        if (current && 'url' in partial && partial.url !== current.url) cleanupMedia(current.url)
-        set((s) => ({
-          instagram: {
-            ...s.instagram,
-            items: s.instagram.items.map((it) =>
-              it.id === id ? { ...it, ...partial } : it
-            ),
-          },
-        }))
-      },
-      removeIgItem: (id) => {
-        const current = get().instagram.items.find((it) => it.id === id)
-        if (current) cleanupMedia(current.url)
-        set((s) => ({
-          instagram: {
-            ...s.instagram,
-            items: s.instagram.items.filter((it) => it.id !== id),
-          },
-        }))
-      },
 
       resetContent: () => {
         const s = get()
