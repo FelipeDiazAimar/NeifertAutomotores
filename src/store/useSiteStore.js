@@ -3,7 +3,7 @@ import { persist } from 'zustand/middleware'
 import { MOCK_STORIES } from '@/lib/mockData'
 import { WHATSAPP_PHONE, FUEL_TYPES, TRANSMISSIONS } from '@/lib/constants'
 import { isSupabaseConfigured } from '@/services/supabaseClient'
-import { fetchSiteContent, saveSiteContent, CONTENT_KEYS } from '@/services/content.service'
+import { fetchSiteContent, CONTENT_KEYS } from '@/services/content.service'
 import { deleteMedia } from '@/services/media.service'
 
 const cleanupMedia = (url) => {
@@ -265,17 +265,6 @@ export const useSiteStore = create(
           ;[next[i], next[j]] = [next[j], next[i]]
           return { heroSlides: next }
         }),
-
-      resetContent: () => {
-        const s = get()
-        s.heroSlides.forEach((it) => cleanupMedia(it.image))
-        s.stories.forEach((it) => {
-          cleanupMedia(it.video_url)
-          cleanupMedia(it.poster_url)
-        })
-        s.instagram.items.forEach((it) => cleanupMedia(it.url))
-        set({ ...DEFAULT_CONTENT })
-      },
     }),
     {
       name: 'nf-site-content',
@@ -290,14 +279,14 @@ export const useSiteStore = create(
 
 /* ---------------------------------------------------------------------------
    Sincronización con Supabase (solo si hay credenciales; no-op en modo demo).
-   - hydrateSiteContent(): trae el contenido del servidor al iniciar la app.
-   - subscribe: persiste (upsert, con debounce) cada sección que cambia.
---------------------------------------------------------------------------- */
+   hydrateSiteContent(): trae el contenido del servidor al iniciar la app.
 
-// Evita que la hidratación inicial (traer contenido de Supabase) dispare una
-// escritura de "guardado" hacia atrás — sin esto, cualquier visitante anónimo
-// terminaba intentando un upsert a contenido_sitio y lo rechazaba el RLS (401).
-let isHydrating = false
+   A diferencia de antes, ESTE store ya no autoguarda solo — /admin/contenido
+   tiene su propio botón "Guardar cambios" (ContentSaveBar) que decide cuándo
+   persistir. Lo único que se sigue guardando solo es la categoría que se
+   crea automáticamente al sincronizar con el CRM viejo (no pasa por esa
+   pantalla), ver crmVehicles.service.js.
+--------------------------------------------------------------------------- */
 
 /** Hidrata el store con el contenido guardado en Supabase. Llamar al iniciar. */
 export async function hydrateSiteContent() {
@@ -307,29 +296,8 @@ export async function hydrateSiteContent() {
     if (!content) return
     const merged = {}
     for (const k of CONTENT_KEYS) if (content[k] != null) merged[k] = content[k]
-    if (Object.keys(merged).length) {
-      isHydrating = true
-      useSiteStore.setState(merged)
-      isHydrating = false
-    }
+    if (Object.keys(merged).length) useSiteStore.setState(merged)
   } catch (e) {
     console.warn('[Neifert] No se pudo hidratar site_content:', e.message)
   }
-}
-
-if (isSupabaseConfigured) {
-  const timers = {}
-  useSiteStore.subscribe((state, prev) => {
-    if (isHydrating) return
-    for (const k of CONTENT_KEYS) {
-      if (state[k] !== prev[k]) {
-        clearTimeout(timers[k])
-        timers[k] = setTimeout(() => {
-          saveSiteContent(k, state[k]).catch((e) =>
-            console.warn(`[Neifert] No se pudo guardar ${k}:`, e.message)
-          )
-        }, 800)
-      }
-    }
-  })
 }

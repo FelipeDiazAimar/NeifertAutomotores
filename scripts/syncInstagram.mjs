@@ -22,9 +22,8 @@
  * R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET_NAME, R2_ENDPOINT,
  * R2_PUBLIC_URL (los mismos que ya usa la app).
  *
- * También podés correr esto mismo (modo incremental) desde un botón en
- * /admin/contenido → pestaña Instagram — usa el mismo runInstagramSync() de
- * src/server/instagramCore.js, vía src/plugins/instagramSyncProxy.js.
+ * Alternativa sin usar la terminal: el ejecutable de scripts/instagramAgent/
+ * (ver ese README/comentarios) hace lo mismo desde la compu de un empleado.
  */
 
 import { runInstagramSync } from '../src/server/instagramCore.js'
