@@ -7,6 +7,7 @@ import VideoUploader from '@/components/admin/VideoUploader'
 import { TextField, Section, inputCls } from '@/components/admin/ContentFields'
 import { useSiteStore } from '@/store/useSiteStore'
 import { syncInstagramFeed } from '@/services/instagramSync.service'
+import { HOME_ASPECT_RATIOS, HOME_MAX_IMAGE_MB, HOME_MAX_VIDEO_MB } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 
 const TABS = [
@@ -247,6 +248,8 @@ function HomeTab() {
                   </span>
                   <ImageUploader
                     multiple={false}
+                    aspectRatio={HOME_ASPECT_RATIOS.carousel}
+                    maxSizeMB={HOME_MAX_IMAGE_MB}
                     value={slide.image ? [slide.image] : []}
                     onChange={(urls) => updateHeroSlide(slide.id, { image: urls[0] || '' })}
                   />
@@ -283,6 +286,8 @@ function HomeTab() {
             </span>
             <ImageUploader
               multiple={false}
+              aspectRatio={HOME_ASPECT_RATIOS.cta}
+              maxSizeMB={HOME_MAX_IMAGE_MB}
               value={home.ctaImage ? [home.ctaImage] : []}
               onChange={(urls) => setHome({ ctaImage: urls[0] || '' })}
             />
@@ -332,12 +337,19 @@ function HomeTab() {
                   <TextField label="URL del video (opcional)" value={st.video_url} onChange={(v) => updateStory(st.id, { video_url: v })} placeholder="https://…/video.mp4" />
                   <div className="sm:col-span-2">
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Video (se reproduce solo al hacer scroll)</span>
-                    <VideoUploader value={st.video_url} onChange={(url) => updateStory(st.id, { video_url: url })} />
+                    <VideoUploader
+                      value={st.video_url}
+                      onChange={(url) => updateStory(st.id, { video_url: url })}
+                      maxSizeMB={HOME_MAX_VIDEO_MB}
+                      aspectRatio={HOME_ASPECT_RATIOS.story}
+                    />
                   </div>
                   <div className="sm:col-span-2">
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Póster (mientras carga el video)</span>
                     <ImageUploader
                       multiple={false}
+                      aspectRatio={HOME_ASPECT_RATIOS.story}
+                      maxSizeMB={HOME_MAX_VIDEO_MB}
                       value={st.poster_url ? [st.poster_url] : []}
                       onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
                     />
@@ -353,6 +365,8 @@ function HomeTab() {
                     <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Imagen</span>
                     <ImageUploader
                       multiple={false}
+                      aspectRatio={HOME_ASPECT_RATIOS.story}
+                      maxSizeMB={HOME_MAX_IMAGE_MB}
                       value={st.poster_url ? [st.poster_url] : []}
                       onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
                     />

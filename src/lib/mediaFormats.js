@@ -36,10 +36,10 @@ export function validateImageFile(file) {
   return null
 }
 
-export function validateVideoFile(file) {
+export function validateVideoFile(file, maxMB = MAX_VIDEO_MB) {
   if (!VIDEO_MIME.includes(file.type)) return 'Formato no soportado. Usá MP4, WebM o MOV.'
-  if (toMb(file.size) > MAX_VIDEO_MB)
-    return `El video pesa ${toMb(file.size).toFixed(0)}MB. Máximo ${MAX_VIDEO_MB}MB.`
+  if (toMb(file.size) > maxMB)
+    return `El video pesa ${toMb(file.size).toFixed(0)}MB. Máximo ${maxMB}MB.`
   return null
 }
 
@@ -166,4 +166,52 @@ export function formatDuration(seconds) {
   const m = Math.floor(seconds / 60)
   const s = Math.round(seconds % 60)
   return `${m}:${String(s).padStart(2, '0')}`
+}
+
+/* ---------------------------------------------------------------------------
+   Home page image presets — relaciones de aspecto específicas por categoría.
+   Se usan en el cropper desde /admin/contenido.
+--------------------------------------------------------------------------- */
+
+export const HOME_MAX_IMAGE_MB = 10
+export const HOME_MAX_VIDEO_MB = 50
+
+export const HOME_ASPECT_RATIOS = {
+  carousel: { w: 21, h: 9, label: '21:9' },
+  story: { w: 4, h: 5, label: '4:5' },
+  cta: { w: 21, h: 9, label: '21:9' },
+}
+
+/** Recorta una imagen con una relación de aspecto arbitraria y devuelve un File WebP. */
+export async function cropImage(file, { x = 0.5, y = 0.5, zoom = 1, aspectW = 1, aspectH = 1 } = {}) {
+  const bitmap = await createImageBitmap(file)
+  const imgW = bitmap.width
+  const imgH = bitmap.height
+  const cropRatio = aspectW / aspectH
+  const imageRatio = imgW / imgH
+
+  let sourceW, sourceH
+  if (cropRatio >= imageRatio) {
+    sourceW = imgW / zoom
+    sourceH = sourceW / cropRatio
+  } else {
+    sourceH = imgH / zoom
+    sourceW = sourceH * cropRatio
+  }
+
+  const sx = Math.max(0, Math.min(imgW - sourceW, x * (imgW - sourceW)))
+  const sy = Math.max(0, Math.min(imgH - sourceH, y * (imgH - sourceH)))
+
+  const outputScale = Math.min(IMAGE_MAX_EDGE / Math.max(sourceW, sourceH), 1)
+  const outputW = Math.round(sourceW * outputScale)
+  const outputH = Math.round(sourceH * outputScale)
+
+  const canvas = document.createElement('canvas')
+  canvas.width = outputW
+  canvas.height = outputH
+  canvas.getContext('2d').drawImage(bitmap, sx, sy, sourceW, sourceH, 0, 0, outputW, outputH)
+  bitmap.close?.()
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, 'image/webp', 0.94))
+  if (!blob) throw new Error('El navegador no pudo recortar la imagen.')
+  return new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'imagen'}.webp`, { type: 'image/webp' })
 }

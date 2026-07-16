@@ -74,20 +74,22 @@ function uploadToR2(path, blob, contentType, onProgress) {
 }
 
 /** Sube una imagen. Devuelve { url, path?, width, height, ratio, warning, demo }. */
-export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress } = {}) {
+export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress, maxSizeMB, skipRatioCheck } = {}) {
   const err = validateImageFile(file)
   if (err) throw new Error(err)
 
   onProgress?.(0.1)
   const { width, height } = await readImageSize(file)
   const { ratio, off } = closestRatio(width, height, IMAGE_RATIOS)
-  const warning =
-    off > RATIO_TOLERANCE
-      ? `Imagen ${(width / height).toFixed(2)}:1 — se recomienda ${ratio.id} (estilo Instagram). Se usa igual.`
-      : null
+  let warning = null
+  if (!skipRatioCheck && off > RATIO_TOLERANCE)
+    warning = `Imagen ${(width / height).toFixed(2)}:1 — se recomienda ${ratio.id} (estilo Instagram). Se usa igual.`
 
   onProgress?.(0.3)
-  const { blob, width: cw, height: ch } = await compressImage(file)
+  const { blob, width: cw, height: ch } = await compressImage(
+    file,
+    maxSizeMB ? { maxBytes: maxSizeMB * 1024 * 1024 } : {}
+  )
   onProgress?.(0.5)
 
   const path = `${bucket}/${Date.now()}-${uid()}.webp`
@@ -109,8 +111,8 @@ export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress 
 }
 
 /** Sube un video. Devuelve { url, path?, width, height, duration, ratio, warning, demo, persistent }. */
-export async function uploadVideoMedia(file, { bucket = 'historias', onProgress } = {}) {
-  const err = validateVideoFile(file)
+export async function uploadVideoMedia(file, { bucket = 'historias', onProgress, maxSizeMB } = {}) {
+  const err = validateVideoFile(file, maxSizeMB)
   if (err) throw new Error(err)
 
   onProgress?.(0.05)

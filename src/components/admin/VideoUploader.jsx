@@ -7,7 +7,7 @@ import { cn } from '@/lib/cn'
 
 /** Subida de un video (explorador / drag & drop). Valida formato/peso,
  *  detecta relación de aspecto y avisa. value: string · onChange: (url) => void */
-export default function VideoUploader({ value, onChange }) {
+export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio }) {
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(null)
@@ -16,7 +16,7 @@ export default function VideoUploader({ value, onChange }) {
     if (!file) return
     try {
       setProgress(0)
-      const res = await uploadVideoMedia(file, { onProgress: setProgress })
+      const res = await uploadVideoMedia(file, { onProgress: setProgress, maxSizeMB })
       onChange(res.url)
       if (res.warning) toast.warning(res.warning, { duration: 6000 })
     } catch (e) {
@@ -27,9 +27,26 @@ export default function VideoUploader({ value, onChange }) {
   }
 
   if (value) {
-    return (
+    const vid = (
+      <video src={value} className="h-full w-full bg-black object-cover" controls muted playsInline />
+    )
+    return aspectRatio ? (
       <div className="relative overflow-hidden rounded-2xl border border-glassborder">
-        <video src={value} className="h-40 w-full bg-black object-contain" controls muted playsInline />
+        <div className="relative mx-auto" style={{ aspectRatio: `${aspectRatio.w}/${aspectRatio.h}` }}>
+          {vid}
+        </div>
+        <button
+          type="button"
+          onClick={() => onChange('')}
+          aria-label="Quitar video"
+          className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-neifert hover:bg-white"
+        >
+          <X size={15} />
+        </button>
+      </div>
+    ) : (
+      <div className="relative overflow-hidden rounded-2xl border border-glassborder">
+        <div className="h-40 w-full bg-black">{vid}</div>
         <button
           type="button"
           onClick={() => onChange('')}
@@ -72,7 +89,7 @@ export default function VideoUploader({ value, onChange }) {
         {busy ? `Procesando… ${Math.round(progress * 100)}%` : 'Arrastrá un video o hacé clic'}
       </p>
       <p className="text-xs text-ink-3">
-        MP4 · WebM · MOV · hasta {MAX_VIDEO_MB}MB
+        MP4 · WebM · MOV · hasta {maxSizeMB || MAX_VIDEO_MB}MB
       </p>
       <p className="text-[11px] text-ink-3">
         Formatos ideales: {VIDEO_RATIOS.map((r) => r.id).join(' · ')}
