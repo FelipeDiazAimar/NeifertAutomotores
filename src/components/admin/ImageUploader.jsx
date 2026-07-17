@@ -179,7 +179,11 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         type="file"
         accept="image/*,.heic,.heif"
         multiple={multiple}
-        className="hidden"
+        // sr-only (no "hidden"/display:none): hay versiones de iOS Safari que
+        // no disparan el evento "change" en un input de archivo oculto con
+        // display:none después de elegir una foto del selector nativo.
+        // sr-only lo mantiene fuera de la vista sin sacarlo del layout.
+        className="sr-only"
         // El input está anidado dentro del div clickeable. Sin esto, el
         // .click() programático de más abajo dispara un evento que hace
         // bubbling hasta el div y vuelve a disparar SU onClick → vuelve a

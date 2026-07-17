@@ -114,7 +114,10 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
         ref={inputRef}
         type="file"
         accept="video/*"
-        className="hidden"
+        // sr-only (no "hidden"/display:none): ver comentario equivalente en
+        // ImageUploader.jsx — iOS Safari puede no disparar "change" en un
+        // input de archivo oculto con display:none.
+        className="sr-only"
         // Ver comentario equivalente en ImageUploader.jsx: sin esto, el
         // .click() programático del div padre hace bubbling y re-dispara
         // su propio onClick → bucle de auto-disparo del selector nativo.
