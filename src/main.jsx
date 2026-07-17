@@ -8,7 +8,12 @@ import { AuthProvider } from '@/context/AuthProvider'
 import { hydrateSiteContent } from '@/store/useSiteStore'
 import { recordShareVisit } from '@/lib/vehicleClicks'
 import App from '@/App'
+import { initLogCapture } from '@/lib/logCapture'
 import '@/styles/index.css'
+
+// Captura de console.* y errores no atrapados → se ven en /admin/logerrors.
+// Va primero para atrapar todo desde el arranque.
+initLogCapture()
 
 // Consola de debug en el teléfono (Eruda). Se activa con ?debug=1 en la URL y
 // queda recordada; ?debug=0 la apaga. El bundle solo se descarga si está

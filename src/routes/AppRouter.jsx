@@ -18,6 +18,7 @@ const AdminCatalogPage = lazy(() => import('@/pages/admin/AdminCatalogPage'))
 const AdminContentPage = lazy(() => import('@/pages/admin/AdminContentPage'))
 const AdminUsersPage = lazy(() => import('@/pages/admin/AdminUsersPage'))
 const StoragePage = lazy(() => import('@/pages/admin/StoragePage'))
+const AdminLogErrorsPage = lazy(() => import('@/pages/admin/AdminLogErrorsPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 
 export default function AppRouter() {
@@ -49,6 +50,7 @@ export default function AppRouter() {
         <Route path="/admin/estadisticas" element={<StatsPage />} />
         <Route path="/admin/usuarios" element={<AdminUsersPage />} />
         <Route path="/admin/almacenamiento" element={<StoragePage />} />
+        <Route path="/admin/logerrors" element={<AdminLogErrorsPage />} />
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
