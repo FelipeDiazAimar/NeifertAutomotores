@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { toast } from 'sonner'
-import { Check, RotateCw } from 'lucide-react'
+import { Check, RotateCw, Loader2 } from 'lucide-react'
 import { cropImage, rotateImageClockwise } from '@/lib/mediaFormats'
 
 const DEFAULT_STAGE = { w: 540, h: 340 }
@@ -16,6 +16,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   const [crop, setCrop] = useState({ x: 0.5, y: 0.5, zoom: 1 })
   const [imageSize, setImageSize] = useState(null)
   const [stage, setStage] = useState(DEFAULT_STAGE)
+  const [working, setWorking] = useState(false)
 
   useEffect(() => {
     const next = file || null
@@ -128,6 +129,8 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   }
 
   const confirm = async () => {
+    if (working) return
+    setWorking(true)
     try {
       const target = activeFile || file
       const cropped = await cropImage(target, {
@@ -137,6 +140,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
       onConfirm(cropped)
     } catch (error) {
       toast.error(error.message || 'No se pudo recortar la imagen')
+      setWorking(false)
     }
   }
 
@@ -219,15 +223,17 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
         </div>
 
         <div className="mt-5 flex justify-end gap-2">
-          <button type="button" className="rounded-lg px-3 py-2 text-sm text-ink-3" onClick={handleCancel}>
+          <button type="button" disabled={working} className="rounded-lg px-3 py-2 text-sm text-ink-3 disabled:opacity-50" onClick={handleCancel}>
             Cancelar
           </button>
           <button
             type="button"
-            className="inline-flex items-center gap-1 rounded-lg bg-neifert px-3 py-2 text-sm font-semibold text-white"
+            disabled={working}
+            className="inline-flex items-center gap-1 rounded-lg bg-neifert px-3 py-2 text-sm font-semibold text-white disabled:opacity-70"
             onClick={confirm}
           >
-            <Check size={16} /> Usar recorte
+            {working ? <Loader2 size={16} className="animate-spin" /> : <Check size={16} />}
+            {working ? 'Procesando…' : 'Usar recorte'}
           </button>
         </div>
       </div>

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Star, UploadCloud, X } from 'lucide-react'
 import { uploadImageMedia } from '@/services/media.service'
-import { MAX_IMAGE_MB } from '@/lib/mediaFormats'
+import { MAX_IMAGE_MB, isAcceptedImageFile } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 import ImageCropper from './ImageCropper'
 
@@ -17,8 +17,8 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const { w: aW, h: aH } = aspectRatio
 
   const addFiles = (fileList) => {
-    const files = Array.from(fileList).filter((file) => file.type.startsWith('image/'))
-    if (!files.length) return toast.error('Seleccioná una imagen válida.')
+    const files = Array.from(fileList).filter(isAcceptedImageFile)
+    if (!files.length) return toast.error('Seleccioná una imagen válida (JPG, PNG, WebP o HEIC).')
     setCropQueue(multiple ? files : files.slice(0, 1))
   }
 
@@ -77,7 +77,11 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         <UploadCloud size={26} className="text-ink-3" />
       )}
       <p className="text-sm font-semibold text-ink">
-        {progress != null ? `Procesando… ${Math.round(progress * 100)}%` : 'Arrastrá imagen o hacé clic'}
+        {progress == null
+          ? 'Arrastrá imagen o hacé clic'
+          : progress < 0.5
+            ? 'Procesando imagen…'
+            : `Subiendo… ${Math.round(progress * 100)}%`}
       </p>
       <p className="text-xs text-ink-3">
         JPG · PNG · WebP · resultado de hasta {maxSizeMB}MB · {multiple ? 'varias' : 'una'}
@@ -90,7 +94,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
           <div className="h-full bg-neifert transition-[width] duration-200" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*" multiple={multiple} className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+      <input ref={inputRef} type="file" accept="image/*,.heic,.heif" multiple={multiple} className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
     </div>
   )
 

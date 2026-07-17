@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Pause, ArrowRight } from 'lucide-react'
+import { Play, Pause, ArrowRight, Loader2 } from 'lucide-react'
 
 /** Tarjeta editorial de media (4:5, estilo Instagram).
  *  Video: se reproduce solo en loop al entrar en viewport; al tocarlo se pausa
@@ -14,6 +14,9 @@ export default function StoryCard({ story }) {
   const [progress, setProgress] = useState(0)
   const [paused, setPaused] = useState(false)
   const [size, setSize] = useState({ w: 0, h: 0 })
+  // Loader del video: se muestra hasta que el navegador puede reproducirlo, y
+  // vuelve a aparecer si el video se queda buffereando.
+  const [videoLoading, setVideoLoading] = useState(isVideo)
 
   // Autoplay/pause según viewport (respeta la pausa manual del usuario)
   useEffect(() => {
@@ -90,6 +93,11 @@ export default function StoryCard({ story }) {
           loop
           playsInline
           preload="metadata"
+          onLoadedData={() => setVideoLoading(false)}
+          onCanPlay={() => setVideoLoading(false)}
+          onPlaying={() => setVideoLoading(false)}
+          onWaiting={() => setVideoLoading(true)}
+          onError={() => setVideoLoading(false)}
           className="h-full w-full object-cover transition-transform duration-[1200ms] ease-out group-hover:scale-105"
         />
       ) : (
@@ -101,6 +109,13 @@ export default function StoryCard({ story }) {
         />
       )}
       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+
+      {/* Loader del video hasta que esté listo para reproducirse */}
+      {isVideo && videoLoading && (
+        <div className="absolute inset-0 z-30 grid place-items-center bg-black/30 backdrop-blur-[1px]">
+          <Loader2 size={30} className="animate-spin text-white/90" />
+        </div>
+      )}
 
       {/* Borde rojo de progreso (solo video con archivo real) */}
       {isVideo && size.w > 0 && (
@@ -142,8 +157,9 @@ export default function StoryCard({ story }) {
         </div>
       )}
 
-      {/* Botón play para "video" sin archivo real (teaser/placeholder) */}
-      {story.kind === 'video' && !story.video_url && (
+      {/* Botón play para "video" sin archivo real (teaser/placeholder). No se
+          muestra si la historia terminó siendo solo una imagen (poster). */}
+      {story.kind === 'video' && !story.video_url && !story.poster_url && (
         <button
           aria-label={`Reproducir: ${story.title}`}
           className="absolute left-1/2 top-1/2 z-20 grid h-16 w-16 -translate-x-1/2 -translate-y-1/2 place-items-center rounded-full border border-white/40 bg-white/15 text-white backdrop-blur-md transition-transform duration-300 group-hover:scale-110"

@@ -188,8 +188,16 @@ export default function AdminCatalogPage() {
     [vehicles, search, sort, filters]
   )
 
+  // Reset a la página 1 cuando cambian búsqueda/orden/filtros. Se hace durante
+  // el render (patrón recomendado por React) en vez de un useEffect, que
+  // dispararía un render en cascada.
   const [page, setPage] = useState(1)
-  useEffect(() => setPage(1), [search, sort, filters])
+  const filterKey = JSON.stringify({ search, sort, filters })
+  const [prevFilterKey, setPrevFilterKey] = useState(filterKey)
+  if (filterKey !== prevFilterKey) {
+    setPrevFilterKey(filterKey)
+    setPage(1)
+  }
   const totalPages = Math.max(1, Math.ceil(shown.length / PAGE_SIZE))
   const pageItems = shown.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
 

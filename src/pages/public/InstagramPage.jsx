@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ExternalLink, Play, RefreshCw, Layers, ChevronLeft, ChevronRight } from 'lucide-react'
 import { InstagramIcon } from '@/components/common/SocialIcons'
@@ -146,9 +146,13 @@ export default function InstagramPage() {
     setRefreshing(false)
   }
 
-  useEffect(() => {
+  // Reset a la página 1 cuando cambia la cantidad de items. Ajuste durante el
+  // render (patrón recomendado por React) en lugar de un useEffect.
+  const [prevItemCount, setPrevItemCount] = useState(items.length)
+  if (items.length !== prevItemCount) {
+    setPrevItemCount(items.length)
     setPage(1)
-  }, [items.length])
+  }
 
   return (
     <section className="mx-auto max-w-[1130px] px-4 py-12 md:px-8">

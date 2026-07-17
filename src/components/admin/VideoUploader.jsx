@@ -86,7 +86,11 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
         <UploadCloud size={24} className="text-ink-3" />
       )}
       <p className="text-sm font-semibold text-ink">
-        {busy ? `Procesando… ${Math.round(progress * 100)}%` : 'Arrastrá un video o hacé clic'}
+        {!busy
+          ? 'Arrastrá un video o hacé clic'
+          : progress < 0.05
+            ? 'Procesando video…'
+            : `Subiendo… ${Math.round(progress * 100)}%`}
       </p>
       <p className="text-xs text-ink-3">
         MP4 · WebM · MOV · hasta {maxSizeMB || MAX_VIDEO_MB}MB

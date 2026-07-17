@@ -144,7 +144,7 @@ export default function HeroCarousel() {
               goTo(safeIndex - 1, -1)
             }}
             aria-label="Imagen anterior"
-            className="absolute left-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 md:left-6"
+            className="absolute left-3 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 md:left-6 md:grid"
           >
             <ChevronLeft size={22} />
           </button>
@@ -154,7 +154,7 @@ export default function HeroCarousel() {
               goTo(safeIndex + 1, 1)
             }}
             aria-label="Imagen siguiente"
-            className="absolute right-3 top-1/2 z-10 grid h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 md:right-6"
+            className="absolute right-3 top-1/2 z-10 hidden h-11 w-11 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white backdrop-blur-md transition-colors hover:bg-black/50 md:right-6 md:grid"
           >
             <ChevronRight size={22} />
           </button>

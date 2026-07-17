@@ -132,11 +132,11 @@ export default function Footer() {
           </div>
         </div>
 
-        <div className="mt-12 flex items-center justify-between pb-4">
+        <div className="mt-12 flex flex-col items-center gap-3 pb-4 text-center sm:flex-row sm:justify-between sm:text-left">
           <p className="text-xs text-ink-3">{footer.copyright}</p>
           <Link
             to="/login"
-            className="hidden text-xs text-ink-3 transition-colors hover:text-neifert md:block"
+            className="text-xs text-ink-3 transition-colors hover:text-neifert"
           >
             Acceso admin
           </Link>

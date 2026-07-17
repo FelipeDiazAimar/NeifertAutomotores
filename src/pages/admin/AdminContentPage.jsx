@@ -302,31 +302,49 @@ function HomeTab() {
                 </div>
 
                 <div className="p-4">
-                  {st.kind === 'video' && (
+                  {st.kind === 'video' && (() => {
+                    const hasVideo = Boolean(st.video_url)
+                    const hasPoster = Boolean(st.poster_url)
+                    // Una historia es un video O una imagen, nunca las dos: al
+                    // elegir una se oculta la otra. (Si ambas quedaron cargadas
+                    // por datos viejos, se muestran las dos para poder corregir.)
+                    const showVideo = !hasPoster || hasVideo
+                    const showImage = !hasVideo || hasPoster
+                    return (
                     <div className="grid gap-4 sm:grid-cols-2">
                       <TextField label="Título" value={st.title} onChange={(v) => updateStory(st.id, { title: v })} />
                       <TextField label="Caption" value={st.caption} onChange={(v) => updateStory(st.id, { caption: v })} />
                       <TextField label="Duración (opcional)" value={st.duration} onChange={(v) => updateStory(st.id, { duration: v })} />
-                      <TextField label="URL externa (opcional)" value={st.video_url} onChange={(v) => updateStory(st.id, { video_url: v })} placeholder="https://…/video.mp4" />
-                      <div className="sm:col-span-2">
-                        <VideoUploader
-                          value={st.video_url}
-                          onChange={(url) => updateStory(st.id, { video_url: url })}
-                          maxSizeMB={HOME_MAX_VIDEO_MB}
-                          aspectRatio={HOME_ASPECT_RATIOS.story}
-                        />
-                      </div>
-                      <div className="sm:col-span-2">
-                        <ImageUploader
-                          multiple={false}
-                          aspectRatio={HOME_ASPECT_RATIOS.story}
-                          maxSizeMB={HOME_MAX_VIDEO_MB}
-                          value={st.poster_url ? [st.poster_url] : []}
-                          onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
-                        />
-                      </div>
+                      {showVideo && (
+                        <TextField label="URL externa (opcional)" value={st.video_url} onChange={(v) => updateStory(st.id, { video_url: v })} placeholder="https://…/video.mp4" />
+                      )}
+                      <p className="text-xs text-ink-3 sm:col-span-2">
+                        Subí un video <span className="font-semibold">o</span> una imagen — no ambos.
+                      </p>
+                      {showVideo && (
+                        <div className="sm:col-span-2">
+                          <VideoUploader
+                            value={st.video_url}
+                            onChange={(url) => updateStory(st.id, { video_url: url })}
+                            maxSizeMB={HOME_MAX_VIDEO_MB}
+                            aspectRatio={HOME_ASPECT_RATIOS.story}
+                          />
+                        </div>
+                      )}
+                      {showImage && (
+                        <div className="sm:col-span-2">
+                          <ImageUploader
+                            multiple={false}
+                            aspectRatio={HOME_ASPECT_RATIOS.story}
+                            maxSizeMB={HOME_MAX_IMAGE_MB}
+                            value={st.poster_url ? [st.poster_url] : []}
+                            onChange={(urls) => updateStory(st.id, { poster_url: urls[0] || '' })}
+                          />
+                        </div>
+                      )}
                     </div>
-                  )}
+                    )
+                  })()}
 
                   {st.kind === 'photo' && (
                     <div className="grid gap-4 sm:grid-cols-2">

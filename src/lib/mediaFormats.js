@@ -2,7 +2,12 @@
  *  fotos/videos del perfil. No se recorta a la fuerza: se valida y se avisa;
  *  cada superficie decide el recorte con object-fit. */
 
-export const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp']
+// image/heic + image/heif = fotos de iPhone (HEIC). Safari/iOS las decodifica
+// nativamente en canvas, así que se comprimen a WebP como cualquier otra.
+export const IMAGE_MIME = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']
+// Extensiones aceptadas por si el navegador no reporta el MIME (iOS a veces
+// entrega el archivo con type vacío, sobre todo con HEIC).
+export const IMAGE_EXT = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']
 export const VIDEO_MIME = ['video/mp4', 'video/webm', 'video/quicktime']
 
 export const MAX_IMAGE_MB = 5
@@ -30,9 +35,24 @@ export const IMAGE_QUALITY = 0.82
 
 export const toMb = (bytes) => bytes / (1024 * 1024)
 
+/** Extensión (en minúsculas) de un File, o '' si no tiene. */
+export const fileExt = (file) => (file?.name?.split('.').pop() || '').toLowerCase()
+
+/** true si el archivo es una imagen aceptada, por MIME o por extensión (para
+ *  tolerar el type vacío que a veces manda iOS con fotos HEIC). */
+export function isAcceptedImageFile(file) {
+  if (!file) return false
+  if (file.type && IMAGE_MIME.includes(file.type)) return true
+  // Sin MIME confiable (o genérico) → decidir por extensión.
+  if (!file.type || file.type === 'application/octet-stream')
+    return IMAGE_EXT.includes(fileExt(file))
+  // Cualquier otro image/* (ej. image/heic-sequence) también se acepta.
+  return file.type.startsWith('image/') || IMAGE_EXT.includes(fileExt(file))
+}
+
 export function validateImageFile(file) {
-  if (!IMAGE_MIME.includes(file.type))
-    return `Formato no soportado (${file.type || 'desconocido'}). Usá JPG, PNG o WebP.`
+  if (!isAcceptedImageFile(file))
+    return `Formato no soportado (${file.type || fileExt(file) || 'desconocido'}). Usá JPG, PNG, WebP o HEIC.`
   return null
 }
 
