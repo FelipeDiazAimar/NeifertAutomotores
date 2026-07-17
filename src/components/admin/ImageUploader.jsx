@@ -151,7 +151,21 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
           <div className="h-full bg-neifert transition-[width] duration-200" style={{ width: `${Math.round(progress * 100)}%` }} />
         </div>
       )}
-      <input ref={inputRef} type="file" accept="image/*,.heic,.heif" multiple={multiple} className="hidden" onChange={(e) => { addFiles(e.target.files); e.target.value = '' }} />
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/*,.heic,.heif"
+        multiple={multiple}
+        className="hidden"
+        // El input está anidado dentro del div clickeable. Sin esto, el
+        // .click() programático de más abajo dispara un evento que hace
+        // bubbling hasta el div y vuelve a disparar SU onClick → vuelve a
+        // llamar .click() → bucle de auto-disparo (confirmado en logs: el
+        // tap abría el selector 3 veces en el mismo milisegundo, lo que
+        // rompía la selección de foto en iOS).
+        onClick={(e) => e.stopPropagation()}
+        onChange={(e) => { addFiles(e.target.files); e.target.value = '' }}
+      />
     </div>
   )
 

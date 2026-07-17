@@ -115,6 +115,10 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
         type="file"
         accept="video/*"
         className="hidden"
+        // Ver comentario equivalente en ImageUploader.jsx: sin esto, el
+        // .click() programático del div padre hace bubbling y re-dispara
+        // su propio onClick → bucle de auto-disparo del selector nativo.
+        onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
           addFile(e.target.files?.[0])
           e.target.value = ''
