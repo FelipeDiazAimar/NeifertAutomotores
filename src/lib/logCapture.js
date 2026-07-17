@@ -70,7 +70,10 @@ function replacerWithCircular() {
 
 function record(level, args) {
   const message = Array.from(args).map(stringifyArg).join(' ')
-  entries.push({ ts: Date.now(), level, message })
+  // Se guarda la ruta actual: un "Load failed" suelto sin esto es imposible
+  // de ubicar (¿pasó en /admin/catalogo? ¿en /admin/contenido?).
+  const path = typeof window !== 'undefined' ? window.location.pathname : ''
+  entries.push({ ts: Date.now(), level, message, path })
   if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES)
   persist()
   emit()
@@ -106,6 +109,19 @@ export function initLogCapture() {
     record('error', [`[unhandledrejection] ${stringifyArg(e.reason)}`])
   })
 
+  // Backgrounding/descarga de la pestaña (típico al abrir el selector nativo
+  // de fotos en iOS): ayuda a distinguir "se recargó la página" de "hay un
+  // bug real en el código" cuando falta un tramo de logs esperado.
+  document.addEventListener('visibilitychange', () => {
+    record('info', [`[visibility] ${document.visibilityState}`])
+  })
+  window.addEventListener('pagehide', (e) => {
+    record('info', [`[pagehide] persisted=${e.persisted}`])
+  })
+  window.addEventListener('pageshow', (e) => {
+    record('info', [`[pageshow] persisted=${e.persisted}`])
+  })
+
   record('info', ['[logCapture] captura de logs iniciada'])
 }
 
@@ -132,6 +148,6 @@ export function subscribeLogs(cb) {
 /** Todos los logs como texto plano (para copiar/pegar). */
 export function logsAsText() {
   return entries
-    .map((e) => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}] ${e.message}`)
+    .map((e) => `${new Date(e.ts).toISOString()} [${e.level.toUpperCase()}]${e.path ? ` (${e.path})` : ''} ${e.message}`)
     .join('\n')
 }

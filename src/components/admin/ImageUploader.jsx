@@ -112,7 +112,11 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
 
   const dropZone = (
     <div
-      onClick={() => !busy && inputRef.current?.click()}
+      onClick={() => {
+        if (busy) return
+        console.log('[IMG] dropzone: tap → abriendo selector nativo')
+        inputRef.current?.click()
+      }}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
       onDrop={onDrop}

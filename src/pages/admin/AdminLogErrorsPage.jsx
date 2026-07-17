@@ -36,7 +36,7 @@ export default function AdminLogErrorsPage() {
       if (level === 'error' && e.level !== 'error') return false
       if (level === 'warn' && e.level !== 'warn') return false
       if (level === 'log' && e.level !== 'log' && e.level !== 'info') return false
-      if (q && !e.message.toLowerCase().includes(q)) return false
+      if (q && !e.message.toLowerCase().includes(q) && !(e.path || '').toLowerCase().includes(q)) return false
       return true
     })
   }, [logs, level, query])
@@ -161,12 +161,13 @@ export default function AdminLogErrorsPage() {
         ) : (
           <ul className="divide-y divide-line/60 font-mono text-[12px] leading-relaxed">
             {filtered.map((e, i) => (
-              <li key={i} className="flex gap-2 px-3 py-2">
+              <li key={i} className="flex flex-wrap gap-2 px-3 py-2">
                 <span className="shrink-0 tabular-nums text-ink-3">{fmtTime(e.ts)}</span>
                 <span className={cn('shrink-0 font-bold uppercase', LEVEL_STYLE[e.level] || 'text-ink-2')}>
                   {e.level}
                 </span>
-                <span className={cn('whitespace-pre-wrap break-words', LEVEL_STYLE[e.level] || 'text-ink')}>
+                {e.path && <span className="shrink-0 text-ink-3">{e.path}</span>}
+                <span className={cn('w-full whitespace-pre-wrap break-words sm:w-auto sm:flex-1', LEVEL_STYLE[e.level] || 'text-ink')}>
                   {e.message}
                 </span>
               </li>
