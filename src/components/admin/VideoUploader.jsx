@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { UploadCloud, X, Loader2 } from 'lucide-react'
 import { uploadVideoMedia } from '@/services/media.service'
@@ -9,6 +9,7 @@ import { cn } from '@/lib/cn'
  *  detecta relación de aspecto y avisa. value: string · onChange: (url) => void */
 export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio }) {
   const inputRef = useRef(null)
+  const inputId = useId()
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(null)
 
@@ -64,8 +65,11 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
   const busy = progress != null
 
   return (
-    <div
-      onClick={() => !busy && inputRef.current?.click()}
+    // <label htmlFor> en vez de un div + ref.click(): ver comentario en
+    // ImageUploader.jsx — el patrón .click() programático hacía que iOS
+    // nunca disparara "change" después de elegir el archivo.
+    <label
+      htmlFor={inputId}
       onDragOver={(e) => {
         e.preventDefault()
         setDragging(true)
@@ -112,21 +116,16 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
 
       <input
         ref={inputRef}
+        id={inputId}
         type="file"
         accept="video/*"
-        // sr-only (no "hidden"/display:none): ver comentario equivalente en
-        // ImageUploader.jsx — iOS Safari puede no disparar "change" en un
-        // input de archivo oculto con display:none.
         className="sr-only"
-        // Ver comentario equivalente en ImageUploader.jsx: sin esto, el
-        // .click() programático del div padre hace bubbling y re-dispara
-        // su propio onClick → bucle de auto-disparo del selector nativo.
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => {
           addFile(e.target.files?.[0])
           e.target.value = ''
         }}
       />
-    </div>
+    </label>
   )
 }

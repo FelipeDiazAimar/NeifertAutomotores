@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Star, UploadCloud, X } from 'lucide-react'
 import { uploadImageMedia } from '@/services/media.service'
@@ -10,6 +10,7 @@ const DEFAULT_ASPECT = { w: 1, h: 1 }
 
 export default function ImageUploader({ value = [], onChange, multiple = true, aspectRatio = DEFAULT_ASPECT, maxSizeMB = MAX_IMAGE_MB }) {
   const inputRef = useRef(null)
+  const inputId = useId()
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(null)
   const [converting, setConverting] = useState(false)
@@ -127,11 +128,17 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const isSquare = aW === 1 && aH === 1
 
   const dropZone = (
-    <div
+    // <label htmlFor> en vez de un div + ref.click(): es el navegador el que
+    // abre el selector nativo directamente por la asociación label↔input,
+    // sin pasar por ningún closure de React. Se probó con .click() programático
+    // (incluso ya arreglado el bubbling y probado sr-only) y en iOS el evento
+    // "change" nunca llegaba después de elegir la foto — el patrón label es la
+    // técnica más robusta y estándar para este problema específico.
+    <label
+      htmlFor={inputId}
       onClick={() => {
         if (busy) return
-        console.log('[IMG] dropzone: tap → abriendo selector nativo')
-        inputRef.current?.click()
+        console.log('[IMG] dropzone: tap → selector nativo (label nativo)')
         // Si a los 20s no pasó nada (ni addFiles ni cancel), algo se perdió
         // en el medio: o el navegador nunca entregó el archivo, o la pestaña
         // se recargó/mató en segundo plano sin llegar a loguear pagehide.
@@ -176,24 +183,15 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
       )}
       <input
         ref={inputRef}
+        id={inputId}
         type="file"
         accept="image/*,.heic,.heif"
         multiple={multiple}
-        // sr-only (no "hidden"/display:none): hay versiones de iOS Safari que
-        // no disparan el evento "change" en un input de archivo oculto con
-        // display:none después de elegir una foto del selector nativo.
-        // sr-only lo mantiene fuera de la vista sin sacarlo del layout.
         className="sr-only"
-        // El input está anidado dentro del div clickeable. Sin esto, el
-        // .click() programático de más abajo dispara un evento que hace
-        // bubbling hasta el div y vuelve a disparar SU onClick → vuelve a
-        // llamar .click() → bucle de auto-disparo (confirmado en logs: el
-        // tap abría el selector 3 veces en el mismo milisegundo, lo que
-        // rompía la selección de foto en iOS).
         onClick={(e) => e.stopPropagation()}
         onChange={(e) => { addFiles(e.target.files); e.target.value = '' }}
       />
-    </div>
+    </label>
   )
 
   return (

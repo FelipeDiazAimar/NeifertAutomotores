@@ -16,13 +16,19 @@ const fieldCls =
   'glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
 
 function Field({ label, children, full }) {
+  // <div>, no <label>: el campo "Fotos" mete un <ImageUploader> como children,
+  // que tiene su PROPIO <label htmlFor> interno para el input de archivo. Un
+  // <label> anidado dentro de otro <label> es HTML inválido (el spec lo
+  // prohíbe explícitamente) y el comportamiento de activación es inconsistente
+  // entre navegadores — en iOS, esto es lo que impedía que el selector de
+  // fotos entregara el archivo elegido.
   return (
-    <label className={cn('block', full && 'sm:col-span-2')}>
+    <div className={cn('block', full && 'sm:col-span-2')}>
       <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">
         {label}
       </span>
       {children}
-    </label>
+    </div>
   )
 }
 
