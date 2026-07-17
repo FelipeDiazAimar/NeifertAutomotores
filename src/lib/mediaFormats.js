@@ -56,6 +56,34 @@ export function validateImageFile(file) {
   return null
 }
 
+/** true si el archivo es HEIC/HEIF (fotos de iPhone). Ni <img> ni
+ *  createImageBitmap() lo decodifican de forma confiable en todos los
+ *  navegadores/contextos — hay que convertirlo a JPEG antes de tocarlo. */
+export function isHeicFile(file) {
+  if (!file) return false
+  const type = (file.type || '').toLowerCase()
+  if (type === 'image/heic' || type === 'image/heif') return true
+  if (!type || type === 'application/octet-stream') {
+    const ext = fileExt(file)
+    return ext === 'heic' || ext === 'heif'
+  }
+  return false
+}
+
+/** Convierte un HEIC/HEIF a JPEG en el navegador (decodificador propio en JS,
+ *  no depende del soporte nativo del navegador). Si el archivo no es HEIC,
+ *  lo devuelve tal cual. */
+export async function convertHeicToJpeg(file) {
+  if (!isHeicFile(file)) return file
+  console.log('[IMG] convertHeicToJpeg: detectado HEIC, convirtiendo…', { name: file.name, sizeMB: +(file.size / 1048576).toFixed(2) })
+  const { default: heic2any } = await import('heic2any')
+  const result = await heic2any({ blob: file, toType: 'image/jpeg', quality: 0.92 })
+  const blob = Array.isArray(result) ? result[0] : result
+  const converted = new File([blob], `${file.name.replace(/\.[^.]+$/, '') || 'imagen'}.jpg`, { type: 'image/jpeg' })
+  console.log('[IMG] convertHeicToJpeg: OK', { sizeMB: +(converted.size / 1048576).toFixed(2) })
+  return converted
+}
+
 export function validateVideoFile(file, maxMB = MAX_VIDEO_MB) {
   if (!VIDEO_MIME.includes(file.type)) return 'Formato no soportado. Usá MP4, WebM o MOV.'
   if (toMb(file.size) > maxMB)

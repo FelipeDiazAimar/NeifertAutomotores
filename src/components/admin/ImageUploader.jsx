@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Star, UploadCloud, X } from 'lucide-react'
 import { uploadImageMedia } from '@/services/media.service'
-import { MAX_IMAGE_MB, isAcceptedImageFile } from '@/lib/mediaFormats'
+import { MAX_IMAGE_MB, isAcceptedImageFile, isHeicFile, convertHeicToJpeg } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
 import ImageCropper from './ImageCropper'
 
@@ -12,23 +12,51 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const inputRef = useRef(null)
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(null)
+  const [converting, setConverting] = useState(false)
   const [cropQueue, setCropQueue] = useState([])
   const cropFile = cropQueue[0]
   const { w: aW, h: aH } = aspectRatio
 
-  const addFiles = (fileList) => {
+  const addFiles = async (fileList) => {
     const all = Array.from(fileList)
     console.log(
       '[IMG] addFiles: seleccionados',
       all.length,
       all.map((f) => ({ name: f.name, type: f.type || '(vacío)', sizeMB: +(f.size / 1048576).toFixed(2) }))
     )
-    const files = all.filter(isAcceptedImageFile)
+    let files = all.filter(isAcceptedImageFile)
     if (!files.length) {
       console.warn('[IMG] addFiles: ningún archivo aceptado por isAcceptedImageFile')
       return toast.error('Seleccioná una imagen válida (JPG, PNG, WebP o HEIC).')
     }
-    console.log('[IMG] addFiles: aceptados', files.length, '→ abriendo cropper')
+    console.log('[IMG] addFiles: aceptados', files.length)
+
+    // Las fotos de iPhone (HEIC) hay que convertirlas a JPEG acá, antes del
+    // recorte: ni <img> ni createImageBitmap() las decodifican de forma
+    // confiable en todos los navegadores, y eso es lo que las "cuelga" en
+    // silencio en la pantalla de recorte.
+    if (files.some(isHeicFile)) {
+      setConverting(true)
+      try {
+        files = await Promise.all(
+          files.map(async (f) => {
+            try {
+              return await convertHeicToJpeg(f)
+            } catch (e) {
+              console.error('[IMG] addFiles: convertHeicToJpeg FALLÓ para', f.name, e)
+              toast.error(`No se pudo convertir "${f.name}" (HEIC). Probá exportarla como JPG desde Fotos.`)
+              return null
+            }
+          })
+        )
+        files = files.filter(Boolean)
+      } finally {
+        setConverting(false)
+      }
+      if (!files.length) return
+    }
+
+    console.log('[IMG] addFiles: listos', files.length, '→ abriendo cropper')
     setCropQueue(multiple ? files : files.slice(0, 1))
   }
 
@@ -79,7 +107,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const removeAt = (index) => onChange(value.filter((_, i) => i !== index))
   const removeSingle = () => onChange([])
   const makeMain = (index) => onChange([value[index], ...value.filter((_, i) => i !== index)])
-  const busy = progress != null || Boolean(cropFile)
+  const busy = progress != null || converting || Boolean(cropFile)
   const isSquare = aW === 1 && aH === 1
 
   const dropZone = (
@@ -94,20 +122,22 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         busy && 'pointer-events-none opacity-90'
       )}
     >
-      {progress != null ? (
+      {progress != null || converting ? (
         <Loader2 size={26} className="animate-spin text-neifert" />
       ) : (
         <UploadCloud size={26} className="text-ink-3" />
       )}
       <p className="text-sm font-semibold text-ink">
-        {progress == null
-          ? 'Arrastrá imagen o hacé clic'
-          : progress < 0.5
-            ? 'Procesando imagen…'
-            : `Subiendo… ${Math.round(progress * 100)}%`}
+        {converting
+          ? 'Convirtiendo foto de iPhone…'
+          : progress == null
+            ? 'Arrastrá imagen o hacé clic'
+            : progress < 0.5
+              ? 'Procesando imagen…'
+              : `Subiendo… ${Math.round(progress * 100)}%`}
       </p>
       <p className="text-xs text-ink-3">
-        JPG · PNG · WebP · resultado de hasta {maxSizeMB}MB · {multiple ? 'varias' : 'una'}
+        JPG · PNG · WebP · HEIC · resultado de hasta {maxSizeMB}MB · {multiple ? 'varias' : 'una'}
       </p>
       <p className="text-[11px] text-ink-3">
         Se recorta en formato {aW}:{aH}{isSquare ? ' (cuadrado)' : ''}
