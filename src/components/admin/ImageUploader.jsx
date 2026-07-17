@@ -77,6 +77,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   }
 
   const removeAt = (index) => onChange(value.filter((_, i) => i !== index))
+  const removeSingle = () => onChange([])
   const makeMain = (index) => onChange([value[index], ...value.filter((_, i) => i !== index)])
   const busy = progress != null || Boolean(cropFile)
   const isSquare = aW === 1 && aH === 1
@@ -126,8 +127,16 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         <div className="flex flex-col gap-4 sm:flex-row">
           <div className="flex min-w-0 flex-1 items-center justify-center rounded-xl border border-glassborder bg-black/5 p-2">
             {value[0] && (
-              <div className="w-full overflow-hidden rounded-lg" style={{ aspectRatio: `${aW}/${aH}` }}>
+              <div className="relative w-full overflow-hidden rounded-lg" style={{ aspectRatio: `${aW}/${aH}` }}>
                 <img src={value[0]} alt="" className="h-full w-full object-cover" />
+                <button
+                  type="button"
+                  onClick={removeSingle}
+                  aria-label="Quitar imagen"
+                  className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-neifert shadow hover:bg-white"
+                >
+                  <X size={15} />
+                </button>
               </div>
             )}
           </div>

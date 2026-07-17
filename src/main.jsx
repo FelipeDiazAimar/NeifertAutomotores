@@ -10,6 +10,23 @@ import { recordShareVisit } from '@/lib/vehicleClicks'
 import App from '@/App'
 import '@/styles/index.css'
 
+// Consola de debug en el teléfono (Eruda). Se activa con ?debug=1 en la URL y
+// queda recordada; ?debug=0 la apaga. El bundle solo se descarga si está
+// activa (import dinámico), así los usuarios normales nunca la cargan.
+{
+  const debugParam = new URLSearchParams(window.location.search).get('debug')
+  if (debugParam === '1') localStorage.setItem('nf-debug', '1')
+  if (debugParam === '0') localStorage.removeItem('nf-debug')
+  if (localStorage.getItem('nf-debug') === '1') {
+    import('eruda')
+      .then(({ default: eruda }) => {
+        eruda.init()
+        console.log('[debug] Consola Eruda activada (?debug=1). Apagá con ?debug=0.')
+      })
+      .catch((e) => console.error('[debug] No se pudo cargar Eruda', e))
+  }
+}
+
 // Trae el contenido del sitio desde Supabase (no-op en modo demo).
 hydrateSiteContent()
 

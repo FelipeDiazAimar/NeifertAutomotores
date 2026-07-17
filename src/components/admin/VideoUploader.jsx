@@ -12,6 +12,8 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
   const [dragging, setDragging] = useState(false)
   const [progress, setProgress] = useState(null)
 
+  const remove = () => onChange('')
+
   const addFile = async (file) => {
     if (!file) return
     try {
@@ -37,7 +39,7 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
         </div>
         <button
           type="button"
-          onClick={() => onChange('')}
+          onClick={remove}
           aria-label="Quitar video"
           className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-neifert hover:bg-white"
         >
@@ -49,7 +51,7 @@ export default function VideoUploader({ value, onChange, maxSizeMB, aspectRatio 
         <div className="h-40 w-full bg-black">{vid}</div>
         <button
           type="button"
-          onClick={() => onChange('')}
+          onClick={remove}
           aria-label="Quitar video"
           className="absolute right-2 top-2 grid h-8 w-8 place-items-center rounded-full bg-white/90 text-neifert hover:bg-white"
         >
