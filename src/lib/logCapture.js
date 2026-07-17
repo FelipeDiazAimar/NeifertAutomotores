@@ -121,6 +121,13 @@ export function initLogCapture() {
   window.addEventListener('pageshow', (e) => {
     record('info', [`[pageshow] persisted=${e.persisted}`])
   })
+  // focus/blur: si el foco NUNCA vuelve después de abrir el selector nativo,
+  // la pestaña se quedó "colgada" en segundo plano (o el navegador la mató
+  // silenciosamente sin llegar a disparar pagehide). Si SÍ vuelve pero nunca
+  // llega el onChange del input, el problema es la entrega del archivo, no
+  // la pestaña.
+  window.addEventListener('focus', () => record('info', ['[focus] la pestaña recuperó el foco']))
+  window.addEventListener('blur', () => record('info', ['[blur] la pestaña perdió el foco']))
 
   record('info', ['[logCapture] captura de logs iniciada'])
 }

@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Loader2, Star, UploadCloud, X } from 'lucide-react'
 import { uploadImageMedia } from '@/services/media.service'
@@ -16,8 +16,24 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const [cropQueue, setCropQueue] = useState([])
   const cropFile = cropQueue[0]
   const { w: aW, h: aH } = aspectRatio
+  const watchdogRef = useRef(null)
+
+  // 'cancel' es un evento nativo reciente (no todos los Safari lo soportan):
+  // se dispara si el usuario cierra el selector nativo sin elegir nada. Sirve
+  // para distinguir "cerró el selector sin elegir" de "eligió y no llegó".
+  useEffect(() => {
+    const el = inputRef.current
+    if (!el) return
+    const onCancel = () => {
+      console.log('[IMG] input: selector cerrado sin elegir (evento cancel)')
+      clearTimeout(watchdogRef.current)
+    }
+    el.addEventListener('cancel', onCancel)
+    return () => el.removeEventListener('cancel', onCancel)
+  }, [])
 
   const addFiles = async (fileList) => {
+    clearTimeout(watchdogRef.current)
     const all = Array.from(fileList)
     console.log(
       '[IMG] addFiles: seleccionados',
@@ -116,6 +132,13 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         if (busy) return
         console.log('[IMG] dropzone: tap → abriendo selector nativo')
         inputRef.current?.click()
+        // Si a los 20s no pasó nada (ni addFiles ni cancel), algo se perdió
+        // en el medio: o el navegador nunca entregó el archivo, o la pestaña
+        // se recargó/mató en segundo plano sin llegar a loguear pagehide.
+        clearTimeout(watchdogRef.current)
+        watchdogRef.current = setTimeout(() => {
+          console.warn('[IMG] watchdog: pasaron 20s sin respuesta del selector nativo (ni archivo ni cancel)')
+        }, 20000)
       }}
       onDragOver={(e) => { e.preventDefault(); setDragging(true) }}
       onDragLeave={() => setDragging(false)}
