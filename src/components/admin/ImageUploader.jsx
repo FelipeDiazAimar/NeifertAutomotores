@@ -17,22 +17,44 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
   const { w: aW, h: aH } = aspectRatio
 
   const addFiles = (fileList) => {
-    const files = Array.from(fileList).filter(isAcceptedImageFile)
-    if (!files.length) return toast.error('Seleccioná una imagen válida (JPG, PNG, WebP o HEIC).')
+    const all = Array.from(fileList)
+    console.log(
+      '[IMG] addFiles: seleccionados',
+      all.length,
+      all.map((f) => ({ name: f.name, type: f.type || '(vacío)', sizeMB: +(f.size / 1048576).toFixed(2) }))
+    )
+    const files = all.filter(isAcceptedImageFile)
+    if (!files.length) {
+      console.warn('[IMG] addFiles: ningún archivo aceptado por isAcceptedImageFile')
+      return toast.error('Seleccioná una imagen válida (JPG, PNG, WebP o HEIC).')
+    }
+    console.log('[IMG] addFiles: aceptados', files.length, '→ abriendo cropper')
     setCropQueue(multiple ? files : files.slice(0, 1))
   }
 
   const uploadFile = async (file) => {
+    console.log('[IMG] uploadFile: inicio', {
+      name: file.name,
+      type: file.type || '(vacío)',
+      sizeMB: +(file.size / 1048576).toFixed(2),
+      maxSizeMB,
+      skipRatioCheck: aW !== 1 || aH !== 1,
+    })
     setProgress(0)
     try {
       const res = await uploadImageMedia(file, {
-        onProgress: setProgress,
+        onProgress: (p) => {
+          console.log('[IMG] uploadFile: progreso', Math.round(p * 100) + '%')
+          setProgress(p)
+        },
         maxSizeMB,
         skipRatioCheck: aW !== 1 || aH !== 1,
       })
+      console.log('[IMG] uploadFile: OK', { url: res.url, demo: res.demo, ratio: res.ratio })
       onChange(multiple ? [...value, res.url] : [res.url])
       if (res.warning) toast.warning(res.warning, { duration: 5000 })
     } catch (error) {
+      console.error('[IMG] uploadFile: ERROR', error?.message, error)
       toast.error(error.message || 'No se pudo subir la imagen')
     } finally {
       setProgress(null)

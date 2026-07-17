@@ -101,7 +101,13 @@ export async function compressImage(
   file,
   { maxEdge = IMAGE_MAX_EDGE, quality = IMAGE_QUALITY, maxBytes = MAX_IMAGE_MB * 1024 * 1024 } = {}
 ) {
-  const bitmap = await createImageBitmap(file)
+  let bitmap
+  try {
+    bitmap = await createImageBitmap(file)
+  } catch (e) {
+    console.error('[IMG] compressImage: createImageBitmap FALLÓ para', file?.type || fileExt(file), e)
+    throw new Error('Este navegador no puede decodificar la imagen (formato no soportado).', { cause: e })
+  }
   const originalWidth = bitmap.width
   const originalHeight = bitmap.height
   let edge = Math.min(maxEdge, Math.max(originalWidth, originalHeight))

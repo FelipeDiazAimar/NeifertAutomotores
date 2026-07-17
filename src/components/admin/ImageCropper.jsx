@@ -131,14 +131,27 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   const confirm = async () => {
     if (working) return
     setWorking(true)
+    const target = activeFile || file
+    console.log('[IMG] cropper.confirm: recortando', {
+      name: target?.name,
+      type: target?.type || '(vacío)',
+      sizeMB: target ? +(target.size / 1048576).toFixed(2) : null,
+      crop,
+      aspect: `${aW}:${aH}`,
+    })
     try {
-      const target = activeFile || file
       const cropped = await cropImage(target, {
         x: crop.x, y: crop.y, zoom: crop.zoom,
         aspectW: aW, aspectH: aH,
       })
+      console.log('[IMG] cropper.confirm: recorte OK', {
+        name: cropped.name,
+        type: cropped.type,
+        sizeMB: +(cropped.size / 1048576).toFixed(2),
+      })
       onConfirm(cropped)
     } catch (error) {
+      console.error('[IMG] cropper.confirm: ERROR recortando', error?.message, error)
       toast.error(error.message || 'No se pudo recortar la imagen')
       setWorking(false)
     }
@@ -173,7 +186,14 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
               src={preview}
               alt=""
               draggable="false"
-              onLoad={(e) => setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })}
+              onLoad={(e) => {
+                console.log('[IMG] cropper.preview: imagen cargada', {
+                  w: e.currentTarget.naturalWidth,
+                  h: e.currentTarget.naturalHeight,
+                })
+                setImageSize({ width: e.currentTarget.naturalWidth, height: e.currentTarget.naturalHeight })
+              }}
+              onError={(e) => console.error('[IMG] cropper.preview: NO se pudo mostrar la imagen (formato no soportado por el navegador?)', e?.type)}
               className="pointer-events-none absolute max-w-none select-none"
               style={imageStyle}
             />

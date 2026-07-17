@@ -47,6 +47,7 @@ function blobToDataUrl(blob) {
  *  upload progress). Devuelve la URL pública, o null si R2 no está configurado. */
 function uploadToR2(path, blob, contentType, onProgress) {
   return new Promise((resolve, reject) => {
+    console.log('[IMG] R2.presign: pidiendo URL firmada', { path, contentType, sizeMB: +(blob.size / 1048576).toFixed(2) })
     fetch('/api/r2/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -55,11 +56,13 @@ function uploadToR2(path, blob, contentType, onProgress) {
       .then((r) => r.json())
       .then((presign) => {
         if (!presign.ok) {
+          console.warn('[IMG] R2.presign: no OK', presign.error)
           if (presign.error?.includes('Límite de almacenamiento')) {
             return reject(new Error(presign.error))
           }
           return resolve(null) // R2 no configurado -> fallback
         }
+        console.log('[IMG] R2.presign: OK → subiendo (PUT) a R2')
 
         const xhr = new XMLHttpRequest()
         xhr.open('PUT', presign.uploadUrl)
@@ -68,33 +71,62 @@ function uploadToR2(path, blob, contentType, onProgress) {
           if (e.lengthComputable) onProgress?.(e.loaded / e.total)
         }
         xhr.onload = () => {
-          if (xhr.status >= 200 && xhr.status < 300) resolve(presign.publicUrl)
-          else reject(new Error(`Subida a R2 falló (${xhr.status})`))
+          if (xhr.status >= 200 && xhr.status < 300) {
+            console.log('[IMG] R2.upload: OK', xhr.status, presign.publicUrl)
+            resolve(presign.publicUrl)
+          } else {
+            console.error('[IMG] R2.upload: falló con status', xhr.status, xhr.responseText?.slice(0, 200))
+            reject(new Error(`Subida a R2 falló (${xhr.status})`))
+          }
         }
-        xhr.onerror = () => reject(new Error('Error de red subiendo a R2'))
+        xhr.onerror = () => {
+          console.error('[IMG] R2.upload: error de red (xhr.onerror)')
+          reject(new Error('Error de red subiendo a R2'))
+        }
         xhr.send(blob)
       })
-      .catch(() => resolve(null)) // proxy inalcanzable -> fallback silencioso
+      .catch((e) => {
+        console.warn('[IMG] R2.presign: fetch falló (proxy inalcanzable) → fallback', e?.message)
+        resolve(null) // proxy inalcanzable -> fallback silencioso
+      })
   })
 }
 
 /** Sube una imagen. Devuelve { url, path?, width, height, ratio, warning, demo }. */
 export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress, maxSizeMB, skipRatioCheck } = {}) {
+  console.log('[IMG] uploadImageMedia: inicio', { bucket, name: file?.name, type: file?.type || '(vacío)' })
   const err = validateImageFile(file)
-  if (err) throw new Error(err)
+  if (err) {
+    console.warn('[IMG] uploadImageMedia: validación rechazó el archivo →', err)
+    throw new Error(err)
+  }
 
   onProgress?.(0.1)
-  const { width, height } = await readImageSize(file)
+  let width, height
+  try {
+    ;({ width, height } = await readImageSize(file))
+    console.log('[IMG] uploadImageMedia: readImageSize OK', { width, height })
+  } catch (e) {
+    console.error('[IMG] uploadImageMedia: readImageSize FALLÓ (el navegador no pudo abrir la imagen)', e)
+    throw new Error('No se pudo leer la imagen. Puede que el formato no sea compatible con este navegador.', { cause: e })
+  }
   const { ratio, off } = closestRatio(width, height, IMAGE_RATIOS)
   let warning = null
   if (!skipRatioCheck && off > RATIO_TOLERANCE)
     warning = `Imagen ${(width / height).toFixed(2)}:1 — se recomienda ${ratio.id} (estilo Instagram). Se usa igual.`
 
   onProgress?.(0.3)
-  const { blob, width: cw, height: ch } = await compressImage(
-    file,
-    maxSizeMB ? { maxBytes: maxSizeMB * 1024 * 1024 } : {}
-  )
+  let blob, cw, ch
+  try {
+    ;({ blob, width: cw, height: ch } = await compressImage(
+      file,
+      maxSizeMB ? { maxBytes: maxSizeMB * 1024 * 1024 } : {}
+    ))
+    console.log('[IMG] uploadImageMedia: compressImage OK', { sizeMB: +(blob.size / 1048576).toFixed(2), cw, ch })
+  } catch (e) {
+    console.error('[IMG] uploadImageMedia: compressImage FALLÓ', e)
+    throw e
+  }
   onProgress?.(0.5)
 
   const path = `${bucket}/${Date.now()}-${uid()}.webp`
@@ -102,15 +134,21 @@ export async function uploadImageMedia(file, { bucket = 'vehiculos', onProgress,
   if (r2Url) return { url: r2Url, path, width: cw, height: ch, ratio: ratio.id, warning }
 
   if (!isSupabaseConfigured) {
+    console.log('[IMG] uploadImageMedia: R2 no disponible y sin Supabase → dataURL demo')
     onProgress?.(1)
     return { url: await blobToDataUrl(blob), width: cw, height: ch, ratio: ratio.id, warning, demo: true }
   }
 
+  console.log('[IMG] uploadImageMedia: R2 no disponible → fallback a Supabase Storage')
   const { error } = await supabase.storage
     .from(bucket)
     .upload(path, blob, { cacheControl: '3600', contentType: 'image/webp', upsert: false })
-  if (error) throw error
+  if (error) {
+    console.error('[IMG] uploadImageMedia: Supabase Storage FALLÓ', error.message)
+    throw error
+  }
   const { data } = supabase.storage.from(bucket).getPublicUrl(path)
+  console.log('[IMG] uploadImageMedia: Supabase Storage OK', data.publicUrl)
   onProgress?.(1)
   return { url: data.publicUrl, path, width: cw, height: ch, ratio: ratio.id, warning }
 }
