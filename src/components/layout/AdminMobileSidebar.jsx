@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { Link, NavLink } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { X, Car, LayoutTemplate, BarChart3, Home, UserCog, LogOut, HardDrive, Bug } from 'lucide-react'
 import Logo from '@/components/common/Logo'
@@ -45,7 +45,9 @@ export default function AdminMobileSidebar() {
             className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-surface-solid shadow-2xl md:hidden"
           >
             <div className="flex items-center justify-between px-5 py-5">
-              <Logo />
+              <Link to="/" onClick={() => setOpen(false)} aria-label="Inicio">
+                <Logo />
+              </Link>
               <button
                 onClick={() => setOpen(false)}
                 aria-label="Cerrar menú"

@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import AdminSidebar from './AdminSidebar'
 import AdminMobileSidebar from './AdminMobileSidebar'
 import AnimatedOutlet from './AnimatedOutlet'
@@ -14,7 +15,9 @@ export default function AdminLayout() {
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 px-4 pt-3 md:hidden">
           <div className="glass-nav flex h-14 items-center justify-between rounded-2xl px-4 shadow-glass">
-            <Logo />
+            <Link to="/" aria-label="Inicio">
+              <Logo />
+            </Link>
             <button
               onClick={() => setMobileNav(true)}
               aria-label="Abrir menú"
