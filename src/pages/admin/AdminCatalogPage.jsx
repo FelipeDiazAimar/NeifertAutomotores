@@ -195,16 +195,24 @@ export default function AdminCatalogPage() {
 
   const saving = create.isPending || update.isPending
 
-  const onSave = async (payload) => {
+  // sessionUploadedUrls: todas las fotos que VehicleForm subió a R2 durante
+  // esta edición (aunque después se hayan sacado con la X antes de guardar).
+  // Se combinan con las que ya tenía el vehículo para no dejar huérfanas ni
+  // las que se sacaron del array final ni las que se subieron y se sacaron
+  // sin llegar a persistirse.
+  const onSave = async (payload, sessionUploadedUrls = []) => {
     try {
+      const after = new Set([payload.main_image_url, ...(payload.images || [])].filter(Boolean))
+      const before =
+        editing === 'new'
+          ? new Set()
+          : new Set([editing.main_image_url, ...(editing.images || [])].filter(Boolean))
+      const removed = [...new Set([...before, ...sessionUploadedUrls])].filter((url) => !after.has(url))
+
       if (editing === 'new') {
         await create.mutateAsync(payload)
         toast.success('Vehículo creado')
       } else {
-        const before = new Set([editing.main_image_url, ...(editing.images || [])].filter(Boolean))
-        const after = new Set([payload.main_image_url, ...(payload.images || [])].filter(Boolean))
-        const removed = [...before].filter((url) => !after.has(url))
-
         await update.mutateAsync({ id: editing.id, patch: payload })
         toast.success('Vehículo actualizado')
 
@@ -212,12 +220,14 @@ export default function AdminCatalogPage() {
         if (payload.status === 'vendido' && editing.status !== 'vendido') {
           trackEvent(editing.id, 'venta')
         }
-
-        // Limpieza de fotos sacadas del auto (fire-and-forget, no bloquea el guardado)
-        removed.forEach((url) =>
-          deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
-        )
       }
+
+      // Limpieza de fotos sacadas del auto o subidas y descartadas antes de
+      // guardar (fire-and-forget, no bloquea el guardado).
+      removed.forEach((url) =>
+        deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
+      )
+
       setEditing(null)
     } catch (e) {
       toast.error('No se pudo guardar: ' + e.message)

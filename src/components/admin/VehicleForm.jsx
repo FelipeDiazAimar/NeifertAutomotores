@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/common/Button'
 import ImageUploader from './ImageUploader'
 import { ARS_TO_USD_RATE } from '@/lib/constants'
 import { useSiteStore } from '@/store/useSiteStore'
+import { deleteMedia } from '@/services/media.service'
 import { cn } from '@/lib/cn'
 
 const STATUSES = [
@@ -67,18 +68,50 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }))
 
+  // Limpieza de fotos en R2: ImageUploader sube apenas se elige el archivo,
+  // así que una foto subida y luego sacada con la X (o todo el formulario
+  // cancelado) queda huérfana en R2 si nadie la borra. Se acumulan acá y se
+  // limpian recién al Guardar o Cancelar — nunca al tocar la X — para no
+  // perder una foto por error antes de confirmar el cambio.
+  const prevImagesRef = useRef(form.images)
+  const sessionUploadedRef = useRef(new Set())
+  const committedRef = useRef(false)
+
+  useEffect(() => {
+    const added = form.images.filter((url) => !prevImagesRef.current.includes(url))
+    added.forEach((url) => sessionUploadedRef.current.add(url))
+    prevImagesRef.current = form.images
+  }, [form.images])
+
+  // Si el formulario se cierra sin haber intentado guardar (botón Cancelar,
+  // X del modal o click afuera), se descarta todo lo subido en esta sesión.
+  useEffect(() => {
+    return () => {
+      if (!committedRef.current) {
+        sessionUploadedRef.current.forEach((url) =>
+          deleteMedia(url).catch((e) => console.warn('[media-cleanup] no se pudo borrar', url, e.message))
+        )
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   const submit = (e) => {
     e.preventDefault()
+    committedRef.current = true
     const priceAmount = Number(form.price_amount) || 0
     const priceUsd = form.currency === 'ARS' ? priceAmount * ARS_TO_USD_RATE : priceAmount
-    onSave({
-      ...form,
-      year: Number(form.year) || null,
-      price_amount: form.price_amount === '' ? null : priceAmount,
-      price_usd: priceUsd,
-      km: Number(form.km) || 0,
-      main_image_url: form.images[0] || null,
-    })
+    onSave(
+      {
+        ...form,
+        year: Number(form.year) || null,
+        price_amount: form.price_amount === '' ? null : priceAmount,
+        price_usd: priceUsd,
+        km: Number(form.km) || 0,
+        main_image_url: form.images[0] || null,
+      },
+      [...sessionUploadedRef.current]
+    )
   }
 
   return (
