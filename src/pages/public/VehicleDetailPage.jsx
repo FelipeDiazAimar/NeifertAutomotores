@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
 import { ArrowLeft, Gauge, Fuel, Settings2, Calendar, Share2, AlertCircle } from 'lucide-react'
@@ -11,6 +11,8 @@ import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { shareOrCopy } from '@/lib/share'
 import { useSiteStore } from '@/store/useSiteStore'
+import { useIsLarge } from '@/hooks/useMediaQuery'
+import { EASE } from '@/lib/animations'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
@@ -38,6 +40,8 @@ export default function VehicleDetailPage() {
   const { data: v, isLoading } = useVehicle(id)
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const sourceRef = useRef('Directo')
+  const isLarge = useIsLarge()
+  const [galleryWide, setGalleryWide] = useState(false)
 
   useEffect(() => {
     if (id) {
@@ -96,15 +100,24 @@ export default function VehicleDetailPage() {
         <ArrowLeft size={16} /> Volver al catálogo
       </Link>
 
-      <div className="mt-6 grid gap-8 lg:grid-cols-2">
+      <div className="mt-6 flex flex-col gap-8 lg:flex-row lg:items-start">
         <motion.div
-          initial={{ opacity: 0, scale: 0.97 }}
-          animate={{ opacity: 1, scale: 1 }}
-          transition={{ duration: 0.5 }}
-          className="relative"
+          initial={{ opacity: 0, scale: 0.97, width: isLarge ? '50%' : '100%' }}
+          animate={{
+            opacity: 1,
+            scale: 1,
+            width: isLarge ? (galleryWide ? '58%' : '50%') : '100%',
+          }}
+          transition={{ duration: 0.5, width: { duration: 0.8, ease: EASE } }}
+          className="relative w-full lg:shrink-0"
         >
           <div className={available ? '' : 'opacity-90 grayscale-[35%]'}>
-            <VehicleGallery images={gallery} alt={`${v.brand} ${v.model}`} isNew={v.is_new} />
+            <VehicleGallery
+              images={gallery}
+              alt={`${v.brand} ${v.model}`}
+              isNew={v.is_new}
+              onActiveWideChange={setGalleryWide}
+            />
           </div>
           {!available && (
             <span className="absolute left-4 top-4 z-20 rounded-full bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-bg shadow-glass">
@@ -117,6 +130,7 @@ export default function VehicleDetailPage() {
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5, delay: 0.1 }}
+          className="min-w-0 flex-1"
         >
           <p className="text-sm font-bold uppercase tracking-wider text-neifert">{v.brand}</p>
           <h1 className="mt-1 font-display text-4xl font-extrabold text-ink">

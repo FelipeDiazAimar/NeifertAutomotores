@@ -236,6 +236,13 @@ export const HOME_ASPECT_RATIOS = {
   cta: { w: 21, h: 9, label: '21:9' },
 }
 
+/** Opciones de recorte para fotos de vehículos: cuadrada (grilla del catálogo)
+ *  u horizontal 4:3 (se ve completa en la ficha del auto). */
+export const VEHICLE_ASPECT_OPTIONS = [
+  { w: 1, h: 1, label: '1:1' },
+  { w: 4, h: 3, label: '4:3' },
+]
+
 /** Recorta una imagen con una relación de aspecto arbitraria y devuelve un File WebP. */
 export async function cropImage(file, { x = 0.5, y = 0.5, zoom = 1, aspectW = 1, aspectH = 1 } = {}) {
   const bitmap = await createImageBitmap(file)

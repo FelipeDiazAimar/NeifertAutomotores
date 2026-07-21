@@ -39,6 +39,10 @@ function CardImage({ vehicle, rounded, isHovered }) {
   const [failed, setFailed] = useState(false)
   const [paused, setPaused] = useState(false)
   const [inView, setInView] = useState(true)
+  // Fotos 4:3 (cargadas así desde el admin) no llenan un marco cuadrado sin
+  // recortar contenido: se muestran con letterbox (barras negras) en vez de
+  // recortarlas, así se ve la foto completa igual que en las cuadradas 1:1.
+  const [wideImages, setWideImages] = useState({})
 
   // Volver a la primera imagen al salir el mouse (solo desktop, sin pausa manual)
   useEffect(() => {
@@ -106,11 +110,19 @@ function CardImage({ vehicle, rounded, isHovered }) {
           alt={`${vehicle.brand} ${vehicle.model}`}
           loading="lazy"
           onError={() => setFailed(true)}
+          onLoad={(e) => {
+            const img = e.currentTarget
+            const wide = img.naturalWidth / img.naturalHeight > 1.15
+            setWideImages((prev) => (prev[all[idx]] === wide ? prev : { ...prev, [all[idx]]: wide }))
+          }}
           initial={{ opacity: 0, scale: 1.04 }}
           animate={{ opacity: 1, scale: 1 }}
           exit={{ opacity: 0 }}
           transition={{ duration: 0.5, ease: EASE }}
-          className="pointer-events-none absolute inset-0 h-full w-full object-cover"
+          className={cn(
+            'pointer-events-none absolute inset-0 h-full w-full',
+            wideImages[all[idx]] ? 'bg-black object-contain' : 'object-cover'
+          )}
         />
       </AnimatePresence>
       {all.length > 1 && (

@@ -7,12 +7,37 @@ import { cn } from '@/lib/cn'
 /** Carrusel de fotos del vehículo: autoplay con crossfade + indicadores de
  *  puntos (transparente / rojo activo). Si el usuario toca un punto o una
  *  flecha, se fija esa imagen y se detiene el autoplay. */
-export default function VehicleGallery({ images = [], alt = '', isNew = false }) {
+export default function VehicleGallery({ images = [], alt = '', isNew = false, onActiveWideChange }) {
   const pics = images.filter(Boolean)
   const [idx, setIdx] = useState(0)
   const [locked, setLocked] = useState(false)
   const [failed, setFailed] = useState({})
+  // Fotos 4:3 se muestran completas (sin recortar) en vez de forzarlas al
+  // marco cuadrado 1:1 de las fotos "clásicas". Se precargan las dimensiones
+  // reales de cada foto para saber su relación antes de mostrarla.
+  const [wide, setWide] = useState({})
   const timer = useRef(null)
+  const picsKey = pics.join('|')
+
+  useEffect(() => {
+    let cancelled = false
+    picsKey.split('|').filter(Boolean).forEach((src) => {
+      const img = new Image()
+      img.onload = () => {
+        if (cancelled) return
+        const isWide = img.naturalWidth / img.naturalHeight > 1.15
+        setWide((prev) => (prev[src] === isWide ? prev : { ...prev, [src]: isWide }))
+      }
+      img.src = src
+    })
+    return () => { cancelled = true }
+  }, [picsKey])
+
+  const activeWide = Boolean(wide[pics[idx]])
+
+  useEffect(() => {
+    onActiveWideChange?.(activeWide)
+  }, [activeWide, onActiveWideChange])
 
   useEffect(() => {
     if (locked || pics.length < 2) return
@@ -36,7 +61,10 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false })
   }
 
   return (
-    <div className="group relative aspect-square overflow-hidden rounded-[24px] shadow-glass">
+    <div
+      className="group relative w-full overflow-hidden rounded-[24px] shadow-glass transition-[aspect-ratio] duration-700 ease-out"
+      style={{ aspectRatio: activeWide ? '4 / 3' : '1 / 1' }}
+    >
       <AnimatePresence initial={false} mode="popLayout">
         <motion.img
           key={idx}

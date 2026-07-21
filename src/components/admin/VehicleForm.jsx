@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Button from '@/components/common/Button'
 import ImageUploader from './ImageUploader'
+import { VEHICLE_ASPECT_OPTIONS } from '@/lib/mediaFormats'
 import { ARS_TO_USD_RATE } from '@/lib/constants'
 import { useSiteStore } from '@/store/useSiteStore'
 import { deleteMedia } from '@/services/media.service'
@@ -213,7 +214,11 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
       </label>
 
       <Field label="Fotos" full>
-        <ImageUploader value={form.images} onChange={(images) => set('images', images)} />
+        <ImageUploader
+          value={form.images}
+          onChange={(images) => set('images', images)}
+          aspectOptions={VEHICLE_ASPECT_OPTIONS}
+        />
       </Field>
 
       <div className="flex justify-end gap-2 sm:col-span-2">

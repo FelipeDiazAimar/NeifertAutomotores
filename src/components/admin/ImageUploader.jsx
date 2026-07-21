@@ -8,7 +8,7 @@ import ImageCropper from './ImageCropper'
 
 const DEFAULT_ASPECT = { w: 1, h: 1 }
 
-export default function ImageUploader({ value = [], onChange, multiple = true, aspectRatio = DEFAULT_ASPECT, maxSizeMB = MAX_IMAGE_MB }) {
+export default function ImageUploader({ value = [], onChange, multiple = true, aspectRatio = DEFAULT_ASPECT, aspectOptions = null, maxSizeMB = MAX_IMAGE_MB }) {
   const inputRef = useRef(null)
   const inputId = useId()
   const [dragging, setDragging] = useState(false)
@@ -83,7 +83,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
       type: file.type || '(vacío)',
       sizeMB: +(file.size / 1048576).toFixed(2),
       maxSizeMB,
-      skipRatioCheck: aW !== 1 || aH !== 1,
+      skipRatioCheck: Boolean(aspectOptions) || aW !== 1 || aH !== 1,
     })
     setProgress(0)
     try {
@@ -93,7 +93,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
           setProgress(p)
         },
         maxSizeMB,
-        skipRatioCheck: aW !== 1 || aH !== 1,
+        skipRatioCheck: Boolean(aspectOptions) || aW !== 1 || aH !== 1,
       })
       console.log('[IMG] uploadFile: OK', { url: res.url, demo: res.demo, ratio: res.ratio })
       onChange(multiple ? [...value, res.url] : [res.url])
@@ -174,7 +174,9 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         JPG · PNG · WebP · HEIC · resultado de hasta {maxSizeMB}MB · {multiple ? 'varias' : 'una'}
       </p>
       <p className="text-[11px] text-ink-3">
-        Se recorta en formato {aW}:{aH}{isSquare ? ' (cuadrado)' : ''}
+        {aspectOptions
+          ? `Elegís el recorte al subir: ${aspectOptions.map((o) => `${o.w}:${o.h}`).join(' o ')}`
+          : `Se recorta en formato ${aW}:${aH}${isSquare ? ' (cuadrado)' : ''}`}
       </p>
       {progress != null && (
         <div className="absolute inset-x-0 bottom-0 h-1 bg-line">
@@ -223,6 +225,7 @@ export default function ImageUploader({ value = [], onChange, multiple = true, a
         <ImageCropper
           file={cropFile}
           aspectRatio={aspectRatio}
+          aspectOptions={aspectOptions}
           onConfirm={confirmCrop}
           onCancel={cancelCrop}
         />

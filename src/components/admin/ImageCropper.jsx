@@ -7,7 +7,7 @@ import { cropImage, rotateImageClockwise } from '@/lib/mediaFormats'
 const DEFAULT_STAGE = { w: 540, h: 340 }
 const CROP_MARGIN = 0.88
 
-export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onConfirm, onCancel }) {
+export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspectOptions = null, onConfirm, onCancel }) {
   const dragRef = useRef(null)
   const urlRef = useRef(null)
   const stageRef = useRef(null)
@@ -17,6 +17,12 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
   const [imageSize, setImageSize] = useState(null)
   const [stage, setStage] = useState(DEFAULT_STAGE)
   const [working, setWorking] = useState(false)
+  const [aspect, setAspect] = useState(aspectOptions?.[0] || aspectRatio)
+
+  const chooseAspect = (option) => {
+    setAspect(option)
+    setCrop({ x: 0.5, y: 0.5, zoom: 1 })
+  }
 
   useEffect(() => {
     const next = file || null
@@ -38,7 +44,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
     return () => observer.disconnect()
   }, [])
 
-  const { w: aW, h: aH } = aspectRatio
+  const { w: aW, h: aH } = aspect
   const cropRatio = aW / aH
 
   // Crop area dimensions (centered within the stage)
@@ -171,6 +177,29 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, onCon
         <p className="mt-1 text-sm text-ink-3">
           Arrastrá para encuadrar. Relación de aspecto {ratioLabel}.
         </p>
+
+        {aspectOptions && aspectOptions.length > 1 && (
+          <div className="mt-3 flex justify-center">
+            <div className="inline-flex items-center gap-1 rounded-full border border-line bg-black/5 p-1">
+              {aspectOptions.map((option) => {
+                const active = option.w === aW && option.h === aH
+                return (
+                  <button
+                    key={option.label}
+                    type="button"
+                    disabled={working}
+                    onClick={() => chooseAspect(option)}
+                    className={`rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors ${
+                      active ? 'bg-neifert text-white shadow' : 'text-ink-3 hover:text-ink'
+                    }`}
+                  >
+                    {option.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Stage */}
         <div

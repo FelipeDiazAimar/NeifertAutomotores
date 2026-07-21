@@ -12,3 +12,4 @@ export function useMediaQuery(query) {
 }
 
 export const useIsDesktop = () => useMediaQuery('(min-width: 768px)')
+export const useIsLarge = () => useMediaQuery('(min-width: 1024px)')
