@@ -10,7 +10,7 @@ export default function AdminLayout() {
   const setMobileNav = useUiStore((s) => s.setMobileNav)
 
   return (
-    <div className="mx-auto flex min-h-screen max-w-[1440px] gap-2">
+    <div className="mx-auto flex min-h-screen max-w-[1440px] gap-2 overflow-x-hidden">
       <AdminSidebar />
       <div className="min-w-0 flex-1">
         <header className="sticky top-0 z-30 px-4 pt-3 md:hidden">

@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { motion } from 'framer-motion'
 import { MapPin, Clock, User, Phone, Calendar, Car, Mail, ExternalLink } from 'lucide-react'
+import { toast } from 'sonner'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import Input from '@/components/common/Input'
 import Button from '@/components/common/Button'
@@ -9,6 +10,7 @@ import { useSiteStore } from '@/store/useSiteStore'
 import { appointmentMessage, CONTACT_INQUIRY_MESSAGE, waLink } from '@/lib/whatsapp'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
+import { createLead } from '@/services/leads.service'
 import { fadeUp, staggerContainer } from '@/lib/animations'
 
 const MAPS_URL = 'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+898+San+Francisco+C%C3%B3rdoba+Argentina'
@@ -16,6 +18,7 @@ const MAPS_URL = 'https://www.google.com/maps/search/?api=1&query=Av.+Urquiza+89
 export default function AppointmentPage() {
   const socials = useSiteStore((s) => s.socials)
   const [form, setForm] = useState({ name: '', phone: '', when: '', vehicle: '', notes: '' })
+  const [submitting, setSubmitting] = useState(false)
 
   const set = (k) => (e) => setForm((f) => ({ ...f, [k]: e.target.value }))
 
@@ -29,10 +32,28 @@ export default function AppointmentPage() {
     return appointmentMessage(lines.join('\n'))
   }
 
-  const onSubmit = (e) => {
+  const onSubmit = async (e) => {
     e.preventDefault()
+    setSubmitting(true)
     trackEvent(null, 'consulta', detectSource())
+
+    if (form.name || form.phone) {
+      try {
+        await createLead({
+          full_name: form.name || 'Sin nombre',
+          phone: form.phone || null,
+          vehicle_interest: form.vehicle || null,
+          source: 'Web',
+          notes: [form.when && `Preferencia horaria: ${form.when}`, form.notes].filter(Boolean).join(' — ') || null,
+          status: 'nuevo',
+        })
+      } catch {
+        toast.error('No se pudo guardar la consulta, pero igual te contactamos.')
+      }
+    }
+
     window.open(waLink(socials.whatsappPhone, buildMessage()), '_blank', 'noopener')
+    setSubmitting(false)
   }
 
   const address  = socials.address  || 'Av. Urquiza 898, San Francisco, Córdoba'
@@ -86,8 +107,8 @@ export default function AppointmentPage() {
                 />
               </div>
               <div className="sm:col-span-2">
-                <Button type="submit" variant="whatsapp" size="lg" icon={WhatsAppIcon} className="w-full">
-                  Coordinar por WhatsApp
+                <Button type="submit" variant="whatsapp" size="lg" icon={WhatsAppIcon} className="w-full" disabled={submitting}>
+                  {submitting ? 'Enviando…' : 'Coordinar por WhatsApp'}
                 </Button>
               </div>
             </form>

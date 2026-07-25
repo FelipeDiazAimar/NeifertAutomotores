@@ -248,11 +248,14 @@ export default function AdminCatalogPage() {
           </button>
           <Button
             variant="glass"
+            size="sm"
             icon={DatabaseZap}
             onClick={() => runSync()}
             disabled={syncing}
+            className="text-xs sm:text-sm"
           >
-            {syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}
+            <span className="hidden sm:inline">{syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}</span>
+            <span className="sm:hidden">{syncing ? 'Sync…' : 'Sync CRM'}</span>
           </Button>
           <Button icon={Plus} onClick={() => setEditing('new')}>
             Nuevo vehículo

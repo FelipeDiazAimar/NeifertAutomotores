@@ -110,8 +110,10 @@ export default function CrmPage() {
             icon={DatabaseZap}
             onClick={() => runSync()}
             disabled={syncing}
+            className="text-xs sm:text-sm"
           >
-            {syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}
+            <span className="hidden sm:inline">{syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}</span>
+            <span className="sm:hidden">{syncing ? 'Sync…' : 'Sync CRM'}</span>
           </Button>
         </div>
       </header>
@@ -152,17 +154,20 @@ export default function CrmPage() {
             <h2 className="font-display text-xl font-bold text-ink">
               Listado de Leads Recientes
             </h2>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+            <div className="glass field-glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3 sm:max-w-xs">
+              <Search size={16} className="shrink-0 text-ink-3" />
+              <input
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder="Buscar por nombre o vehículo…"
+                className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+              />
+            </div>
             <div className="flex items-center gap-2">
-              <div className="glass field-glass flex h-10 items-center gap-2 rounded-xl px-3">
-                <Search size={16} className="shrink-0 text-ink-3" />
-                <input
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  placeholder="Buscar por nombre o vehículo…"
-                  className="w-32 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3 sm:w-48"
-                />
-              </div>
-              <div className="w-40">
+              <div className="w-36 sm:w-40">
                 <Select
                   size="sm"
                   value={originFilter}

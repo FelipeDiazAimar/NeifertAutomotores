@@ -39,23 +39,25 @@ export default function ShareLinksCard() {
         {CHANNELS.map(({ key, source, hint }) => {
           const url = `${origin}/?ref=${key}`
           return (
-            <div key={key} className="glass flex items-center gap-3 rounded-xl p-3">
+            <div key={key} className="glass flex items-center gap-2 rounded-xl p-2.5 sm:gap-3 sm:p-3">
               <span
                 className="h-2.5 w-2.5 shrink-0 rounded-full"
                 style={{ background: SOURCE_COLORS[source] }}
               />
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-ink">{source}</p>
-                <p className="truncate text-xs text-ink-3" title={hint}>
+                <p className="truncate text-[11px] text-ink-3 sm:text-xs" title={url}>
                   {url}
                 </p>
               </div>
               <button
                 onClick={() => copy(url)}
                 aria-label={`Copiar enlace de ${source}`}
-                className="flex shrink-0 items-center gap-1.5 rounded-full bg-surface px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:text-neifert"
+                className="flex shrink-0 items-center gap-1 rounded-full bg-surface px-2.5 py-1.5 text-[11px] font-semibold text-ink-2 transition-colors hover:text-neifert sm:gap-1.5 sm:px-3 sm:text-xs"
               >
-                <Copy size={13} /> Copiar
+                <Copy size={12} className="sm:hidden" />
+                <Copy size={13} className="hidden sm:block" />
+                <span className="hidden sm:inline">Copiar</span>
               </button>
             </div>
           )

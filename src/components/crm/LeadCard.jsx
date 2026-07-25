@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom'
-import { Phone, ChevronRight } from 'lucide-react'
+import { Phone, ChevronRight, CheckCircle2, XCircle } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import GlassCard from '@/components/common/GlassCard'
 import { LEAD_STATUSES, WHATSAPP_PHONE } from '@/lib/constants'
@@ -7,7 +7,7 @@ import { formatRelative } from '@/lib/formatters'
 import { cn } from '@/lib/cn'
 import { leadFollowUpMessage } from '@/lib/whatsapp'
 
-function Avatar({ lead }) {
+function Avatar({ lead, contacted }) {
   return (
     <div className="relative shrink-0">
       {lead.avatar_url ? (
@@ -17,7 +17,12 @@ function Avatar({ lead }) {
           {lead.full_name.slice(0, 2).toUpperCase()}
         </span>
       )}
-      <span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-bg bg-success" />
+      <span
+        className={cn(
+          'absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-bg',
+          contacted ? 'bg-success' : 'bg-amber'
+        )}
+      />
     </div>
   )
 }
@@ -27,11 +32,12 @@ export default function LeadCard({ lead }) {
     leadFollowUpMessage(lead)
   )}`
   const status = LEAD_STATUSES[lead.status]
+  const contacted = lead.status !== 'nuevo'
 
   return (
     <GlassCard className="p-4">
       <div className="flex items-start gap-3">
-        <Avatar lead={lead} />
+        <Avatar lead={lead} contacted={contacted} />
         <div className="min-w-0 flex-1">
           <div className="flex items-start justify-between gap-2">
             <p className="truncate font-bold text-ink">{lead.full_name}</p>
@@ -47,6 +53,11 @@ export default function LeadCard({ lead }) {
               {lead.source}
             </span>
             <span className="text-xs text-ink-3">{status?.label}</span>
+            {contacted ? (
+              <CheckCircle2 size={13} className="text-success" />
+            ) : (
+              <XCircle size={13} className="text-amber" />
+            )}
           </div>
         </div>
       </div>

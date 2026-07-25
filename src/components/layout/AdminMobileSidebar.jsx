@@ -43,7 +43,7 @@ export default function AdminMobileSidebar() {
             animate={{ x: 0 }}
             exit={{ x: '100%' }}
             transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-            className="fixed inset-y-0 right-0 z-50 flex w-72 flex-col bg-surface-solid shadow-2xl md:hidden"
+            className="fixed inset-y-0 right-0 z-50 flex w-72 max-w-[85vw] flex-col bg-surface-solid shadow-2xl md:hidden"
           >
             <div className="flex items-center justify-between px-5 py-5">
               <Link to="/" onClick={() => setOpen(false)} aria-label="Inicio">

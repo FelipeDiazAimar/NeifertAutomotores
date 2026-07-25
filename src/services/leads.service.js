@@ -176,3 +176,32 @@ export async function createLead(payload) {
   pushExternalLead(lead)
   return lead
 }
+
+export async function updateLead(id, payload) {
+  if (!isSupabaseConfigured) {
+    const idx = demoLeads.findIndex((l) => l.id === id)
+    if (idx === -1) throw new Error('Lead no encontrado')
+    demoLeads[idx] = { ...demoLeads[idx], ...payload, updated_at: new Date().toISOString() }
+    return demoLeads[idx]
+  }
+  const { data, error } = await supabase
+    .from('prospectos')
+    .update(toDbLead(payload))
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return toAppLead(data)
+}
+
+export async function deleteLead(id) {
+  if (!isSupabaseConfigured) {
+    const idx = demoLeads.findIndex((l) => l.id === id)
+    if (idx === -1) throw new Error('Lead no encontrado')
+    demoLeads.splice(idx, 1)
+    return { ok: true }
+  }
+  const { error } = await supabase.from('prospectos').delete().eq('id', id)
+  if (error) throw error
+  return { ok: true }
+}
