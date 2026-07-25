@@ -43,8 +43,8 @@ export default function Footer() {
   return (
     <footer className="mt-5 px-4 sm:mt-24 md:px-8">
       <div className="mx-auto max-w-7xl border-t border-line pt-6 sm:pt-12">
-        <div className="grid gap-10 md:grid-cols-4">
-          <div>
+        <div className="grid grid-cols-2 gap-10 md:grid-cols-4">
+          <div className="col-span-2 md:col-span-1">
             <Logo />
             <p className="mt-4 max-w-xs text-sm text-ink-2">{footer.tagline}</p>
             <div className="mt-4 flex gap-3 text-ink-3">
@@ -105,7 +105,7 @@ export default function Footer() {
             <FooterCol key={col.title} title={col.title} items={col.items} />
           ))}
 
-          <div>
+          <div className="col-span-2 md:col-span-1">
             <h4 className="mb-3 text-xs font-bold uppercase tracking-wider text-ink-3">
               Dónde estamos
             </h4>

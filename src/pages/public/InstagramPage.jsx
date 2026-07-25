@@ -155,8 +155,9 @@ export default function InstagramPage() {
   }
 
   return (
-    <section className="mx-auto max-w-[1130px] px-4 py-12 md:px-8">
-      <motion.div
+    <section className="mx-auto max-w-[1130px] py-12 md:px-8">
+      <div className="px-4 md:px-0">
+        <motion.div
         variants={staggerContainer(0.1, 0.05)}
         initial="hidden"
         animate="show"
@@ -208,6 +209,7 @@ export default function InstagramPage() {
           )}
         </AnimatePresence>
       </motion.div>
+      </div>
 
       <div ref={gridRef} className="mt-12 scroll-mt-24">
         {refreshing ? (
@@ -236,7 +238,9 @@ export default function InstagramPage() {
         )}
       </div>
 
-      <Pagination page={page} totalPages={totalPages} onChange={goTo} />
+      <div className="px-4 md:px-0">
+        <Pagination page={page} totalPages={totalPages} onChange={goTo} />
+      </div>
     </section>
   )
 }
