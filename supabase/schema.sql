@@ -160,12 +160,19 @@ create index if not exists idx_vehiculos_categoria     on public.vehiculos (cate
 create index if not exists idx_vehiculos_estado         on public.vehiculos (estado);
 create index if not exists idx_prospectos_estado        on public.prospectos (estado);
 create index if not exists idx_prospectos_ultimo_contacto on public.prospectos (ultimo_contacto_en desc);
--- Dedup de prospectos ingeridos del CRM externo (upsert por id_externo)
-create unique index if not exists idx_prospectos_id_externo
-  on public.prospectos (id_externo) where id_externo is not null;
--- Dedup de vehículos ingeridos del CRM viejo (upsert por id_externo)
-create unique index if not exists idx_vehiculos_id_externo
-  on public.vehiculos (id_externo) where id_externo is not null;
+-- Dedup de prospectos ingeridos del CRM externo (upsert por id_externo).
+-- Índice simple, NO parcial: un índice único ya permite múltiples NULL sin
+-- necesidad de "where id_externo is not null" — y ese predicado rompía el
+-- ON CONFLICT (id_externo) que genera el upsert de Supabase (Postgres no
+-- puede usar un índice parcial para inferir el conflicto salvo que el
+-- ON CONFLICT repita el mismo WHERE). El drop+create es para poder corregir
+-- bases que ya tenían el índice parcial creado (si no, "if not exists" no
+-- hace nada porque el nombre ya existe).
+drop index if exists idx_prospectos_id_externo;
+create unique index if not exists idx_prospectos_id_externo on public.prospectos (id_externo);
+-- Dedup de vehículos ingeridos del CRM viejo (mismo caso, por consistencia).
+drop index if exists idx_vehiculos_id_externo;
+create unique index if not exists idx_vehiculos_id_externo on public.vehiculos (id_externo);
 create index if not exists idx_eventos_vehiculo_tipo    on public.eventos_vehiculo (tipo);
 create index if not exists idx_eventos_vehiculo_creado  on public.eventos_vehiculo (creado_en desc);
 create index if not exists idx_eventos_vehiculo_veh     on public.eventos_vehiculo (vehiculo_id);

@@ -12,7 +12,7 @@ export default function MapSection() {
   const address = socials.address || 'Av. Urquiza 898, San Francisco, Córdoba'
 
   return (
-    <section className="mt-20 mb-4">
+    <section className="mt-20 mb-2 sm:mb-4">
       {/* Encabezado */}
       <div className="mb-6 flex flex-col items-center gap-1 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-neifert/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-neifert">

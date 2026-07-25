@@ -40,7 +40,7 @@ export default function LeadCard({ lead }) {
             </span>
           </div>
           <p className="truncate text-sm font-semibold text-neifert">
-            {lead.vehicle_interest}
+            {lead.vehicle_interest || 'Sin especificar'}
           </p>
           <div className="mt-1.5 flex items-center gap-2">
             <span className="rounded-full border border-neifert px-2 py-0.5 text-[11px] font-semibold text-neifert">

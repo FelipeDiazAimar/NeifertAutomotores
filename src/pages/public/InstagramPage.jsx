@@ -77,7 +77,7 @@ function Pagination({ page, totalPages, onChange }) {
   }
 
   return (
-    <div className="mt-8 flex items-center justify-center gap-1 overflow-x-auto px-2">
+    <div className="mt-3 flex items-center justify-center gap-1 overflow-x-auto px-2 sm:mt-8">
       <button
         onClick={() => onChange(page - 1)}
         disabled={page === 1}
@@ -211,7 +211,7 @@ export default function InstagramPage() {
 
       <div ref={gridRef} className="mt-12 scroll-mt-24">
         {refreshing ? (
-          <div className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-4">
+          <div className="grid grid-cols-3 gap-px lg:grid-cols-4">
             {Array.from({ length: 12 }).map((_, i) => (
               <SkeletonItem key={i} />
             ))}
@@ -222,7 +222,7 @@ export default function InstagramPage() {
             variants={staggerContainer(0.015)}
             initial="hidden"
             animate="show"
-            className="grid grid-cols-2 gap-px sm:grid-cols-3 lg:grid-cols-4"
+            className="grid grid-cols-3 gap-px lg:grid-cols-4"
           >
             {pageItems.map((item) => (
               <GalleryItem key={item.id} item={item} profileUrl={profileUrl} />

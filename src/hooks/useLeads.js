@@ -11,9 +11,11 @@ import {
 export function useLeads() {
   const quickFilter = useCrmStore((s) => s.quickFilter)
   const search = useCrmStore((s) => s.search)
+  const sort = useCrmStore((s) => s.sort)
+  const origin = useCrmStore((s) => s.originFilter)
   return useQuery({
-    queryKey: ['leads', { quickFilter, search }],
-    queryFn: () => fetchLeads({ quickFilter, search }),
+    queryKey: ['leads', { quickFilter, search, sort, origin }],
+    queryFn: () => fetchLeads({ quickFilter, search, sort, origin }),
   })
 }
 

@@ -1,12 +1,25 @@
-import { useForm } from 'react-hook-form'
+import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
-import { User, Phone, Mail, Car, Tag, Calendar, Plus } from 'lucide-react'
+import { format } from 'date-fns'
+import { User, Phone, Mail, Car, Tag, Plus } from 'lucide-react'
 import Input from '@/components/common/Input'
+import Select from '@/components/common/Select'
+import DatePicker from '@/components/common/DatePicker'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import { LEAD_SOURCES } from '@/lib/constants'
 import { useCreateLead } from '@/hooks/useLeads'
+
+// Mismas opciones/etiquetas que el filtro por origen y la columna "Origen"
+// del listado — un solo lugar (LEAD_SOURCES) para no desalinear nombres.
+const SOURCE_OPTIONS = LEAD_SOURCES.map((s) => ({ id: s, label: s }))
+
+const todayStr = () => format(new Date(), 'yyyy-MM-dd')
+
+// Dominios de correo más comunes entre clientes — se sugieren como chips
+// para completar el email con un toque, sin obligar a tipearlo entero.
+const EMAIL_DOMAINS = ['gmail.com', 'hotmail.com']
 
 const schema = z.object({
   full_name: z.string().min(2, 'Ingresá el nombre completo'),
@@ -24,12 +37,17 @@ export default function LeadForm() {
     register,
     handleSubmit,
     reset,
+    control,
+    watch,
+    setValue,
     formState: { errors },
-  } = useForm({ resolver: zodResolver(schema), defaultValues: { source: 'Web' } })
+  } = useForm({ resolver: zodResolver(schema), defaultValues: { source: 'Web', contact_date: todayStr() } })
+
+  const emailLocal = (watch('email') || '').split('@')[0]
 
   const onSubmit = async (values) => {
     await mutateAsync({ ...values, email: values.email || null })
-    reset({ source: 'Web' })
+    reset({ source: 'Web', contact_date: todayStr() })
   }
 
   return (
@@ -55,38 +73,60 @@ export default function LeadForm() {
             error={errors.phone?.message}
             {...register('phone')}
           />
-          <Input
-            label="Email"
-            icon={Mail}
-            placeholder="juan.perez@email.com"
-            error={errors.email?.message}
-            {...register('email')}
-          />
+          <div>
+            <Input
+              label="Email"
+              icon={Mail}
+              placeholder="juan.perez@email.com"
+              error={errors.email?.message}
+              {...register('email')}
+            />
+            {emailLocal && (
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {EMAIL_DOMAINS.map((domain) => (
+                  <button
+                    key={domain}
+                    type="button"
+                    onClick={() =>
+                      setValue('email', `${emailLocal}@${domain}`, {
+                        shouldValidate: true,
+                        shouldDirty: true,
+                      })
+                    }
+                    className="rounded-full border border-line px-2.5 py-1 text-[11px] font-medium text-ink-2 transition-colors hover:border-neifert hover:text-neifert"
+                  >
+                    @{domain}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
           <Input
             label="Vehículo de interés"
             icon={Car}
             placeholder="Ej. Audi A4 2023"
             {...register('vehicle_interest')}
           />
-          <label className="block">
-            <span className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">
-              Origen del lead
-            </span>
-            <div className="glass flex h-12 items-center gap-2.5 rounded-2xl px-3.5 focus-within:border-neifert">
-              <Tag size={17} className="shrink-0 text-ink-3" />
-              <select
-                {...register('source')}
-                className="w-full bg-transparent text-sm text-ink outline-none"
-              >
-                {LEAD_SOURCES.map((s) => (
-                  <option key={s} value={s} className="bg-surface-solid text-ink">
-                    {s}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </label>
-          <Input label="Fecha de contacto" type="date" icon={Calendar} {...register('contact_date')} />
+          <Controller
+            name="source"
+            control={control}
+            render={({ field }) => (
+              <Select
+                label="Origen del lead"
+                icon={Tag}
+                options={SOURCE_OPTIONS}
+                value={field.value}
+                onChange={field.onChange}
+              />
+            )}
+          />
+          <Controller
+            name="contact_date"
+            control={control}
+            render={({ field }) => (
+              <DatePicker label="Fecha de contacto" value={field.value} onChange={field.onChange} />
+            )}
+          />
         </div>
 
         <Input
@@ -97,7 +137,7 @@ export default function LeadForm() {
         />
 
         <div className="flex justify-end gap-3 pt-2">
-          <Button type="button" variant="ghost" onClick={() => reset({ source: 'Web' })}>
+          <Button type="button" variant="ghost" onClick={() => reset({ source: 'Web', contact_date: todayStr() })}>
             Cancelar
           </Button>
           <Button type="submit" icon={Plus} disabled={isPending}>

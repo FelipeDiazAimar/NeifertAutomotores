@@ -1,7 +1,7 @@
 import { cn } from '@/lib/cn'
 
 export const inputCls =
-  'glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
+  'glass field-glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
 
 export function TextField({ label, value, onChange, placeholder, textarea, className }) {
   return (

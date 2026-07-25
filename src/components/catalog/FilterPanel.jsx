@@ -24,7 +24,7 @@ function Chip({ active, onClick, children }) {
 function RangeRow({ label, suffix, minVal, maxVal, onMin, onMax, placeholderMax }) {
   return (
     <div>
-      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">{label}</p>
+      <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2 dark:text-ink">{label}</p>
       <div className="flex items-center gap-2">
         <input
           type="number"
@@ -32,18 +32,18 @@ function RangeRow({ label, suffix, minVal, maxVal, onMin, onMax, placeholderMax 
           value={minVal ?? ''}
           onChange={(e) => onMin(e.target.value === '' ? null : Number(e.target.value))}
           placeholder="Mín"
-          className="glass h-10 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3"
+          className="glass field-glass h-10 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 dark:placeholder:text-ink-2"
         />
-        <span className="text-ink-3">—</span>
+        <span className="text-ink-3 dark:text-ink">—</span>
         <input
           type="number"
           inputMode="numeric"
           value={maxVal ?? ''}
           onChange={(e) => onMax(e.target.value === '' ? null : Number(e.target.value))}
           placeholder={placeholderMax || 'Máx'}
-          className="glass h-10 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3"
+          className="glass field-glass h-10 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 dark:placeholder:text-ink-2"
         />
-        {suffix && <span className="shrink-0 text-xs text-ink-3">{suffix}</span>}
+        {suffix && <span className="shrink-0 text-xs text-ink-3 dark:text-ink">{suffix}</span>}
       </div>
     </div>
   )
@@ -116,7 +116,7 @@ export default function FilterPanel(props) {
 
             <div className="space-y-5">
               <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2 dark:text-ink">
                   Combustible
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -133,7 +133,7 @@ export default function FilterPanel(props) {
               </div>
 
               <div>
-                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2">
+                <p className="mb-2 text-xs font-bold uppercase tracking-wider text-ink-2 dark:text-ink">
                   Tipo de caja
                 </p>
                 <div className="flex flex-wrap gap-2">
@@ -170,7 +170,7 @@ export default function FilterPanel(props) {
             <div className="mt-5 flex items-center justify-between gap-2">
               <button
                 onClick={clearFilters}
-                className="text-sm font-semibold text-ink-3 transition-colors hover:text-neifert"
+                className="text-sm font-semibold text-ink-3 transition-colors hover:text-neifert dark:text-ink"
               >
                 Limpiar todo
               </button>

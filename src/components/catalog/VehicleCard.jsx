@@ -131,28 +131,30 @@ function CardImage({ vehicle, rounded, isHovered }) {
             type="button"
             aria-label="Ver imagen anterior"
             onClick={(event) => go(-1, event)}
-            className="absolute left-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+            className="absolute left-1.5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:grid sm:left-2 sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
-            <ChevronLeft size={18} />
+            <ChevronLeft size={16} className="sm:hidden" />
+            <ChevronLeft size={18} className="hidden sm:block" />
           </button>
           <button
             type="button"
             aria-label="Ver imagen siguiente"
             onClick={(event) => go(1, event)}
-            className="absolute right-2 top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+            className="absolute right-1.5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:grid sm:right-2 sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
-            <ChevronRight size={18} />
+            <ChevronRight size={16} className="sm:hidden" />
+            <ChevronRight size={18} className="hidden sm:block" />
           </button>
         </>
       )}
       {all.length > 1 && (
-        <div className="pointer-events-none absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
+        <div className="pointer-events-none absolute bottom-1.5 left-1/2 flex -translate-x-1/2 gap-1 sm:bottom-2">
           {all.map((_, i) => (
             <span
               key={i}
               className={cn(
-                'h-1.5 rounded-full transition-all',
-                i === idx ? 'w-4 bg-neifert' : 'w-1.5 bg-white/60'
+                'h-1 rounded-full transition-all sm:h-1.5',
+                i === idx ? 'w-3 bg-neifert sm:w-4' : 'w-1 bg-white/60 sm:w-1.5'
               )}
             />
           ))}
@@ -164,8 +166,8 @@ function CardImage({ vehicle, rounded, isHovered }) {
 
 function Spec({ icon: Icon, children }) {
   return (
-    <span className="flex items-center gap-1.5 text-xs text-ink-2">
-      <Icon size={14} className="text-ink-3" />
+    <span className="flex items-center gap-1 text-[11px] text-ink-2 sm:gap-1.5 sm:text-xs">
+      <Icon size={13} className="shrink-0 text-ink-3" />
       {children}
     </span>
   )
@@ -196,38 +198,75 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       whileHover={{ scale: 1.1, rotate: -6 }}
       whileTap={{ scale: 0.95 }}
       aria-label="Consultar por WhatsApp"
-      className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-whatsapp text-white"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-whatsapp text-white sm:h-11 sm:w-11"
       style={{ boxShadow: '0 8px 18px -6px rgba(37,211,102,0.6)' }}
     >
-      <WhatsAppIcon size={20} />
+      <WhatsAppIcon size={16} className="sm:hidden" />
+      <WhatsAppIcon size={20} className="hidden shrink-0 sm:block" />
     </motion.a>
   )
 
+  const onShareClick = (e) => {
+    e.preventDefault()
+    e.stopPropagation()
+    trackShareClick({ kind: 'vehicle', id: vehicle.id })
+    trackEvent(vehicle.id, 'compartir', detectSource())
+    shareOrCopy({
+      url: `/catalogo/${vehicle.id}?ref=share`,
+      title: `${vehicle.brand} ${vehicle.model} — Neifert Automotores`,
+      text: `Mirá este ${vehicle.brand} ${vehicle.model} ${vehicle.year} en Neifert.`,
+    })
+  }
+
+  // Desktop (sm+, sin cambios): botón de compartir junto al de WhatsApp, en
+  // la fila del precio. En mobile no se renderiza acá — se muestra flotando
+  // sobre la foto (shareButtonOverlay) para dejar la fila del precio solo
+  // con el precio + WhatsApp.
   const shareButton = (
     <motion.button
       type="button"
-      onClick={(e) => {
-        e.preventDefault()
-        e.stopPropagation()
-        trackShareClick({ kind: 'vehicle', id: vehicle.id })
-        trackEvent(vehicle.id, 'compartir', detectSource())
-        shareOrCopy({
-          url: `/catalogo/${vehicle.id}?ref=share`,
-          title: `${vehicle.brand} ${vehicle.model} — Neifert Automotores`,
-          text: `Mirá este ${vehicle.brand} ${vehicle.model} ${vehicle.year} en Neifert.`,
-        })
-      }}
+      onClick={onShareClick}
       whileHover={{ scale: 1.1 }}
       whileTap={{ scale: 0.95 }}
       aria-label="Compartir"
-      className="grid h-11 w-11 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert"
+      className="hidden shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:grid sm:h-11 sm:w-11"
     >
       <Share2 size={18} />
     </motion.button>
   )
 
+  // Solo mobile: badge flotante sobre la esquina superior derecha de la foto
+  // (vista grid — la cuadrícula de 2 columnas queda muy justa de ancho).
+  const shareButtonOverlay = (
+    <motion.button
+      type="button"
+      onClick={onShareClick}
+      whileTap={{ scale: 0.9 }}
+      aria-label="Compartir"
+      className="grid h-7 w-7 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:hidden"
+    >
+      <Share2 size={13} />
+    </motion.button>
+  )
+
+  // Vista lista: la card ocupa el ancho completo incluso en mobile, así que
+  // compartir siempre entra al lado de WhatsApp (no hace falta esconderlo).
+  const shareButtonList = (
+    <motion.button
+      type="button"
+      onClick={onShareClick}
+      whileHover={{ scale: 1.1 }}
+      whileTap={{ scale: 0.95 }}
+      aria-label="Compartir"
+      className="grid h-9 w-9 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
+    >
+      <Share2 size={15} className="sm:hidden" />
+      <Share2 size={18} className="hidden sm:block" />
+    </motion.button>
+  )
+
   const actions = (
-    <div className="flex flex-wrap items-center gap-2">
+    <div className="flex items-center gap-1.5 sm:gap-2">
       {shareButton}
       {waButton}
     </div>
@@ -247,23 +286,23 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
         {...layoutProps}
         onMouseEnter={() => setIsCardHovered(true)}
         onMouseLeave={() => setIsCardHovered(false)}
-        className="group glass flex flex-col gap-4 overflow-hidden rounded-[20px] p-3 shadow-glass sm:flex-row"
+        className="group glass flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 shadow-glass sm:flex-row sm:gap-4 sm:p-3"
       >
         <Link
           to={`/catalogo/${vehicle.id}`}
-          className="relative h-44 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
+          className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
         >
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2.5 py-0.5 text-xs font-semibold text-[#0b0b0f]">
+          <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:px-2.5 sm:text-xs">
             {vehicle.year}
           </span>
         </Link>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
           <Link to={`/catalogo/${vehicle.id}`}>
-            <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
               {vehicle.brand}
             </p>
-            <p className="truncate font-display text-lg font-bold text-ink">
+            <p className="truncate font-display text-base font-bold text-ink sm:text-lg">
               {vehicle.model}
               {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
             </p>
@@ -271,10 +310,13 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           {specs}
         </div>
         <div className="flex flex-row items-end justify-between gap-3 py-1 sm:flex-col sm:gap-0">
-          <p className="font-display text-xl font-extrabold text-ink">
+          <p className="font-display text-lg font-extrabold text-ink sm:text-xl">
             {formatVehiclePrice(vehicle)}
           </p>
-          {actions}
+          <div className="flex items-center gap-1.5 sm:gap-2">
+            {shareButtonList}
+            {waButton}
+          </div>
         </div>
       </motion.div>
     )
@@ -291,33 +333,46 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       <Link to={`/catalogo/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          <span className="absolute left-3 top-3 z-10 rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
+          <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-xs">
             {vehicle.year}
           </span>
-          {vehicle.is_new && (
-            <span className="absolute right-3 top-3 z-10 rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
-              Nuevo
-            </span>
-          )}
+          {/* Esquina superior derecha: en desktop, "Nuevo" (si aplica) —
+              sin cambios. En mobile, solo el botón de compartir; "Nuevo" se
+              muestra más abajo, a la altura de la marca (ver debajo). */}
+          <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 sm:right-3 sm:top-3">
+            {vehicle.is_new && (
+              <span className="hidden rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white sm:inline-block">
+                Nuevo
+              </span>
+            )}
+            {shareButtonOverlay}
+          </div>
         </div>
       </Link>
-      <div className="p-4">
+      <div className="p-2.5 sm:p-4">
         <Link to={`/catalogo/${vehicle.id}`} className="block">
-          <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
-            {vehicle.brand}
-          </p>
-          <p className={cn('truncate font-display text-lg font-bold text-ink')}>
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
+              {vehicle.brand}
+            </p>
+            {vehicle.is_new && (
+              <span className="rounded-full bg-neifert px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
+                Nuevo
+              </span>
+            )}
+          </div>
+          <p className={cn('truncate font-display text-sm font-bold text-ink sm:text-lg')}>
             {vehicle.model}
             {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
           </p>
         </Link>
-        <div className="mt-3">{specs}</div>
-        <div className="mt-4 flex items-end justify-between">
+        <div className="mt-1.5 sm:mt-3">{specs}</div>
+        <div className="mt-2.5 flex items-center justify-between gap-2 sm:mt-4 sm:flex-wrap sm:items-end">
           <div>
-            <p className="text-[9px] font-semibold uppercase tracking-wide text-ink-3">
+            <p className="hidden text-[9px] font-semibold uppercase tracking-wide text-ink-3 sm:block">
               Precio contado
             </p>
-            <p className="font-display text-xl font-extrabold text-ink">
+            <p className="font-display text-sm font-extrabold text-ink sm:text-xl">
               {formatVehiclePrice(vehicle)}
             </p>
           </div>

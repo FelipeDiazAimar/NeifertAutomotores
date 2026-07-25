@@ -102,7 +102,8 @@ All in `src/plugins/`: `instagramProxy`, `crmProxy`, `r2Proxy`, `usersProxy`, `i
 | `VITE_WHATSAPP_PHONE` | No | WhatsApp button number |
 | `SUPABASE_SERVICE_ROLE_KEY` | No | Vite proxies (server-side only) |
 | `R2_*` | No | Cloudflare R2 storage via proxy |
-| `CRM_SYNC_*` | No | CRM sync proxy |
+| `CRM_EXT_API_TOKEN` | No | CRM viejo: API pública (stock + leads) |
+| `CRM_SYNC_*` | No | CRM viejo: panel interno (cartera completa de clientes) |
 | `INSTAGRAM_AGENT_TOKEN` | No | Instagram sync |
 
 `loadEnv(mode, cwd, '')` in vite.config.js loads ALL env vars (not just `VITE_` prefix) so proxies can use service-role keys.

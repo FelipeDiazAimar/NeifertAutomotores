@@ -41,8 +41,8 @@ export default function Footer() {
   const address = socials.address || 'Av. Urquiza 898, San Francisco, Córdoba'
 
   return (
-    <footer className="mt-24 px-4 md:px-8">
-      <div className="mx-auto max-w-7xl border-t border-line pt-12">
+    <footer className="mt-5 px-4 sm:mt-24 md:px-8">
+      <div className="mx-auto max-w-7xl border-t border-line pt-6 sm:pt-12">
         <div className="grid gap-10 md:grid-cols-4">
           <div>
             <Logo />

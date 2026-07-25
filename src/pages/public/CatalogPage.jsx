@@ -80,7 +80,7 @@ export default function CatalogPage() {
       </div>
 
       {!isLoading && vehicles.length > 0 && (
-        <div className="mt-12 text-center">
+        <div className="mt-4 text-center sm:mt-12">
           <p className="text-sm text-ink-3">
             Mostrando {shown.length} de {vehicles.length} vehículos exclusivos
           </p>

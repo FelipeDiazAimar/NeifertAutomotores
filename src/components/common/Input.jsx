@@ -17,7 +17,7 @@ const Input = forwardRef(function Input(
       )}
       <div
         className={cn(
-          'glass flex gap-2.5 rounded-2xl px-3.5 transition-colors focus-within:border-neifert',
+          'glass field-glass flex gap-2.5 rounded-2xl px-3.5 transition-colors focus-within:border-neifert',
           isArea ? 'items-start py-3' : 'h-12 items-center',
           error && 'border-neifert'
         )}

@@ -14,7 +14,7 @@ const STATUSES = [
 ]
 
 const fieldCls =
-  'glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
+  'glass field-glass h-11 w-full rounded-xl px-3 text-sm text-ink outline-none placeholder:text-ink-3 focus:border-neifert'
 
 function Field({ label, children, full }) {
   // <div>, no <label>: el campo "Fotos" mete un <ImageUploader> como children,

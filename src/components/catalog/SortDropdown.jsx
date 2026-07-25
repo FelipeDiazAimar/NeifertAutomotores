@@ -5,14 +5,14 @@ import { SORT_OPTIONS } from '@/lib/constants'
 import { useCatalogStore } from '@/store/useCatalogStore'
 import { cn } from '@/lib/cn'
 
-export default function SortDropdown({ sort: sortProp, setSort: setSortProp }) {
+export default function SortDropdown({ sort: sortProp, setSort: setSortProp, options = SORT_OPTIONS, label = 'Ordenar por:' }) {
   const storeSort = useCatalogStore((s) => s.sort)
   const storeSetSort = useCatalogStore((s) => s.setSort)
   const sort = sortProp ?? storeSort
   const setSort = setSortProp ?? storeSetSort
   const [open, setOpen] = useState(false)
   const ref = useRef(null)
-  const current = SORT_OPTIONS.find((o) => o.id === sort)
+  const current = options.find((o) => o.id === sort)
 
   useEffect(() => {
     const handler = (e) => {
@@ -28,7 +28,7 @@ export default function SortDropdown({ sort: sortProp, setSort: setSortProp }) {
         onClick={() => setOpen((o) => !o)}
         className="glass flex h-10 items-center gap-2 rounded-xl px-3 text-sm text-ink"
       >
-        <span className="hidden text-ink-3 sm:inline">Ordenar por:</span>
+        <span className="hidden text-ink-3 sm:inline">{label}</span>
         <span className="font-semibold">{current?.label}</span>
         <ChevronDown size={15} className={cn('transition-transform', open && 'rotate-180')} />
       </button>
@@ -42,7 +42,7 @@ export default function SortDropdown({ sort: sortProp, setSort: setSortProp }) {
             transition={{ duration: 0.18 }}
             className="glass absolute right-0 z-20 mt-2 w-48 overflow-hidden rounded-xl p-1 shadow-glass"
           >
-            {SORT_OPTIONS.map((o) => (
+            {options.map((o) => (
               <li key={o.id}>
                 <button
                   onClick={() => {

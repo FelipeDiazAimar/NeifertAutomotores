@@ -41,7 +41,7 @@ export default function AppointmentPage() {
   const phone    = socials.phone    || '(03564) 43-5199'
 
   return (
-    <section className="mx-auto max-w-5xl px-4 py-12 md:px-8">
+    <section className="mx-auto max-w-5xl px-4 pt-12 pb-3 sm:pb-12 md:px-8">
       {/* Encabezado */}
       <motion.div
         variants={staggerContainer(0.1, 0.05)}

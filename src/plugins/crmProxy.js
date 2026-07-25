@@ -1,11 +1,21 @@
-import { crmLogin, fetchCrmVehiculos, bridgeCrmSession } from '../server/crmCore.js'
+import {
+  crmLogin,
+  fetchExtVehiculos,
+  createExtLead,
+  fetchExtWebLeads,
+  fetchCrmClientes,
+  bridgeCrmSession,
+} from '../server/crmCore.js'
 
 /**
  * Plugin de Vite que expone el proxy del CRM viejo en el servidor de
  * desarrollo. La lógica real vive en src/server/crmCore.js (compartida con
  * las funciones serverless de producción en api/crm/*.js).
  *
- * GET  /api/crm/vehiculos      → login interno (cacheado) + vehiculos.php
+ * GET  /api/crm/vehiculos      → stock disponible (API pública, token estático)
+ * GET  /api/crm/leads          → leads que empujamos nosotros (verificación)
+ * POST /api/crm/leads          → empuja un lead nuevo del sitio
+ * GET  /api/crm/clientes       → cartera completa (panel interno, login de empleado)
  * POST /api/crm/login          → valida usuario/contraseña contra el login real
  * POST /api/crm/bridge-session → crea/encuentra la cuenta puente en Supabase
  *                                 Auth y devuelve un token de un solo uso
@@ -33,24 +43,73 @@ function sendJson(res, status, payload) {
   res.end(JSON.stringify(payload))
 }
 
-export function crmProxyPlugin({ supabaseUrl, supabaseServiceRoleKey, crmSyncUser, crmSyncPass } = {}) {
+export function crmProxyPlugin({
+  supabaseUrl,
+  supabaseServiceRoleKey,
+  crmExtApiToken,
+  crmSyncUser,
+  crmSyncPass,
+} = {}) {
   return {
     name: 'crm-viejo-proxy',
     configureServer(server) {
-      server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
+      server.middlewares.use('/api/crm/clientes', async (_req, res) => {
         if (!crmSyncUser || !crmSyncPass) {
           return sendJson(res, 501, {
             ok: false,
-            error: 'Falta CRM_SYNC_USER/CRM_SYNC_PASS en el servidor para sincronizar vehículos.',
+            error: 'Falta CRM_SYNC_USER/CRM_SYNC_PASS en el servidor para sincronizar clientes.',
           })
         }
         try {
-          const json = await fetchCrmVehiculos({ syncUser: crmSyncUser, syncPass: crmSyncPass })
-          sendJson(res, 200, json)
+          const data = await fetchCrmClientes({ syncUser: crmSyncUser, syncPass: crmSyncPass })
+          sendJson(res, 200, { ok: true, data })
+        } catch (e) {
+          console.error('[crm-proxy] clientes:', e.message)
+          sendJson(res, 502, { ok: false, error: e.message })
+        }
+      })
+
+      server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
+        if (!crmExtApiToken) {
+          return sendJson(res, 501, {
+            ok: false,
+            error: 'Falta CRM_EXT_API_TOKEN en el servidor para sincronizar vehículos.',
+          })
+        }
+        try {
+          const data = await fetchExtVehiculos(crmExtApiToken)
+          sendJson(res, 200, { ok: true, data })
         } catch (e) {
           console.error('[crm-proxy] vehiculos:', e.message)
           sendJson(res, 502, { ok: false, error: e.message })
         }
+      })
+
+      server.middlewares.use('/api/crm/leads', async (req, res) => {
+        if (!crmExtApiToken) {
+          return sendJson(res, 501, { ok: false, error: 'Falta CRM_EXT_API_TOKEN en el servidor.' })
+        }
+        if (req.method === 'GET') {
+          try {
+            const data = await fetchExtWebLeads(crmExtApiToken)
+            return sendJson(res, 200, { ok: true, data })
+          } catch (e) {
+            console.error('[crm-proxy] leads (GET):', e.message)
+            return sendJson(res, 502, { ok: false, error: e.message })
+          }
+        }
+        if (req.method === 'POST') {
+          try {
+            const { name, phone, notes, brand, model } = await readJsonBody(req)
+            if (!name || !phone) return sendJson(res, 400, { ok: false, error: 'Faltan name/phone.' })
+            const result = await createExtLead(crmExtApiToken, { name, phone, notes, brand, model })
+            return sendJson(res, 200, { ok: true, ...result })
+          } catch (e) {
+            console.error('[crm-proxy] leads (POST):', e.message)
+            return sendJson(res, 502, { ok: false, error: e.message })
+          }
+        }
+        sendJson(res, 405, { ok: false, error: 'Method not allowed' })
       })
 
       server.middlewares.use('/api/crm/login', async (req, res) => {

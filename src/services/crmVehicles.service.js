@@ -18,9 +18,11 @@ const EXTERNAL_SOURCE = 'crm_viejo'
 
 // Campos que sí trae y actualiza el CRM viejo (el resto — fotos, descripción,
 // is_new, fuel_type — quedan siempre a cargo del admin de nuestro sitio).
+// 'status' no está: el endpoint solo devuelve stock disponible, así que el
+// estado se decide aparte (ver la pasada de "vendidos" en syncVehiclesFromCrm).
 const SYNCED_FIELDS = [
   'brand', 'model', 'version', 'color', 'year', 'km',
-  'transmission', 'category', 'status', 'currency', 'price_amount', 'price_usd',
+  'transmission', 'category', 'currency', 'price_amount', 'price_usd',
 ]
 
 const TIPO_LABELS = {
@@ -34,7 +36,7 @@ const TIPO_LABELS = {
   Moto: 'Moto',
 }
 
-/** Trae los vehículos crudos del CRM viejo (vía nuestro proxy, evita CORS). */
+/** Trae el stock disponible del CRM viejo (vía nuestro proxy, evita CORS). */
 export async function fetchExternalVehicles() {
   const res = await fetch('/api/crm/vehiculos')
   const json = await res.json()
@@ -59,10 +61,15 @@ function resolveCategoryId(tipo) {
   return categories.find((c) => c.id === slug)?.id || slug
 }
 
-/** Mapea un vehículo crudo del CRM viejo a nuestro shape (solo campos públicos). */
+/** Mapea un vehículo crudo del CRM viejo a nuestro shape (solo campos públicos).
+ *  El endpoint es de solo stock disponible: no trae `status`, por eso acá
+ *  siempre se marca 'disponible' — los que dejan de aparecer en el listado
+ *  se marcan 'vendido' aparte (ver syncVehiclesFromCrm). Tampoco se usan sus
+ *  `fotos`: la imagen/marketing del vehículo siempre queda a cargo del admin
+ *  de este sitio (se guardan en el snapshot solo como referencia). */
 function mapExternalVehicle(raw, categoryId) {
-  const amount = raw.precio_contado ?? raw.precio_canje ?? null
-  const currency = raw.precio_contado != null ? raw.moneda_contado || 'USD' : raw.moneda_canje || 'USD'
+  const currency = raw.moneda || 'USD'
+  const amount = raw.precio ?? null
   const priceUsd = amount == null ? 0 : currency === 'ARS' ? amount * ARS_TO_USD_RATE : amount
   const transmission = raw.trans ? (/manual/i.test(raw.trans) ? 'Manual' : 'Automática') : null
 
@@ -75,7 +82,6 @@ function mapExternalVehicle(raw, categoryId) {
     km: raw.km ?? 0,
     transmission,
     category: categoryId,
-    status: ['disponible', 'reservado', 'vendido'].includes(raw.status) ? raw.status : 'disponible',
     currency,
     price_amount: amount,
     price_usd: priceUsd,
@@ -85,7 +91,7 @@ function mapExternalVehicle(raw, categoryId) {
     ...synced,
     external_id: String(raw.id),
     external_source: EXTERNAL_SOURCE,
-    external_snapshot: synced,
+    external_snapshot: { ...synced, fotos: raw.fotos || [] },
     external_synced_at: new Date().toISOString(),
   }
 }
@@ -94,21 +100,25 @@ function mapExternalVehicle(raw, categoryId) {
 export async function syncVehiclesFromCrm() {
   const [localList, externalList] = await Promise.all([fetchAllVehicles(), fetchExternalVehicles()])
   const localByExtId = new Map(localList.filter((v) => v.external_id).map((v) => [v.external_id, v]))
+  const seenExtIds = new Set()
 
   let created = 0
   let updated = 0
   let unchanged = 0
+  let soldOut = 0
   const errors = []
 
   for (const raw of externalList) {
     try {
       const categoryId = resolveCategoryId(raw.tipo)
       const mapped = mapExternalVehicle(raw, categoryId)
+      seenExtIds.add(mapped.external_id)
       const local = localByExtId.get(mapped.external_id)
 
       if (!local) {
         await createVehicle({
           ...mapped,
+          status: 'disponible',
           fuel_type: 'Nafta', // el CRM viejo no distingue combustible; ajustable a mano
           is_new: false,
           images: [],
@@ -128,17 +138,14 @@ export async function syncVehiclesFromCrm() {
           patch[field] = mapped[field]
         }
       }
+      // Volvió a aparecer en el stock disponible (ej: se deshizo una venta
+      // o una reserva) → recupera el estado 'disponible'.
+      if (local.status !== 'disponible') patch.status = 'disponible'
 
       if (Object.keys(patch).length > 0) {
         updated++
       } else {
         unchanged++
-      }
-
-      // El CRM viejo lo marcó vendido recién ahora: registra la venta real
-      // para el embudo, igual que si se marcara a mano en nuestro panel.
-      if (patch.status === 'vendido' && local.status !== 'vendido') {
-        trackEvent(local.id, 'venta')
       }
 
       await updateVehicle(local.id, {
@@ -151,5 +158,25 @@ export async function syncVehiclesFromCrm() {
     }
   }
 
-  return { created, updated, unchanged, total: externalList.length, errors }
+  // El endpoint solo lista stock disponible: lo que ya no aparece y antes sí
+  // (y vino del CRM viejo) se dio de baja allá — lo marcamos vendido acá,
+  // igual que si se hiciera a mano, y registra la venta real para el embudo.
+  for (const local of localList) {
+    if (
+      local.external_id &&
+      local.external_source === EXTERNAL_SOURCE &&
+      !seenExtIds.has(local.external_id) &&
+      local.status !== 'vendido'
+    ) {
+      try {
+        await updateVehicle(local.id, { status: 'vendido' })
+        trackEvent(local.id, 'venta')
+        soldOut++
+      } catch (e) {
+        errors.push(`${local.brand || '?'} ${local.model || ''}: ${e.message}`)
+      }
+    }
+  }
+
+  return { created, updated, unchanged, soldOut, total: externalList.length, errors }
 }

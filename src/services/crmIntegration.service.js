@@ -1,40 +1,83 @@
 import { supabase, isSupabaseConfigured } from './supabaseClient'
 import { toDbLead } from './leads.service'
 
-/** Integración con el CRM externo (enlatado). Es READ-ONLY: ingerimos SUS leads
- *  (WhatsApp de la empresa + gente que va presencial al salón) a nuestra tabla
- *  `prospectos`, etiquetados por origen, para unificar el embudo y el dashboard
- *  con nuestros propios leads (web/IG/FB/catálogo).
+/** Ingesta READ-ONLY de la cartera completa de clientes/leads del CRM viejo
+ *  (WhatsApp de la empresa + gente presencial del salón + los que ya
+ *  llegaron por la web) hacia nuestra tabla `prospectos`, etiquetados por
+ *  origen, para unificar el embudo con nuestros propios leads.
  *
- *  PENDIENTE (cuando tengamos acceso a su API, ~2026-07-14):
- *   - Definir baseURL + auth (API key / OAuth) en variables de entorno.
- *   - Completar mapExternalLead() con el shape real de sus respuestas.
- *   - Reemplazar fetchExternalLeads() por la llamada real (o recibir un webhook).
- */
+ *  Fuente: GET /api/crm/clientes → panel interno del CRM viejo (login de
+ *  empleado, ver src/server/crmCore.js). NO es la API pública que nos
+ *  dieron oficialmente (esa solo expone los leads que nosotros mismos
+ *  empujamos, ver leads.service.js#pushExternalLead) — este endpoint lo
+ *  encontramos en la captura de red de su propio panel y lo usamos con
+ *  credenciales de un empleado real. */
 
-/** Mapea un lead crudo del CRM externo → nuestro shape de `leads`.
- *  TODO: ajustar los nombres de campo al contrato real del enlatado. */
+const EXTERNAL_SOURCE = 'crm_enlatado'
+
+// canal (CRM viejo) → origen (nuestro enum). Lo no reconocido cae a
+// 'WhatsApp' — es el canal genérico más probable para contacto directo
+// (llamada, "otro", ya_cliente, vacío).
+const CANAL_TO_ORIGEN = {
+  salon: 'Showroom',
+  whatsapp: 'WhatsApp',
+  instagram: 'Instagram',
+  facebook: 'Facebook',
+}
+
+// status (CRM viejo) → estado (nuestro enum). No conocemos su pipeline
+// interno más allá de activo/vendido, así que todo lo "activo" entra como
+// 'nuevo' (se puede reclasificar a mano en nuestro panel).
+const STATUS_TO_ESTADO = {
+  vendido: 'cerrado',
+}
+
+/** Arma un texto de notas legible a partir de los campos sueltos que no
+ *  tienen equivalente directo en nuestro esquema (presupuesto, año buscado,
+ *  auto de entrega, etc.) — para no perder esa información. */
+function buildNotes(raw) {
+  const parts = []
+  const busca = [raw.tipo, raw.trans, raw.year_min || raw.year_max ? `${raw.year_min ?? '?'}-${raw.year_max ?? '?'}` : null]
+    .filter(Boolean)
+    .join(', ')
+  if (busca) parts.push(`Busca: ${busca}`)
+  if (raw.budget) parts.push(`Presupuesto: $${Number(raw.budget).toLocaleString('es-AR')}`)
+  if (raw.tieneAutoEntrega && raw.ae_brand) {
+    parts.push(`Entrega: ${[raw.ae_brand, raw.ae_model, raw.ae_year].filter(Boolean).join(' ')}`)
+  }
+  if (raw.notes) parts.push(raw.notes)
+  return parts.join(' — ') || null
+}
+
+/** Mapea un cliente crudo del CRM viejo (clientes.php) → nuestro shape de
+ *  `leads`. Ver muestra real de campos en scraping/Harfiles/neifert.har. */
 export function mapExternalLead(raw) {
   return {
-    external_id: String(raw.id ?? raw.lead_id ?? ''),
-    external_source: 'crm_enlatado',
-    full_name: raw.name ?? raw.full_name ?? 'Sin nombre',
-    phone: raw.phone ?? raw.telefono ?? null,
-    email: raw.email ?? null,
-    vehicle_interest: raw.vehicle ?? raw.interes ?? null,
-    // Origen: WhatsApp de la empresa vs. visita presencial al salón
-    source: raw.channel === 'whatsapp' ? 'WhatsApp' : 'Showroom',
-    status: raw.status ?? 'nuevo',
-    notes: raw.notes ?? null,
-    last_contact_at: raw.last_contact_at ?? new Date().toISOString(),
+    external_id: String(raw.id),
+    external_source: EXTERNAL_SOURCE,
+    full_name: raw.name || 'Sin nombre',
+    phone: raw.phone || null,
+    email: null,
+    // Combina marca+modelo+tipo (no exclusivo): si solo tienen el tipo
+    // cargado ("Pickup"), se muestra igual, pero apenas hay algo más
+    // específico (marca/modelo) se agrega en vez de perderlo.
+    vehicle_interest: [raw.brand, raw.model, raw.tipo].filter(Boolean).join(' ') || null,
+    source: CANAL_TO_ORIGEN[raw.canal] || 'WhatsApp',
+    status: STATUS_TO_ESTADO[raw.status] || 'nuevo',
+    notes: buildNotes(raw),
+    last_contact_at: raw.updated_at || raw.created_at || new Date().toISOString(),
+    created_at: raw.created_at || undefined,
     synced_at: new Date().toISOString(),
   }
 }
 
-/** Trae los leads del CRM externo. STUB: hoy no hay API → devuelve []. */
-export async function fetchExternalLeads(/* { since } = {} */) {
-  // TODO: fetch(`${CRM_BASE_URL}/leads?since=...`, { headers: { Authorization } })
-  return []
+/** Trae la cartera completa del CRM viejo vía nuestro proxy (evita CORS y
+ *  nunca expone credenciales al navegador). */
+export async function fetchExternalLeads() {
+  const res = await fetch('/api/crm/clientes')
+  const json = await res.json()
+  if (!json?.ok) throw new Error(json?.error || 'No se pudo conectar con el CRM viejo.')
+  return json.data || []
 }
 
 /** Ingesta: upsert por external_id en `prospectos` (deduplica). Devuelve
@@ -48,7 +91,7 @@ export async function ingestExternalLeads(rawList) {
   return { count: rows.length }
 }
 
-/** Sincronización completa (para un botón admin, un cron o un webhook receiver). */
+/** Sincronización completa (para el botón de /admin/crm o un auto-sync al entrar). */
 export async function syncExternalCrm() {
   const raw = await fetchExternalLeads()
   return ingestExternalLeads(raw)

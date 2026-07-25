@@ -1,21 +1,36 @@
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import {
   UserPlus,
   Users,
   TrendingUp,
-  CalendarCheck,
   ClipboardList,
   Search,
+  DatabaseZap,
 } from 'lucide-react'
+import Button from '@/components/common/Button'
 import KpiCard from '@/components/crm/KpiCard'
 import LeadForm from '@/components/crm/LeadForm'
 import QuickFilters from '@/components/crm/QuickFilters'
 import LeadTable from '@/components/crm/LeadTable'
 import LeadCard from '@/components/crm/LeadCard'
 import Spinner from '@/components/common/Spinner'
+import Pagination from '@/components/common/Pagination'
+import Select from '@/components/common/Select'
+import SortDropdown from '@/components/catalog/SortDropdown'
 import { useLeads, useLeadCounts } from '@/hooks/useLeads'
 import { useRealtimeLeads } from '@/hooks/useRealtimeLeads'
 import { useCrmStore } from '@/store/useCrmStore'
+import { syncExternalCrm } from '@/services/crmIntegration.service'
+import { LEAD_SORT_OPTIONS, LEAD_SOURCES } from '@/lib/constants'
 import { cn } from '@/lib/cn'
+
+const PAGE_SIZE = 10
+
+// Mismas etiquetas que "Origen del lead" en LeadForm y la columna "Origen"
+// de la tabla — un solo lugar (LEAD_SOURCES) para no desalinear nombres.
+const ORIGIN_OPTIONS = [{ id: 'todos', label: 'Todos los orígenes' }, ...LEAD_SOURCES.map((s) => ({ id: s, label: s }))]
 
 export default function CrmPage() {
   useRealtimeLeads()
@@ -25,6 +40,50 @@ export default function CrmPage() {
   const setMobileTab = useCrmStore((s) => s.setMobileTab)
   const search = useCrmStore((s) => s.search)
   const setSearch = useCrmStore((s) => s.setSearch)
+  const sort = useCrmStore((s) => s.sort)
+  const setSort = useCrmStore((s) => s.setSort)
+  const originFilter = useCrmStore((s) => s.originFilter)
+  const setOriginFilter = useCrmStore((s) => s.setOriginFilter)
+  const quickFilter = useCrmStore((s) => s.quickFilter)
+  const qc = useQueryClient()
+  const [syncing, setSyncing] = useState(false)
+  const autoSyncedRef = useRef(false)
+
+  // Reset a la página 1 cuando cambia búsqueda/orden/filtro. Ajuste durante
+  // el render (patrón recomendado por React) en vez de un useEffect, que
+  // dispararía un render en cascada.
+  const [page, setPage] = useState(1)
+  const pageKey = JSON.stringify({ search, sort, quickFilter, originFilter })
+  const [prevPageKey, setPrevPageKey] = useState(pageKey)
+  if (pageKey !== prevPageKey) {
+    setPrevPageKey(pageKey)
+    setPage(1)
+  }
+  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE))
+  const pageLeads = leads.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+
+  const runSync = async ({ silent = false } = {}) => {
+    setSyncing(true)
+    try {
+      const r = await syncExternalCrm()
+      qc.invalidateQueries({ queryKey: ['leads'] })
+      qc.invalidateQueries({ queryKey: ['lead-counts'] })
+      if (!silent || r.count > 0) toast.success(`CRM sincronizado: ${r.count} cliente(s)`)
+    } catch (e) {
+      if (!silent) toast.error('No se pudo sincronizar con el CRM viejo: ' + e.message)
+      else console.warn('[crm-sync] auto-sync falló (silencioso):', e.message)
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  // Auto-sync best-effort al entrar al panel (una vez por sesión de la página)
+  useEffect(() => {
+    if (autoSyncedRef.current) return
+    autoSyncedRef.current = true
+    runSync({ silent: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const today = new Date().toDateString()
   const leadsHoy = leads.filter((l) => new Date(l.created_at).toDateString() === today).length
@@ -32,24 +91,36 @@ export default function CrmPage() {
   const conversion = counts?.todos
     ? ((counts.finalizados / counts.todos) * 100).toFixed(1)
     : '0'
+  const totalLeads = counts?.todos ?? 0
 
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
+      <header className="flex flex-wrap items-center justify-between gap-3">
         <span className="rounded-full bg-neifert px-4 py-1.5 text-sm font-semibold text-white shadow-glow-red">
           Gestión de Salón
         </span>
-        <span className="flex items-center gap-2 text-xs font-medium text-ink-2">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
-          Abierto ahora
-        </span>
+        <div className="flex items-center gap-3">
+          <span className="flex items-center gap-2 text-xs font-medium text-ink-2">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
+            Abierto ahora
+          </span>
+          <Button
+            variant="glass"
+            size="sm"
+            icon={DatabaseZap}
+            onClick={() => runSync()}
+            disabled={syncing}
+          >
+            {syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}
+          </Button>
+        </div>
       </header>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <KpiCard icon={UserPlus} accent="red" label="Leads Hoy" value={leadsHoy} />
         <KpiCard icon={Users} accent="blue" label="Activos" value={activos} />
         <KpiCard icon={TrendingUp} accent="green" label="Conversión" value={`${conversion}%`} />
-        <KpiCard icon={CalendarCheck} accent="amber" label="Test Drives" value={8} />
+        <KpiCard icon={ClipboardList} accent="amber" label="Total Leads" value={totalLeads} />
       </div>
 
       <div className="glass grid grid-cols-2 gap-1 rounded-2xl p-1 md:hidden">
@@ -77,18 +148,29 @@ export default function CrmPage() {
         </div>
 
         <div className={cn('space-y-4', mobileTab !== 'leads' && 'hidden md:block')}>
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <h2 className="font-display text-xl font-bold text-ink">
               Listado de Leads Recientes
             </h2>
-            <div className="glass hidden h-10 items-center gap-2 rounded-xl px-3 md:flex">
-              <Search size={16} className="text-ink-3" />
-              <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar lead…"
-                className="w-40 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
-              />
+            <div className="flex items-center gap-2">
+              <div className="glass field-glass flex h-10 items-center gap-2 rounded-xl px-3">
+                <Search size={16} className="shrink-0 text-ink-3" />
+                <input
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Buscar por nombre o vehículo…"
+                  className="w-32 bg-transparent text-sm text-ink outline-none placeholder:text-ink-3 sm:w-48"
+                />
+              </div>
+              <div className="w-40">
+                <Select
+                  size="sm"
+                  value={originFilter}
+                  onChange={setOriginFilter}
+                  options={ORIGIN_OPTIONS}
+                />
+              </div>
+              <SortDropdown sort={sort} setSort={setSort} options={LEAD_SORT_OPTIONS} label="Orden:" />
             </div>
           </div>
 
@@ -105,13 +187,14 @@ export default function CrmPage() {
           ) : (
             <>
               <div className="hidden md:block">
-                <LeadTable leads={leads} />
+                <LeadTable leads={pageLeads} />
               </div>
               <div className="space-y-3 md:hidden">
-                {leads.map((l) => (
+                {pageLeads.map((l) => (
                   <LeadCard key={l.id} lead={l} />
                 ))}
               </div>
+              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
             </>
           )}
         </div>

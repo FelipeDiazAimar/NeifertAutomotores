@@ -6,7 +6,6 @@ import { useLenis } from 'lenis/react'
 import { toast } from 'sonner'
 import {
   Plus, Pencil, Trash2, Link2, X, Search, Eye, MessageCircle, RefreshCw, DatabaseZap,
-  ChevronLeft, ChevronRight,
 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { aggregateStats } from '@/lib/vehicleClicks'
@@ -16,6 +15,7 @@ import { trackEvent } from '@/services/events.service'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
+import Pagination from '@/components/common/Pagination'
 import VehicleForm from '@/components/admin/VehicleForm'
 import SortDropdown from '@/components/catalog/SortDropdown'
 import FilterPanel from '@/components/catalog/FilterPanel'
@@ -36,43 +36,6 @@ const STATUS_STYLE = {
 }
 
 const PAGE_SIZE = 12
-
-function Pagination({ page, totalPages, onChange }) {
-  if (totalPages <= 1) return null
-  const pages = Array.from({ length: totalPages }, (_, i) => i + 1)
-  return (
-    <div className="mt-6 flex flex-wrap items-center justify-center gap-2">
-      <button
-        onClick={() => onChange(page - 1)}
-        disabled={page === 1}
-        aria-label="Página anterior"
-        className="grid h-9 w-9 place-items-center rounded-full glass text-ink-2 transition-colors hover:text-neifert disabled:opacity-40"
-      >
-        <ChevronLeft size={16} />
-      </button>
-      {pages.map((p) => (
-        <button
-          key={p}
-          onClick={() => onChange(p)}
-          className={cn(
-            'grid h-9 min-w-9 place-items-center rounded-full px-3 text-sm font-semibold transition-colors',
-            p === page ? 'bg-neifert text-white shadow-glow-red' : 'glass text-ink-2 hover:text-neifert'
-          )}
-        >
-          {p}
-        </button>
-      ))}
-      <button
-        onClick={() => onChange(page + 1)}
-        disabled={page === totalPages}
-        aria-label="Página siguiente"
-        className="grid h-9 w-9 place-items-center rounded-full glass text-ink-2 transition-colors hover:text-neifert disabled:opacity-40"
-      >
-        <ChevronRight size={16} />
-      </button>
-    </div>
-  )
-}
 
 function WideModal({ open, onClose, title, children }) {
   // Bloquea el scroll del catálogo de fondo mientras el modal está abierto
@@ -147,9 +110,9 @@ export default function AdminCatalogPage() {
       if (r.errors.length) {
         toast.warning(`Sincronizado con ${r.errors.length} error(es). Ver consola.`)
         console.warn('[crm-sync] errores:', r.errors)
-      } else if (!silent || r.created > 0 || r.updated > 0) {
+      } else if (!silent || r.created > 0 || r.updated > 0 || r.soldOut > 0) {
         toast.success(
-          `CRM sincronizado: ${r.created} nuevo(s), ${r.updated} actualizado(s), ${r.unchanged} sin cambios`
+          `CRM sincronizado: ${r.created} nuevo(s), ${r.updated} actualizado(s), ${r.soldOut} vendido(s), ${r.unchanged} sin cambios`
         )
       }
     } catch (e) {
@@ -298,7 +261,7 @@ export default function AdminCatalogPage() {
       </div>
 
       <div className="mb-5 flex flex-wrap items-center gap-2">
-        <div className="glass flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-3 sm:max-w-xs">
+        <div className="glass field-glass flex h-10 min-w-0 flex-1 items-center gap-2 rounded-xl px-3 sm:max-w-xs">
           <Search size={16} className="shrink-0 text-ink-3" />
           <input
             value={search}

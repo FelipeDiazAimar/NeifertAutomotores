@@ -27,6 +27,14 @@ export const LEAD_STATUSES = {
   cerrado: { label: 'Cerrado', variant: 'green' },
 }
 
+/** Opciones de ordenamiento del listado de leads (/admin/crm). */
+export const LEAD_SORT_OPTIONS = [
+  { id: 'date-desc', label: 'Contacto reciente' },
+  { id: 'date-asc', label: 'Contacto antiguo' },
+  { id: 'name-asc', label: 'Nombre A-Z' },
+  { id: 'name-desc', label: 'Nombre Z-A' },
+]
+
 /** Canales de captación de leads. */
 export const LEAD_SOURCES = [
   'WhatsApp',

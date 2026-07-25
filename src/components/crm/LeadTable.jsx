@@ -54,7 +54,7 @@ export default function LeadTable({ leads }) {
               <td className="px-5 py-3.5">
                 <span className="flex items-center gap-2 text-ink-2">
                   <Car size={15} className="text-ink-3" />
-                  {lead.vehicle_interest}
+                  {lead.vehicle_interest || 'Sin especificar'}
                 </span>
               </td>
               <td className="px-5 py-3.5 text-ink-2">{lead.source}</td>
