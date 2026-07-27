@@ -53,6 +53,7 @@ const EMPTY = {
   category: 'suv',
   status: 'disponible',
   is_new: false,
+  hidden: false,
   description: '',
   images: [],
 }
@@ -211,6 +212,16 @@ export default function VehicleForm({ initial, onSave, onCancel, saving }) {
           className="h-4 w-4 accent-[color:var(--c-neifert,#BE1E2D)]"
         />
         <span className="text-sm text-ink">Destacar como Nuevo</span>
+      </label>
+
+      <label className="flex cursor-pointer items-center gap-2 sm:col-span-2">
+        <input
+          type="checkbox"
+          checked={form.hidden}
+          onChange={(e) => set('hidden', e.target.checked)}
+          className="h-4 w-4 accent-[color:var(--c-neifert,#BE1E2D)]"
+        />
+        <span className="text-sm text-ink">Oculto al público</span>
       </label>
 
       <Field label="Fotos" full>

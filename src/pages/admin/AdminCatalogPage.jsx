@@ -5,7 +5,7 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLenis } from 'lenis/react'
 import { toast } from 'sonner'
 import {
-  Plus, Pencil, Trash2, Link2, X, Search, Eye, MessageCircle, RefreshCw, DatabaseZap,
+  Plus, Pencil, Trash2, Link2, X, Search, Eye, EyeOff, MessageCircle, RefreshCw, DatabaseZap,
 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { aggregateStats } from '@/lib/vehicleClicks'
@@ -223,6 +223,15 @@ export default function AdminCatalogPage() {
     toast.success('Enlace copiado')
   }
 
+  const toggleHidden = async (v) => {
+    try {
+      await update.mutateAsync({ id: v.id, patch: { hidden: !v.hidden } })
+      toast.success(v.hidden ? 'Vehículo visible nuevamente' : 'Vehículo oculto al público')
+    } catch (e) {
+      toast.error('No se pudo cambiar la visibilidad: ' + e.message)
+    }
+  }
+
   const copyWa = async (v) => {
     await navigator.clipboard.writeText(vehicleOfferMessage(v, { origin: window.location.origin }))
     toast.success('Mensaje comercial de WhatsApp copiado')
@@ -340,6 +349,14 @@ export default function AdminCatalogPage() {
                       CRM
                     </span>
                   )}
+                  {v.hidden && (
+                    <span
+                      title="Este vehículo no se muestra en el catálogo público"
+                      className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-500"
+                    >
+                      Oculto
+                    </span>
+                  )}
                 </div>
               </div>
               {/* Stats por vehículo */}
@@ -362,6 +379,11 @@ export default function AdminCatalogPage() {
               <div className="flex items-center gap-1 border-t border-line px-2 py-1.5">
                 <IconBtn icon={Pencil} label="Editar" onClick={() => setEditing(v)} />
                 <IconBtn icon={Link2} label="Copiar enlace" onClick={() => copyLink(v)} />
+                <IconBtn
+                  icon={v.hidden ? EyeOff : Eye}
+                  label={v.hidden ? 'Mostrar al público' : 'Ocultar al público'}
+                  onClick={() => toggleHidden(v)}
+                />
                 <IconBtn icon={WhatsAppIcon} label="Copiar WhatsApp" onClick={() => copyWa(v)} />
                 <div className="flex-1" />
                 <IconBtn icon={Trash2} label="Borrar" danger onClick={() => onDelete(v)} />

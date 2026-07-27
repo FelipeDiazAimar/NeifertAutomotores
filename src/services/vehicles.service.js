@@ -24,6 +24,7 @@ const FIELD_MAP = {
   view_count: 'vistas', external_id: 'id_externo', external_source: 'origen_externo',
   external_snapshot: 'snapshot_externo', external_synced_at: 'sincronizado_en',
   created_at: 'creado_en', updated_at: 'actualizado_en',
+  hidden: 'oculto',
 }
 const FIELD_MAP_REVERSE = Object.fromEntries(Object.entries(FIELD_MAP).map(([en, es]) => [es, en]))
 const dbCol = (enKey) => FIELD_MAP[enKey] || enKey
@@ -88,7 +89,10 @@ function matchesFilters(v, { search, filters }) {
 
 function applyMock(list, { category, sort, search, filters, includeAll }) {
   let out = [...list]
-  if (!includeAll) out = out.filter((v) => (v.status || 'disponible') === 'disponible')
+  if (!includeAll) {
+    out = out.filter((v) => (v.status || 'disponible') === 'disponible')
+    out = out.filter((v) => !v.hidden)
+  }
   if (category && category !== 'todos') out = out.filter((v) => v.category === category)
   out = out.filter((v) => matchesFilters(v, { search, filters }))
   const [col, asc] = SORT_MAP[sort] || SORT_MAP['price-desc']
@@ -110,7 +114,10 @@ export async function fetchVehicles({
   }
 
   let query = supabase.from('vehiculos').select('*')
-  if (!includeAll) query = query.eq('estado', 'disponible')
+  if (!includeAll) {
+    query = query.eq('estado', 'disponible')
+    query = query.eq('oculto', false)
+  }
   if (category !== 'todos') query = query.eq('categoria', category)
   if (search) {
     const numeric = /^\d{4}$/.test(search.trim())
@@ -163,6 +170,7 @@ export async function createVehicle(payload) {
       id: uid(),
       status: 'disponible',
       is_new: false,
+      hidden: false,
       images: [],
       created_at: new Date().toISOString(),
       ...payload,
