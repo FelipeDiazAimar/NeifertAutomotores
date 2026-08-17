@@ -101,7 +101,7 @@ export default function FilterPanel(props) {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.18 }}
-            className="glass absolute right-0 z-30 mt-2 max-h-[70vh] w-[min(92vw,22rem)] overflow-auto rounded-2xl p-4 shadow-glass"
+            className="glass glass-popover absolute right-0 z-30 mt-2 max-h-[70vh] w-[min(92vw,22rem)] overflow-auto rounded-2xl p-4 shadow-glass"
           >
             <div className="mb-3 flex items-center justify-between">
               <p className="font-display text-base font-bold text-ink">Filtrar</p>

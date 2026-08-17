@@ -3,8 +3,9 @@ import { useLocation } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useQuery } from '@tanstack/react-query'
 import { Sparkles, Search, X, LayoutGrid, List } from 'lucide-react'
-import { useLenis } from 'lenis/react'
+import { ReactLenis, useLenis } from 'lenis/react'
 import VehicleCard from '@/components/catalog/VehicleCard'
+import Button from '@/components/common/Button'
 import { fetchVehicles } from '@/services/vehicles.service'
 import { searchVehicles } from '@/lib/vehicleSearch'
 import { useUiStore } from '@/store/useUiStore'
@@ -12,6 +13,7 @@ import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
 const SUGGESTIONS = ['SUV familiar', 'Eléctrico 0km', 'Deportivo premium', 'Audi 2024', 'Algo económico']
+const PAGE_SIZE = 8
 
 export default function AiSearchOverlay() {
   const open = useUiStore((s) => s.aiSearchOpen)
@@ -19,12 +21,14 @@ export default function AiSearchOverlay() {
   const [query, setQuery] = useState('')
   const [submitted, setSubmitted] = useState('')
   const [view, setView] = useState('grid')
+  const [visible, setVisible] = useState(PAGE_SIZE)
   const location = useLocation()
 
   const runSearch = (q) => {
     const term = (q ?? query).trim()
     setQuery(term)
     setSubmitted(term)
+    setVisible(PAGE_SIZE)
   }
 
   const { data: pool = [] } = useQuery({
@@ -67,6 +71,7 @@ export default function AiSearchOverlay() {
     if (!open) {
       setQuery('')
       setSubmitted('')
+      setVisible(PAGE_SIZE)
     }
   }
 
@@ -76,6 +81,7 @@ export default function AiSearchOverlay() {
     [submitted, pool, categories]
   )
   const hasQuery = submitted.trim().length > 0
+  const shown = results.slice(0, visible)
 
   return (
     <AnimatePresence>
@@ -92,8 +98,12 @@ export default function AiSearchOverlay() {
             onClick={() => setOpen(false)}
           />
 
-          {/* Contenedor scrollable independiente del fondo */}
-          <div data-lenis-prevent className="relative z-10 h-full overflow-y-auto overscroll-contain">
+          {/* Contenedor scrollable independiente del fondo, con el mismo
+              smooth scroll (Lenis) que usa el resto del sitio */}
+          <ReactLenis
+            className="relative z-10 h-full overflow-y-auto overscroll-contain"
+            options={{ lerp: 0.1, smoothWheel: true }}
+          >
           <div className="mx-auto max-w-5xl px-4 py-10 md:py-16 pb-20">
             <motion.div
               initial={{ y: -16, opacity: 0 }}
@@ -179,18 +189,35 @@ export default function AiSearchOverlay() {
                 </div>
 
                 {results.length > 0 ? (
-                  <motion.div
-                    layout
-                    className={cn(
-                      view === 'grid'
-                        ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3'
-                        : 'flex flex-col gap-3'
-                    )}
-                  >
-                    {results.map((v) => (
-                      <VehicleCard key={v.id} vehicle={v} view={view} />
-                    ))}
-                  </motion.div>
+                  <>
+                    <motion.div
+                      layout
+                      className={cn(
+                        view === 'grid'
+                          ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3'
+                          : 'flex flex-col gap-3'
+                      )}
+                    >
+                      {shown.map((v) => (
+                        <VehicleCard key={v.id} vehicle={v} view={view} />
+                      ))}
+                    </motion.div>
+
+                    <div className="mt-8 text-center">
+                      <p className="text-sm text-ink-3">
+                        Mostrando {shown.length} de {results.length} recomendaciones
+                      </p>
+                      {visible < results.length && (
+                        <Button
+                          variant="glass"
+                          className="mt-4"
+                          onClick={() => setVisible((v) => v + PAGE_SIZE)}
+                        >
+                          Cargar más recomendaciones
+                        </Button>
+                      )}
+                    </div>
+                  </>
                 ) : (
                   <div className="glass grid place-items-center rounded-[20px] py-16 text-center">
                     <p className="text-ink-2">
@@ -201,7 +228,7 @@ export default function AiSearchOverlay() {
               </div>
             )}
           </div>
-          </div>
+          </ReactLenis>
         </motion.div>
       )}
     </AnimatePresence>

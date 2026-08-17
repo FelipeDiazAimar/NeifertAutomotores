@@ -62,12 +62,14 @@ const DEFAULT_CONTENT = {
       'Descubrí nuestra colección exclusiva de vehículos que esperan por un nuevo capítulo con vos al volante.',
     ctaImage:
       'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1400&q=80',
+    ctaImageMobile: '',
   },
   heroSlides: [
     {
       id: 'hs1',
       image:
         'https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1600&q=80',
+      imageMobile: '',
       title: 'Explorá nuestra colección',
       subtitle: 'Vehículos de alta gama, peritados y listos para entrega.',
     },
@@ -75,6 +77,7 @@ const DEFAULT_CONTENT = {
       id: 'hs2',
       image:
         'https://images.unsplash.com/photo-1552519507-da3b142c6e3d?auto=format&fit=crop&w=1600&q=80',
+      imageMobile: '',
       title: 'Excelencia en cada detalle',
       subtitle: 'Encontrá el auto que soñás con la transparencia que merecés.',
     },
@@ -82,6 +85,7 @@ const DEFAULT_CONTENT = {
       id: 'hs3',
       image:
         'https://images.unsplash.com/photo-1494976388531-d1058494cdd8?auto=format&fit=crop&w=1600&q=80',
+      imageMobile: '',
       title: 'Tu próximo destino te espera',
       subtitle: 'Stock disponible para ver en el salón o coordinar tu cita.',
     },
@@ -208,6 +212,7 @@ export const useSiteStore = create(
       setHome: (partial) => {
         const current = get().home
         if ('ctaImage' in partial && partial.ctaImage !== current.ctaImage) cleanupMedia(current.ctaImage)
+        if ('ctaImageMobile' in partial && partial.ctaImageMobile !== current.ctaImageMobile) cleanupMedia(current.ctaImageMobile)
         set((s) => ({ home: { ...s.home, ...partial } }))
       },
       setFooter: (partial) => set((s) => ({ footer: { ...s.footer, ...partial } })),
@@ -242,18 +247,24 @@ export const useSiteStore = create(
       // Carrusel del hero (imagen + texto propio por slide)
       addHeroSlide: (slide) =>
         set((s) => ({
-          heroSlides: [...s.heroSlides, { id: uid(), title: '', subtitle: '', image: '', ...slide }],
+          heroSlides: [...s.heroSlides, { id: uid(), title: '', subtitle: '', image: '', imageMobile: '', ...slide }],
         })),
       updateHeroSlide: (id, partial) => {
         const current = get().heroSlides.find((it) => it.id === id)
-        if (current && 'image' in partial && partial.image !== current.image) cleanupMedia(current.image)
+        if (current) {
+          if ('image' in partial && partial.image !== current.image) cleanupMedia(current.image)
+          if ('imageMobile' in partial && partial.imageMobile !== current.imageMobile) cleanupMedia(current.imageMobile)
+        }
         set((s) => ({
           heroSlides: s.heroSlides.map((it) => (it.id === id ? { ...it, ...partial } : it)),
         }))
       },
       removeHeroSlide: (id) => {
         const current = get().heroSlides.find((it) => it.id === id)
-        if (current) cleanupMedia(current.image)
+        if (current) {
+          cleanupMedia(current.image)
+          cleanupMedia(current.imageMobile)
+        }
         set((s) => ({ heroSlides: s.heroSlides.filter((it) => it.id !== id) }))
       },
       reorderHeroSlide: (id, dir) =>

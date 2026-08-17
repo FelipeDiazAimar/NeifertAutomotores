@@ -4,7 +4,7 @@ import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
 import ContentSaveBar from '@/components/admin/ContentSaveBar'
-import { TextField, Section, inputCls } from '@/components/admin/ContentFields'
+import { TextField, Section, inputCls, ImageVariantPicker } from '@/components/admin/ContentFields'
 import { useSiteStore } from '@/store/useSiteStore'
 import { HOME_ASPECT_RATIOS, HOME_MAX_IMAGE_MB, HOME_MAX_VIDEO_MB } from '@/lib/mediaFormats'
 import { cn } from '@/lib/cn'
@@ -64,6 +64,83 @@ function SimpleListEditor({ title, desc, placeholder, items, onAdd, onRemove }) 
         {items.length === 0 && <p className="text-sm text-ink-3">Vacío. Agregá uno arriba.</p>}
       </div>
     </Section>
+  )
+}
+
+function HeroSlideEditor({ slide, index, count, onUpdate, onRemove, onReorder }) {
+  const [variant, setVariant] = useState('desktop')
+
+  return (
+    <div className="rounded-xl border border-line bg-surface-solid p-4 shadow-xs transition-shadow hover:shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neifert">
+          <ImageIcon size={14} />
+          Imagen {index + 1}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onReorder(-1)}
+            disabled={index === 0}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover antes"
+          >
+            <ArrowUp size={15} />
+          </button>
+          <button
+            onClick={() => onReorder(1)}
+            disabled={index === count - 1}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover después"
+          >
+            <ArrowDown size={15} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
+            aria-label="Borrar"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField label="Título" value={slide.title} onChange={(v) => onUpdate({ title: v })} />
+        <TextField label="Subtítulo" value={slide.subtitle} onChange={(v) => onUpdate({ subtitle: v })} />
+        <div className="sm:col-span-2">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <p className="text-xs text-ink-3">
+              {variant === 'desktop' ? 'Versión para pantallas de escritorio.' : 'Versión para celulares. Si no se carga, se usa la de escritorio.'}
+            </p>
+            <ImageVariantPicker
+              variant={variant}
+              onChange={setVariant}
+              hasDesktop={Boolean(slide.image)}
+              hasMobile={Boolean(slide.imageMobile)}
+            />
+          </div>
+          {variant === 'desktop' ? (
+            <ImageUploader
+              key="desktop"
+              multiple={false}
+              aspectRatio={HOME_ASPECT_RATIOS.carousel}
+              maxSizeMB={HOME_MAX_IMAGE_MB}
+              value={slide.image ? [slide.image] : []}
+              onChange={(urls) => onUpdate({ image: urls[0] || '' })}
+            />
+          ) : (
+            <ImageUploader
+              key="mobile"
+              multiple={false}
+              aspectRatio={HOME_ASPECT_RATIOS.carousel}
+              maxSizeMB={HOME_MAX_IMAGE_MB}
+              value={slide.imageMobile ? [slide.imageMobile] : []}
+              onChange={(urls) => onUpdate({ imageMobile: urls[0] || '' })}
+            />
+          )}
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -160,6 +237,7 @@ function HomeTab() {
   const updateHeroSlide = useSiteStore((s) => s.updateHeroSlide)
   const removeHeroSlide = useSiteStore((s) => s.removeHeroSlide)
   const reorderHeroSlide = useSiteStore((s) => s.reorderHeroSlide)
+  const [ctaVariant, setCtaVariant] = useState('desktop')
 
   return (
     <div className="space-y-6">
@@ -174,53 +252,15 @@ function HomeTab() {
       >
         <div className="space-y-3">
           {heroSlides.map((slide, i) => (
-            <div key={slide.id} className="rounded-xl border border-line bg-surface-solid p-4 shadow-xs transition-shadow hover:shadow-sm">
-              <div className="mb-3 flex items-center justify-between">
-                <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neifert">
-                  <ImageIcon size={14} />
-                  Imagen {i + 1}
-                </span>
-                <div className="flex items-center gap-1">
-                  <button
-                    onClick={() => reorderHeroSlide(slide.id, -1)}
-                    disabled={i === 0}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
-                    aria-label="Mover antes"
-                  >
-                    <ArrowUp size={15} />
-                  </button>
-                  <button
-                    onClick={() => reorderHeroSlide(slide.id, 1)}
-                    disabled={i === heroSlides.length - 1}
-                    className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
-                    aria-label="Mover después"
-                  >
-                    <ArrowDown size={15} />
-                  </button>
-                  <button
-                    onClick={() => removeHeroSlide(slide.id)}
-                    className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
-                    aria-label="Borrar"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid gap-4 sm:grid-cols-2">
-                <TextField label="Título" value={slide.title} onChange={(v) => updateHeroSlide(slide.id, { title: v })} />
-                <TextField label="Subtítulo" value={slide.subtitle} onChange={(v) => updateHeroSlide(slide.id, { subtitle: v })} />
-                <div className="sm:col-span-2">
-                  <ImageUploader
-                    multiple={false}
-                    aspectRatio={HOME_ASPECT_RATIOS.carousel}
-                    maxSizeMB={HOME_MAX_IMAGE_MB}
-                    value={slide.image ? [slide.image] : []}
-                    onChange={(urls) => updateHeroSlide(slide.id, { image: urls[0] || '' })}
-                  />
-                </div>
-              </div>
-            </div>
+            <HeroSlideEditor
+              key={slide.id}
+              slide={slide}
+              index={i}
+              count={heroSlides.length}
+              onUpdate={(partial) => updateHeroSlide(slide.id, partial)}
+              onRemove={() => removeHeroSlide(slide.id)}
+              onReorder={(dir) => reorderHeroSlide(slide.id, dir)}
+            />
           ))}
           {heroSlides.length === 0 && (
             <div className="flex min-h-[100px] items-center justify-center rounded-xl border-2 border-dashed border-line text-sm text-ink-3">
@@ -248,13 +288,36 @@ function HomeTab() {
           <TextField label="Título — final" value={home.ctaTitleB} onChange={(v) => setHome({ ctaTitleB: v })} />
           <TextField label="Subtítulo" value={home.ctaSubtitle} onChange={(v) => setHome({ ctaSubtitle: v })} textarea className="sm:col-span-2" />
           <div className="sm:col-span-2">
-            <ImageUploader
-              multiple={false}
-              aspectRatio={HOME_ASPECT_RATIOS.cta}
-              maxSizeMB={HOME_MAX_IMAGE_MB}
-              value={home.ctaImage ? [home.ctaImage] : []}
-              onChange={(urls) => setHome({ ctaImage: urls[0] || '' })}
-            />
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <p className="text-xs text-ink-3">
+                {ctaVariant === 'desktop' ? 'Versión para pantallas de escritorio.' : 'Versión para celulares. Si no se carga, se usa la de escritorio.'}
+              </p>
+              <ImageVariantPicker
+                variant={ctaVariant}
+                onChange={setCtaVariant}
+                hasDesktop={Boolean(home.ctaImage)}
+                hasMobile={Boolean(home.ctaImageMobile)}
+              />
+            </div>
+            {ctaVariant === 'desktop' ? (
+              <ImageUploader
+                key="desktop"
+                multiple={false}
+                aspectRatio={HOME_ASPECT_RATIOS.cta}
+                maxSizeMB={HOME_MAX_IMAGE_MB}
+                value={home.ctaImage ? [home.ctaImage] : []}
+                onChange={(urls) => setHome({ ctaImage: urls[0] || '' })}
+              />
+            ) : (
+              <ImageUploader
+                key="mobile"
+                multiple={false}
+                aspectRatio={HOME_ASPECT_RATIOS.cta}
+                maxSizeMB={HOME_MAX_IMAGE_MB}
+                value={home.ctaImageMobile ? [home.ctaImageMobile] : []}
+                onChange={(urls) => setHome({ ctaImageMobile: urls[0] || '' })}
+              />
+            )}
           </div>
         </div>
       </Section>

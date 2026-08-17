@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import Spinner from '@/components/common/Spinner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { useSiteStore } from '@/store/useSiteStore'
@@ -21,6 +22,37 @@ const slideVariants = {
   enter: (dir) => ({ x: dir > 0 ? '100%' : '-100%' }),
   center: { x: 0, transition: { duration: 0.65, ease: EASE } },
   exit: (dir) => ({ x: dir > 0 ? '-100%' : '100%', transition: { duration: 0.65, ease: EASE } }),
+}
+
+// Muestra la imagen del slide sin dejar ver un placeholder mientras carga:
+// arranca oculta detrás de un fondo animado y recién aparece con onLoad.
+function HeroSlideImage({ desktopSrc, mobileSrc }) {
+  const [loaded, setLoaded] = useState(false)
+
+  if (!desktopSrc) return null
+
+  return (
+    <>
+      {!loaded && (
+        <div className="absolute inset-0 grid place-items-center bg-ink-2/40">
+          <Spinner className="border-white/30 border-t-white" />
+        </div>
+      )}
+      <picture>
+        {mobileSrc && <source media="(max-width: 767px)" srcSet={mobileSrc} />}
+        <img
+          src={desktopSrc}
+          alt=""
+          draggable={false}
+          onLoad={() => setLoaded(true)}
+          className={cn(
+            'pointer-events-none h-full w-full select-none object-cover transition-opacity duration-500',
+            loaded ? 'opacity-100' : 'opacity-0'
+          )}
+        />
+      </picture>
+    </>
+  )
 }
 
 const textVariants = {
@@ -96,14 +128,7 @@ export default function HeroCarousel() {
           onDragEnd={onDragEnd}
           className="absolute inset-0 cursor-grab active:cursor-grabbing"
         >
-          {slide.image && (
-            <img
-              src={slide.image}
-              alt=""
-              draggable={false}
-              className="pointer-events-none h-full w-full select-none object-cover"
-            />
-          )}
+          <HeroSlideImage desktopSrc={slide.image} mobileSrc={slide.imageMobile} />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/45" />
         </motion.div>
       </AnimatePresence>
