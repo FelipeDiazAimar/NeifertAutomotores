@@ -8,6 +8,7 @@ export const CONTENT_KEYS = [
   'footer',
   'instagram',
   'stories',
+  'sobreNosotros',
   'categories',
   'heroSlides',
   'fuelTypes',

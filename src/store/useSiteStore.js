@@ -91,6 +91,10 @@ const DEFAULT_CONTENT = {
     },
   ],
   stories: MOCK_STORIES.map((s) => ({ ...s })),
+  sobreNosotros: {
+    heading: 'Nuestra historia, en primera persona',
+    items: [],
+  },
   instagram: {
     headline: 'Seguinos en Instagram',
     subtitle: 'Las últimas entregas, novedades y detrás de escena del salón.',
@@ -276,13 +280,60 @@ export const useSiteStore = create(
           ;[next[i], next[j]] = [next[j], next[i]]
           return { heroSlides: next }
         }),
+
+      // Sección "Sobre Nosotros" (videos verticales con sonido + título/texto)
+      setSobreNosotrosHeading: (heading) =>
+        set((s) => ({ sobreNosotros: { ...s.sobreNosotros, heading } })),
+      addSobreNosotrosItem: (item) =>
+        set((s) => ({
+          sobreNosotros: {
+            ...s.sobreNosotros,
+            items: [
+              ...s.sobreNosotros.items,
+              { id: uid(), title: '', text: '', video_url: '', ...item },
+            ],
+          },
+        })),
+      updateSobreNosotrosItem: (id, partial) => {
+        const current = get().sobreNosotros.items.find((it) => it.id === id)
+        if (current && 'video_url' in partial && partial.video_url !== current.video_url) {
+          cleanupMedia(current.video_url)
+        }
+        set((s) => ({
+          sobreNosotros: {
+            ...s.sobreNosotros,
+            items: s.sobreNosotros.items.map((it) => (it.id === id ? { ...it, ...partial } : it)),
+          },
+        }))
+      },
+      removeSobreNosotrosItem: (id) => {
+        const current = get().sobreNosotros.items.find((it) => it.id === id)
+        if (current) cleanupMedia(current.video_url)
+        set((s) => ({
+          sobreNosotros: { ...s.sobreNosotros, items: s.sobreNosotros.items.filter((it) => it.id !== id) },
+        }))
+      },
+      reorderSobreNosotrosItem: (id, dir) =>
+        set((s) => {
+          const items = s.sobreNosotros.items
+          const i = items.findIndex((it) => it.id === id)
+          const j = i + dir
+          if (i === -1 || j < 0 || j >= items.length) return {}
+          const next = [...items]
+          ;[next[i], next[j]] = [next[j], next[i]]
+          return { sobreNosotros: { ...s.sobreNosotros, items: next } }
+        }),
     }),
     {
       name: 'nf-site-content',
-      version: 2,
+      version: 3,
       migrate: (persistedState) => ({
         ...persistedState,
         socials: { ...persistedState.socials, whatsappPhone: '543564562413' },
+        // v2 → v3: sobreNosotros pasó de array de bloques a { heading, items }.
+        sobreNosotros: Array.isArray(persistedState.sobreNosotros)
+          ? { heading: 'Nuestra historia, en primera persona', items: persistedState.sobreNosotros }
+          : persistedState.sobreNosotros || { heading: 'Nuestra historia, en primera persona', items: [] },
       }),
     }
   )
@@ -305,6 +356,11 @@ export async function hydrateSiteContent() {
   try {
     const content = await fetchSiteContent()
     if (!content) return
+    // sobreNosotros pasó de array de bloques a { heading, items } — normaliza
+    // filas viejas que hayan quedado guardadas en Supabase con el formato anterior.
+    if (Array.isArray(content.sobreNosotros)) {
+      content.sobreNosotros = { heading: 'Nuestra historia, en primera persona', items: content.sobreNosotros }
+    }
     const merged = {}
     for (const k of CONTENT_KEYS) if (content[k] != null) merged[k] = content[k]
     if (Object.keys(merged).length) useSiteStore.setState(merged)

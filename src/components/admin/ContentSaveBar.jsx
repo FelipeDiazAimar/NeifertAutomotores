@@ -21,6 +21,7 @@ function collectMediaUrls(state) {
   ;(state.heroSlides || []).forEach((s) => add(s.image))
   add(state.home?.ctaImage)
   ;(state.stories || []).forEach((s) => { add(s.video_url); add(s.poster_url) })
+  ;(state.sobreNosotros?.items || []).forEach((s) => add(s.video_url))
   return urls
 }
 

@@ -232,6 +232,11 @@ export const HOME_MAX_VIDEO_MB = 50
 
 export const HOME_ASPECT_RATIOS = {
   carousel: { w: 21, h: 9, label: '21:9' },
+  // El carrusel del hero ocupa toda la pantalla en mobile (86dvh + header):
+  // en teléfonos reales eso da un ancho/alto de ~0.47–0.58, mucho más
+  // vertical que el 4:5 de las tarjetas de Historias. 9:16 es el que mejor
+  // aproxima ese rango sin recortar de más en ningún extremo.
+  heroMobile: { w: 9, h: 16, label: '9:16' },
   story: { w: 4, h: 5, label: '4:5' },
   cta: { w: 21, h: 9, label: '21:9' },
 }

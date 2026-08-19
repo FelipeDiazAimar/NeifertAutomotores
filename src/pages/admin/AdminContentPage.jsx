@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, Layout, Settings, Footprints, Share2 } from 'lucide-react'
+import { Plus, Trash2, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, Layout, Settings, Footprints, Share2, Info } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
@@ -11,6 +11,7 @@ import { cn } from '@/lib/cn'
 
 const TABS = [
   { id: 'home', label: 'Home', icon: Layout },
+  { id: 'sobre-nosotros', label: 'Sobre Nosotros', icon: Info },
   { id: 'categorias', label: 'Catálogo', icon: Settings },
   { id: 'footer', label: 'Footer', icon: Footprints },
   { id: 'redes', label: 'Redes & Contacto', icon: Share2 },
@@ -132,7 +133,7 @@ function HeroSlideEditor({ slide, index, count, onUpdate, onRemove, onReorder })
             <ImageUploader
               key="mobile"
               multiple={false}
-              aspectRatio={HOME_ASPECT_RATIOS.story}
+              aspectRatio={HOME_ASPECT_RATIOS.heroMobile}
               maxSizeMB={HOME_MAX_IMAGE_MB}
               value={slide.imageMobile ? [slide.imageMobile] : []}
               onChange={(urls) => onUpdate({ imageMobile: urls[0] || '' })}
@@ -447,6 +448,106 @@ function HomeTab() {
   )
 }
 
+function SobreNosotrosItemEditor({ item, index, count, onUpdate, onRemove, onReorder }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-solid p-4 shadow-xs transition-shadow hover:shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neifert">
+          <Video size={14} />
+          Bloque {index + 1}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onReorder(-1)}
+            disabled={index === 0}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover antes"
+          >
+            <ArrowUp size={15} />
+          </button>
+          <button
+            onClick={() => onReorder(1)}
+            disabled={index === count - 1}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover después"
+          >
+            <ArrowDown size={15} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
+            aria-label="Borrar"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField label="Título" value={item.title} onChange={(v) => onUpdate({ title: v })} className="sm:col-span-2" />
+        <TextField label="Texto" value={item.text} onChange={(v) => onUpdate({ text: v })} textarea className="sm:col-span-2" />
+        <div className="sm:col-span-2">
+          <p className="mb-2 text-xs text-ink-3">Video vertical con sonido.</p>
+          <VideoUploader
+            value={item.video_url}
+            onChange={(url) => onUpdate({ video_url: url })}
+            maxSizeMB={HOME_MAX_VIDEO_MB}
+            aspectRatio={HOME_ASPECT_RATIOS.heroMobile}
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function SobreNosotrosTab() {
+  const sobreNosotros = useSiteStore((s) => s.sobreNosotros)
+  const setHeading = useSiteStore((s) => s.setSobreNosotrosHeading)
+  const addItem = useSiteStore((s) => s.addSobreNosotrosItem)
+  const updateItem = useSiteStore((s) => s.updateSobreNosotrosItem)
+  const removeItem = useSiteStore((s) => s.removeSobreNosotrosItem)
+  const reorderItem = useSiteStore((s) => s.reorderSobreNosotrosItem)
+  const items = Array.isArray(sobreNosotros) ? sobreNosotros : sobreNosotros?.items || []
+  const heading = Array.isArray(sobreNosotros) ? '' : sobreNosotros?.heading || ''
+
+  return (
+    <div className="space-y-6">
+      <Section title="Encabezado" desc="Título principal de la página /sobre-nosotros.">
+        <TextField label="Título" value={heading} onChange={setHeading} />
+      </Section>
+
+      <Section
+        title="Bloques"
+        desc="Video vertical + título/texto que se muestran en zig-zag en /sobre-nosotros."
+        action={
+          <Button size="sm" variant="glass" icon={Plus} onClick={() => addItem({})}>
+            Agregar bloque
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          {items.map((item, i) => (
+            <SobreNosotrosItemEditor
+              key={item.id}
+              item={item}
+              index={i}
+              count={items.length}
+              onUpdate={(partial) => updateItem(item.id, partial)}
+              onRemove={() => removeItem(item.id)}
+              onReorder={(dir) => reorderItem(item.id, dir)}
+            />
+          ))}
+          {items.length === 0 && (
+            <div className="flex min-h-[100px] items-center justify-center rounded-xl border-2 border-dashed border-line text-sm text-ink-3">
+              No hay bloques. Agregá uno arriba.
+            </div>
+          )}
+        </div>
+      </Section>
+    </div>
+  )
+}
+
 function FooterTab() {
   const footer = useSiteStore((s) => s.footer)
   const setFooter = useSiteStore((s) => s.setFooter)
@@ -562,6 +663,7 @@ export default function AdminContentPage() {
       </div>
 
       {tab === 'home' && <HomeTab />}
+      {tab === 'sobre-nosotros' && <SobreNosotrosTab />}
       {tab === 'categorias' && <CatalogTab />}
       {tab === 'footer' && <FooterTab />}
       {tab === 'redes' && <RedesTab />}

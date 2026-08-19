@@ -9,6 +9,7 @@ const HomePage = lazy(() => import('@/pages/public/HomePage'))
 const CatalogPage = lazy(() => import('@/pages/public/CatalogPage'))
 const VehicleDetailPage = lazy(() => import('@/pages/public/VehicleDetailPage'))
 const InstagramPage = lazy(() => import('@/pages/public/InstagramPage'))
+const SobreNosotrosPage = lazy(() => import('@/pages/public/SobreNosotrosPage'))
 const AppointmentPage = lazy(() => import('@/pages/public/AppointmentPage'))
 const LegalPage = lazy(() => import('@/pages/public/LegalPage'))
 const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
@@ -31,6 +32,7 @@ export default function AppRouter() {
         <Route path="/catalogo" element={<CatalogPage />} />
         <Route path="/catalogo/:id" element={<VehicleDetailPage />} />
         <Route path="/instagram" element={<InstagramPage />} />
+        <Route path="/sobre-nosotros" element={<SobreNosotrosPage />} />
         <Route path="/cita" element={<AppointmentPage />} />
         <Route path="/terminos" element={<LegalPage type="terms" />} />
         <Route path="/privacidad" element={<LegalPage type="privacy" />} />
