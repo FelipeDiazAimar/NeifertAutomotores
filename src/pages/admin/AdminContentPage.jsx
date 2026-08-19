@@ -132,7 +132,7 @@ function HeroSlideEditor({ slide, index, count, onUpdate, onRemove, onReorder })
             <ImageUploader
               key="mobile"
               multiple={false}
-              aspectRatio={HOME_ASPECT_RATIOS.carousel}
+              aspectRatio={HOME_ASPECT_RATIOS.story}
               maxSizeMB={HOME_MAX_IMAGE_MB}
               value={slide.imageMobile ? [slide.imageMobile] : []}
               onChange={(urls) => onUpdate({ imageMobile: urls[0] || '' })}
@@ -312,7 +312,7 @@ function HomeTab() {
               <ImageUploader
                 key="mobile"
                 multiple={false}
-                aspectRatio={HOME_ASPECT_RATIOS.cta}
+                aspectRatio={HOME_ASPECT_RATIOS.story}
                 maxSizeMB={HOME_MAX_IMAGE_MB}
                 value={home.ctaImageMobile ? [home.ctaImageMobile] : []}
                 onChange={(urls) => setHome({ ctaImageMobile: urls[0] || '' })}
