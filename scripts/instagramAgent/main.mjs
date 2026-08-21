@@ -19,7 +19,7 @@
 
 import { fetchInstagramPage } from '../../src/server/instagramScraper.js'
 
-const API_BASE = 'https://neifert.vercel.app'
+const API_BASE = 'https://neifertautomotores.com'
 const SUPABASE_URL = 'https://ghbikkvdtxhzkyyfkisv.supabase.co'
 const SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYmlra3ZkdHhoemt5eWZraXN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNzE0ODUsImV4cCI6MjA5OTY0NzQ4NX0.RFpRG6ZtLjnDkPE5t3LR3LO8zOvLSNvTTHayI7Nv-BA'

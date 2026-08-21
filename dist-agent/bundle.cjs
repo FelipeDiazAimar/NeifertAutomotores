@@ -161,7 +161,7 @@ async function fetchInstagramPage(afterCursor = null) {
 }
 
 // scripts/instagramAgent/main.mjs
-var API_BASE = "https://neifert.vercel.app";
+var API_BASE = "https://neifertautomotores.com";
 var SUPABASE_URL = "https://ghbikkvdtxhzkyyfkisv.supabase.co";
 var SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdoYmlra3ZkdHhoemt5eWZraXN2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODQwNzE0ODUsImV4cCI6MjA5OTY0NzQ4NX0.RFpRG6ZtLjnDkPE5t3LR3LO8zOvLSNvTTHayI7Nv-BA";
 var AGENT_TOKEN = "a0f8359f5838fc4fbdc14cf620773b2e13e17e1cd457f08d";
