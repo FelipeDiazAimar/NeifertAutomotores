@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Gauge, Fuel, Settings2, Share2 } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Gauge, Fuel, Settings2, Share2, Link2 } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
@@ -157,42 +157,43 @@ function Spec({ icon: Icon, children }) {
   )
 }
 
-export default function VehicleCard({ vehicle, view = 'grid' }) {
+/** Botón único de compartir que despliega un popover vertical (hacia
+ *  arriba) con WhatsApp y copiar enlace. Se cierra al tocar afuera. */
+function ShareMenu({ vehicle, className }) {
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const waHref = vehicleWaLink(phone, vehicle)
-  const [isCardHovered, setIsCardHovered] = useState(false)
+  const [open, setOpen] = useState(false)
+  const wrapRef = useRef(null)
+  const leaveTimer = useRef(null)
 
-  const specs = (
-    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-      <Spec icon={Gauge}>{formatKm(vehicle.km)}</Spec>
-      <Spec icon={Fuel}>{vehicle.fuel_type}</Spec>
-      {vehicle.transmission && <Spec icon={Settings2}>{vehicle.transmission}</Spec>}
-    </div>
-  )
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => {
+      if (wrapRef.current && !wrapRef.current.contains(e.target)) setOpen(false)
+    }
+    document.addEventListener('pointerdown', onDown)
+    return () => {
+      document.removeEventListener('pointerdown', onDown)
+      if (leaveTimer.current) clearTimeout(leaveTimer.current)
+    }
+  }, [open])
 
-  const waButton = (
-    <motion.a
-      href={waHref}
-      target="_blank"
-      rel="noreferrer"
-      onClick={(e) => {
-        e.stopPropagation()
-        trackEvent(vehicle.id, 'consulta', detectSource())
-      }}
-      whileHover={{ scale: 1.1, rotate: -6 }}
-      whileTap={{ scale: 0.95 }}
-      aria-label="Consultar por WhatsApp"
-      className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-whatsapp text-white sm:h-11 sm:w-11"
-      style={{ boxShadow: '0 8px 18px -6px rgba(37,211,102,0.6)' }}
-    >
-      <WhatsAppIcon size={16} className="sm:hidden" />
-      <WhatsAppIcon size={20} className="hidden shrink-0 sm:block" />
-    </motion.a>
-  )
+  // Cierre diferido: al salir el puntero espera 300 ms; si vuelve a entrar
+  // antes, se cancela. Da margen para mover el puntero hacia el popover.
+  const onLeave = () => {
+    if (leaveTimer.current) clearTimeout(leaveTimer.current)
+    leaveTimer.current = setTimeout(() => setOpen(false), 300)
+  }
+  const onEnter = () => {
+    if (leaveTimer.current) {
+      clearTimeout(leaveTimer.current)
+      leaveTimer.current = null
+    }
+  }
 
-  const onShareClick = (e) => {
-    e.preventDefault()
+  const copyLink = (e) => {
     e.stopPropagation()
+    setOpen(false)
     trackShareClick({ kind: 'vehicle', id: vehicle.id })
     trackEvent(vehicle.id, 'compartir', detectSource())
     shareOrCopy({
@@ -202,57 +203,78 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
     })
   }
 
-  // Desktop (sm+, sin cambios): botón de compartir junto al de WhatsApp, en
-  // la fila del precio. En mobile no se renderiza acá — se muestra flotando
-  // sobre la foto (shareButtonOverlay) para dejar la fila del precio solo
-  // con el precio + WhatsApp.
-  const shareButton = (
-    <motion.button
-      type="button"
-      onClick={onShareClick}
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-      aria-label="Compartir"
-      className="hidden shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:grid sm:h-11 sm:w-11"
+  return (
+    <div
+      ref={wrapRef}
+      onMouseLeave={onLeave}
+      onMouseEnter={onEnter}
+      className={cn('relative shrink-0', className)}
     >
-      <Share2 size={18} />
-    </motion.button>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 6, scale: 0.9 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 6, scale: 0.9 }}
+            transition={{ duration: 0.18, ease: EASE }}
+            className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-1.5"
+          >
+            <motion.a
+              href={waHref}
+              target="_blank"
+              rel="noreferrer"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen(false)
+                trackEvent(vehicle.id, 'consulta', detectSource())
+              }}
+              whileTap={{ scale: 0.9 }}
+              aria-label="Consultar por WhatsApp"
+              className="grid h-9 w-9 place-items-center rounded-full bg-whatsapp text-white sm:h-11 sm:w-11"
+              style={{ boxShadow: '0 8px 18px -6px rgba(37,211,102,0.6)' }}
+            >
+              <WhatsAppIcon size={16} className="sm:hidden" />
+              <WhatsAppIcon size={20} className="hidden sm:block" />
+            </motion.a>
+            <motion.button
+              type="button"
+              onClick={copyLink}
+              whileTap={{ scale: 0.9 }}
+              aria-label="Copiar enlace"
+              className="grid h-9 w-9 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
+            >
+              <Link2 size={15} className="sm:hidden" />
+              <Link2 size={18} className="hidden sm:block" />
+            </motion.button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+      <motion.button
+        type="button"
+        onClick={(e) => {
+          e.stopPropagation()
+          setOpen((o) => !o)
+        }}
+        whileHover={{ scale: 1.1 }}
+        whileTap={{ scale: 0.95 }}
+        aria-label="Compartir"
+        className="grid h-9 w-9 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
+      >
+        <Share2 size={15} className="sm:hidden" />
+        <Share2 size={18} className="hidden sm:block" />
+      </motion.button>
+    </div>
   )
+}
 
-  // Solo mobile: badge flotante sobre la esquina superior derecha de la foto
-  // (vista grid — la cuadrícula de 2 columnas queda muy justa de ancho).
-  const shareButtonOverlay = (
-    <motion.button
-      type="button"
-      onClick={onShareClick}
-      whileTap={{ scale: 0.9 }}
-      aria-label="Compartir"
-      className="grid h-7 w-7 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:hidden"
-    >
-      <Share2 size={13} />
-    </motion.button>
-  )
+export default function VehicleCard({ vehicle, view = 'grid' }) {
+  const [isCardHovered, setIsCardHovered] = useState(false)
 
-  // Vista lista: la card ocupa el ancho completo incluso en mobile, así que
-  // compartir siempre entra al lado de WhatsApp (no hace falta esconderlo).
-  const shareButtonList = (
-    <motion.button
-      type="button"
-      onClick={onShareClick}
-      whileHover={{ scale: 1.1 }}
-      whileTap={{ scale: 0.95 }}
-      aria-label="Compartir"
-      className="grid h-9 w-9 shrink-0 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
-    >
-      <Share2 size={15} className="sm:hidden" />
-      <Share2 size={18} className="hidden sm:block" />
-    </motion.button>
-  )
-
-  const actions = (
-    <div className="flex items-center gap-1.5 sm:gap-2">
-      {shareButton}
-      {waButton}
+  const specs = (
+    <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+      <Spec icon={Gauge}>{formatKm(vehicle.km)}</Spec>
+      <Spec icon={Fuel}>{vehicle.fuel_type}</Spec>
+      {vehicle.transmission && <Spec icon={Settings2}>{vehicle.transmission}</Spec>}
     </div>
   )
 
@@ -298,8 +320,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
             <PriceAmount value={formatVehiclePrice(vehicle)} />
           </p>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            {shareButtonList}
-            {waButton}
+            <ShareMenu vehicle={vehicle} />
           </div>
         </div>
       </motion.div>
@@ -317,11 +338,10 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       <Link to={`/catalogo/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          {/* Mobile: año abajo a la izquierda, compartir abajo a la derecha. */}
+          {/* Mobile: año abajo a la izquierda. */}
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:hidden">
             {vehicle.year}
           </span>
-          <div className="absolute bottom-2 right-2 z-10 sm:hidden">{shareButtonOverlay}</div>
           {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}
           <div className="absolute right-3 top-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">
             <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
@@ -362,7 +382,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
               <PriceAmount value={formatVehiclePrice(vehicle)} />
             </p>
           </div>
-          {actions}
+          <ShareMenu vehicle={vehicle} />
         </div>
       </div>
     </motion.div>
