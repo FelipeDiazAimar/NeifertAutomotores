@@ -19,6 +19,7 @@ import Pagination from '@/components/common/Pagination'
 import VehicleForm from '@/components/admin/VehicleForm'
 import SortDropdown from '@/components/catalog/SortDropdown'
 import FilterPanel from '@/components/catalog/FilterPanel'
+import PriceAmount from '@/components/catalog/PriceAmount'
 import { useAllVehicles, useVehicleMutations } from '@/hooks/useVehicles'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 import { vehicleOfferMessage } from '@/lib/whatsapp'
@@ -327,7 +328,9 @@ export default function AdminCatalogPage() {
                     {v.model}
                     {v.version && <span className="text-ink-3"> {v.version}</span>}
                   </p>
-                  <p className="text-sm font-extrabold text-ink">{formatVehiclePrice(v)}</p>
+                  <p className="text-sm font-extrabold text-ink">
+                    <PriceAmount value={formatVehiclePrice(v)} stack="sm" />
+                  </p>
                   <p className="text-xs text-ink-3">
                     {v.year} · {formatKm(v.km)}
                   </p>

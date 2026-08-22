@@ -13,6 +13,7 @@ import { useSiteStore } from '@/store/useSiteStore'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
+import PriceAmount from '@/components/catalog/PriceAmount'
 
 function ImgPlaceholder({ brand }) {
   return (
@@ -144,23 +145,6 @@ function CardImage({ vehicle, rounded, isHovered }) {
         </div>
       )}
     </div>
-  )
-}
-
-/** Precio con el prefijo de moneda ("AR$"/"U$S") más chico y en tono más
- *  claro en mobile; en desktop queda igual que el resto del precio.
- *  En mobile el prefijo va en línea propia: la separación entre el prefijo
- *  y el monto se ajusta con el `leading-[…]` del span (ver abajo). */
-function PriceAmount({ value }) {
-  const idx = value.indexOf(' ')
-  if (idx === -1) return value
-  return (
-    <>
-      <span className="block text-[0.72em] leading-[0.9] text-ink-2 sm:inline sm:text-[1em] sm:leading-none sm:text-ink">
-        {value.slice(0, idx)}
-      </span>
-      {value.slice(idx + 1)}
-    </>
   )
 }
 
