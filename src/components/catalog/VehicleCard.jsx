@@ -24,21 +24,19 @@ function ImgPlaceholder({ brand }) {
   )
 }
 
-/** Imagen de la card. En desktop, el carrusel solo avanza automáticamente
+/** Imagen de la card. En desktop, el carrusel avanza automáticamente solo
  *  mientras el mouse está sobre esa card puntual (y vuelve a la primera al
- *  salir). En mobile, sigue avanzando sola cuando la card está en vista y
- *  se puede navegar con swipe. */
+ *  salir). En mobile no hay autoplay: se navega manual con las flechas o
+ *  swipe. */
 function CardImage({ vehicle, rounded, isHovered }) {
   const all = (vehicle.images?.length ? vehicle.images : [vehicle.main_image_url]).filter(
     Boolean
   )
   const isDesktop = useIsDesktop()
-  const cardRef = useRef(null)
   const touchRef = useRef(null)
   const [idx, setIdx] = useState(0)
   const [failed, setFailed] = useState(false)
   const [paused, setPaused] = useState(false)
-  const [inView, setInView] = useState(true)
   // Fotos 4:3 (cargadas así desde el admin) no llenan un marco cuadrado sin
   // recortar contenido: se muestran con letterbox (barras negras) en vez de
   // recortarlas, así se ve la foto completa igual que en las cuadradas 1:1.
@@ -49,26 +47,12 @@ function CardImage({ vehicle, rounded, isHovered }) {
     if (!isHovered && !paused) setIdx(0)
   }, [isHovered, paused])
 
-  // Solo la card centrada/principalmente visible reproduce el carrusel (mobile)
+  // Autoplay solo en desktop y con el mouse encima de la card.
   useEffect(() => {
-    const el = cardRef.current
-    if (!el || all.length < 2) return
-    const observer = new IntersectionObserver(
-      ([entry]) => setInView(entry.isIntersecting),
-      { threshold: 0.5 }
-    )
-    observer.observe(el)
-    return () => observer.disconnect()
-  }, [all.length])
-
-  // Autoplay: en desktop, solo con hover sobre la card; en mobile, en vista.
-  useEffect(() => {
-    if (paused || all.length < 2) return undefined
-    const shouldPlay = isDesktop ? isHovered : inView
-    if (!shouldPlay) return undefined
+    if (paused || all.length < 2 || !isDesktop || !isHovered) return undefined
     const timer = setInterval(() => setIdx((i) => (i + 1) % all.length), 2500)
     return () => clearInterval(timer)
-  }, [all.length, paused, inView, isDesktop, isHovered])
+  }, [all.length, paused, isDesktop, isHovered])
 
   const go = (direction, event) => {
     if (event) {
@@ -98,7 +82,6 @@ function CardImage({ vehicle, rounded, isHovered }) {
 
   return (
     <div
-      ref={cardRef}
       className={cn('absolute inset-0', rounded)}
       onTouchStart={onTouchStart}
       onTouchEnd={onTouchEnd}
@@ -148,7 +131,7 @@ function CardImage({ vehicle, rounded, isHovered }) {
         </>
       )}
       {all.length > 1 && (
-        <div className="pointer-events-none absolute bottom-1.5 left-1/2 flex -translate-x-1/2 gap-1 sm:bottom-2">
+        <div className="pointer-events-none absolute bottom-1.5 left-1/2 hidden -translate-x-1/2 gap-1 sm:flex sm:bottom-2">
           {all.map((_, i) => (
             <span
               key={i}
@@ -161,6 +144,23 @@ function CardImage({ vehicle, rounded, isHovered }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** Precio con el prefijo de moneda ("AR$"/"U$S") más chico y en tono más
+ *  claro en mobile; en desktop queda igual que el resto del precio.
+ *  En mobile el prefijo va en línea propia: la separación entre el prefijo
+ *  y el monto se ajusta con el `leading-[…]` del span (ver abajo). */
+function PriceAmount({ value }) {
+  const idx = value.indexOf(' ')
+  if (idx === -1) return value
+  return (
+    <>
+      <span className="block text-[0.72em] leading-[0.9] text-ink-2 sm:inline sm:text-[1em] sm:leading-none sm:text-ink">
+        {value.slice(0, idx)}
+      </span>
+      {value.slice(idx + 1)}
+    </>
   )
 }
 
@@ -293,7 +293,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
         >
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:px-2.5 sm:text-xs">
+          <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:bottom-auto sm:left-auto sm:right-2 sm:top-2 sm:px-2.5 sm:text-xs">
             {vehicle.year}
           </span>
         </Link>
@@ -311,7 +311,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
         </div>
         <div className="flex flex-row items-end justify-between gap-3 py-1 sm:flex-col sm:gap-0">
           <p className="font-display text-lg font-extrabold text-ink sm:text-xl">
-            {formatVehiclePrice(vehicle)}
+            <PriceAmount value={formatVehiclePrice(vehicle)} />
           </p>
           <div className="flex items-center gap-1.5 sm:gap-2">
             {shareButtonList}
@@ -333,19 +333,21 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       <Link to={`/catalogo/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          <span className="absolute left-2 top-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:left-3 sm:top-3 sm:px-3 sm:py-1 sm:text-xs">
+          {/* Mobile: año abajo a la izquierda, compartir abajo a la derecha. */}
+          <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:hidden">
             {vehicle.year}
           </span>
-          {/* Esquina superior derecha: en desktop, "Nuevo" (si aplica) —
-              sin cambios. En mobile, solo el botón de compartir; "Nuevo" se
-              muestra más abajo, a la altura de la marca (ver debajo). */}
-          <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5 sm:right-3 sm:top-3">
+          <div className="absolute bottom-2 right-2 z-10 sm:hidden">{shareButtonOverlay}</div>
+          {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}
+          <div className="absolute right-3 top-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">
+            <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
+              {vehicle.year}
+            </span>
             {vehicle.is_new && (
-              <span className="hidden rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white sm:inline-block">
+              <span className="rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                 Nuevo
               </span>
             )}
-            {shareButtonOverlay}
           </div>
         </div>
       </Link>
@@ -367,13 +369,13 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           </p>
         </Link>
         <div className="mt-1.5 sm:mt-3">{specs}</div>
-        <div className="mt-2.5 flex items-center justify-between gap-2 sm:mt-4 sm:flex-wrap sm:items-end">
+        <div className="mt-1.5 flex items-center justify-between gap-2 sm:mt-4 sm:flex-wrap sm:items-end">
           <div>
             <p className="hidden text-[9px] font-semibold uppercase tracking-wide text-ink-3 sm:block">
               Precio contado
             </p>
             <p className="font-display text-sm font-extrabold text-ink sm:text-xl">
-              {formatVehiclePrice(vehicle)}
+              <PriceAmount value={formatVehiclePrice(vehicle)} />
             </p>
           </div>
           {actions}

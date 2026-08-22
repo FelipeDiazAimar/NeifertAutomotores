@@ -2,6 +2,7 @@ import { lazy } from 'react'
 import { Routes, Route } from 'react-router-dom'
 import PublicLayout from '@/components/layout/PublicLayout'
 import AdminLayout from '@/components/layout/AdminLayout'
+import ScrollToTop from '@/components/common/ScrollToTop'
 import ProtectedRoute from './ProtectedRoute'
 
 // Páginas cargadas bajo demanda (code-splitting por ruta)
@@ -26,7 +27,9 @@ const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 
 export default function AppRouter() {
   return (
-    <Routes>
+    <>
+      <ScrollToTop />
+      <Routes>
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
         <Route path="/catalogo" element={<CatalogPage />} />
@@ -61,5 +64,6 @@ export default function AppRouter() {
 
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </>
   )
 }
