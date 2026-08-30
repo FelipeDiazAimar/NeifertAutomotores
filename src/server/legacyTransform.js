@@ -181,3 +181,88 @@ export function transformVehiculo(p) {
   }
   return { vehiculo }
 }
+
+const PERITAJE_DROP = new Set(['id', 'vehiculo_id', 'vehiculoId', 'created_at', 'updated_at'])
+
+export function transformPeritaje(p) {
+  const secciones = {}
+  for (const [k, v] of Object.entries(p)) {
+    if (PERITAJE_DROP.has(k)) continue
+    if (v && typeof v === 'object' && !Array.isArray(v) && /^sec_[a-z]$/.test(k)) {
+      for (const [sk, sv] of Object.entries(v)) secciones[sk] = sv
+    } else {
+      secciones[k] = v
+    }
+  }
+  return {
+    id: num(p.id),
+    vehiculo_id: str(p.vehiculo_id ?? p.vehiculoId),
+    fecha_peritaje: dateOnly(p.fecha_peritaje ?? p.fechaPeritaje ?? p.fecha),
+    peritado_por: str(p.peritado_por ?? p.peritadoPor ?? p.peritador),
+    resena_texto: str(p.resena_texto ?? p.resenaTexto ?? p.observaciones),
+    costo_total: num(p.costo_total ?? p.costoTotal),
+    secciones,
+  }
+}
+
+export const GESTORIA_ITEMS = [
+  'form08', 'verif_policial', 'multas_nac', 'dominio_hist',
+  'libre_deudas', 'titulo', 'cedulas', 'identificacion',
+]
+
+// nested-POST key → standard slug
+const GESTORIA_ALIAS = {
+  form08: 'form08',
+  verificPolicial: 'verif_policial',
+  verif_policial: 'verif_policial',
+  multasNac: 'multas_nac',
+  multas_nac: 'multas_nac',
+  dominioHist: 'dominio_hist',
+  dominio_hist: 'dominio_hist',
+  libreDeudas: 'libre_deudas',
+  libre_deudas: 'libre_deudas',
+  titulo: 'titulo',
+  cedulas: 'cedulas',
+  identificacion: 'identificacion',
+}
+
+function gestoriaItemFromFlat(p, slug) {
+  return {
+    checked: bool(p[slug]),
+    fecha: dateOnly(p[slug + '_fecha']),
+    obs: str(p[slug + '_nota']),
+    marcado_por: null,
+  }
+}
+
+function gestoriaItemFromNested(v) {
+  return {
+    checked: bool(v.checked),
+    fecha: dateOnly(v.fecha),
+    obs: str(v.obs),
+    marcado_por: str(v.marcadoPor ?? v.marcado_por),
+  }
+}
+
+export function transformGestoria(p) {
+  const items = {}
+  if (p.items && typeof p.items === 'object') {
+    for (const [k, v] of Object.entries(p.items)) {
+      const slug = GESTORIA_ALIAS[k] ?? k
+      items[slug] = v && typeof v === 'object' ? gestoriaItemFromNested(v) : { checked: bool(v), fecha: null, obs: null, marcado_por: null }
+    }
+  } else {
+    for (const slug of GESTORIA_ITEMS) items[slug] = gestoriaItemFromFlat(p, slug)
+  }
+  const row = {
+    id: num(p.id),
+    vehiculo_id: str(p.vehiculo_id ?? p.vehiculoId),
+    estado: str(p.estado),
+    notas: str(p.notas),
+    fecha_inicio: dateOnly(p.fecha_inicio ?? p.fechaInicio),
+    fecha_cierre: dateOnly(p.fecha_cierre ?? p.fechaCierre),
+    items,
+  }
+  for (const slug of GESTORIA_ITEMS) row[slug] = Boolean(items[slug]?.checked)
+  return row
+}
