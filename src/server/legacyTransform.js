@@ -63,3 +63,71 @@ export function transformTarea(p) {
     updated_at: str(p.updated_at),
   }
 }
+
+export function parseMaybeJsonArray(v) {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') {
+    try {
+      const parsed = JSON.parse(v)
+      return Array.isArray(parsed) ? parsed : []
+    } catch {
+      return []
+    }
+  }
+  return []
+}
+
+function mapInteres(b) {
+  return { marca: str(b.marca ?? b.brand), modelo: str(b.modelo ?? b.model) }
+}
+
+function mapAutoEntrega(a) {
+  return {
+    marca: str(a.marca ?? a.brand),
+    modelo: str(a.modelo ?? a.model),
+    version: str(a.version),
+    anio: num(a.anio ?? a.year),
+    km: num(a.km),
+    color: str(a.color),
+    trans: str(a.trans),
+    notas: str(a.notas ?? a.notes),
+  }
+}
+
+export function transformCliente(p) {
+  const cliente = {
+    id: str(p.id),
+    nombre: str(p.name ?? p.nombre),
+    telefono: str(p.phone ?? p.telefono),
+    localidad: str(p.localidad),
+    fecha_cumple: dateOnly(p.fecha_cumple ?? p.fechaCumple),
+    status: str(p.status),
+    canal: str(p.canal),
+    presupuesto: num(p.budget ?? p.presupuesto),
+    marca_interes: str(p.brand),
+    modelo_interes: str(p.model),
+    tipo_interes: str(p.tipo),
+    trans_interes: str(p.trans),
+    anio_min: num(p.year_min ?? p.yearMin),
+    anio_max: num(p.year_max ?? p.yearMax),
+    notas: str(p.notes ?? p.notas),
+    interes_cero_km: bool(p.interes_cero_km ?? p.interesCeroKm),
+    cero_km: p.cero_km ?? p.ceroKm ?? null,
+    tiene_auto_entrega: bool(p.tiene_auto_entrega ?? p.tieneAutoEntrega),
+    creado_por: str(p.creado_por ?? p.creadoPor),
+    editado_por: str(p.editado_por ?? p.editadoPor),
+    fecha_creacion: dateOnly(p.fecha_creacion ?? p.fechaCreacion),
+    fecha_edicion: dateOnly(p.fecha_edicion ?? p.fechaEdicion),
+    created_at: str(p.created_at),
+    updated_at: str(p.updated_at),
+    venta_vehiculo_id: str(p.venta_car_id ?? p.ventaCarId),
+    fecha_venta: dateOnly(p.fecha_venta ?? p.fechaVenta),
+  }
+  const brands = Array.isArray(p.brands) ? p.brands : []
+  const intereses = brands.map(mapInteres)
+  const aeSource =
+    (Array.isArray(p.autosEntrega) && p.autosEntrega.length ? p.autosEntrega : null) ??
+    parseMaybeJsonArray(p.autos_entrega)
+  const autosEntrega = aeSource.map(mapAutoEntrega)
+  return { cliente, intereses, autosEntrega }
+}
