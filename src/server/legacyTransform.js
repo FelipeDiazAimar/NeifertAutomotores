@@ -131,3 +131,53 @@ export function transformCliente(p) {
   const autosEntrega = aeSource.map(mapAutoEntrega)
   return { cliente, intereses, autosEntrega }
 }
+
+export function extractImagenes(p) {
+  const arr = p.imagenes ?? p.fotos ?? p.images ?? []
+  if (!Array.isArray(arr)) return []
+  return arr
+    .map((it) => (typeof it === 'string' ? it : it && (it.url ?? it.src ?? it.href)))
+    .filter((u) => typeof u === 'string' && u.length > 0)
+}
+
+export function transformVehiculo(p) {
+  const vehiculo = {
+    id: str(p.id),
+    marca: str(p.brand ?? p.marca),
+    modelo: str(p.model ?? p.modelo),
+    version: str(p.version),
+    patente: str(p.patente),
+    tipo: str(p.tipo),
+    anio: num(p.year ?? p.anio),
+    km: num(p.km),
+    trans: str(p.trans),
+    color: str(p.color),
+    moneda_contado: str(p.moneda_contado ?? p.monedaContado),
+    precio_contado: num(p.precio_contado ?? p.precioContado),
+    moneda_canje: str(p.moneda_canje ?? p.monedaCanje),
+    precio_canje: num(p.precio_canje ?? p.precioCanje),
+    duenio_nombre: str(p.duenio_nombre ?? p.duenioNombre),
+    duenio_apellido: str(p.duenio_apellido ?? p.duenioApellido),
+    duenio_contacto: str(p.duenio_contacto ?? p.duenioContacto),
+    itv: str(p.itv),
+    itv_venc: dateOnly(p.itv_venc ?? p.itvVenc),
+    consignacion: bool(p.consignacion),
+    tipo_consignacion: str(p.tipo_consignacion ?? p.tipoConsignacion),
+    origen: str(p.origen),
+    carpeta_completa: bool(p.carpeta_completa ?? p.carpetaCompleta),
+    carpeta_con_oficio: bool(p.carpeta_con_oficio ?? p.carpetaConOficio),
+    carpeta_entregada: bool(p.carpeta_entregada ?? p.carpetaEntregada),
+    tiene_iva: bool(p.tiene_iva ?? p.tieneIVA),
+    nota: str(p.nota),
+    status: str(p.status),
+    creado_por: str(p.creado_por ?? p.creadoPor),
+    editado_por: str(p.editado_por ?? p.editadoPor),
+    fecha_creacion: dateOnly(p.fecha_creacion ?? p.fechaCreacion),
+    fecha_edicion: dateOnly(p.fecha_edicion ?? p.fechaEdicion),
+    created_at: str(p.created_at),
+    updated_at: str(p.updated_at),
+    venta_cliente_id: str(p.venta_cliente_id ?? p.ventaClienteId),
+    fecha_venta: dateOnly(p.fecha_venta ?? p.fechaVenta),
+  }
+  return { vehiculo }
+}
