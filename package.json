@@ -8,8 +8,11 @@
     "build": "vite build",
     "preview": "vite preview",
     "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --write \"src/**/*.{js,jsx,css}\"",
     "sync:instagram": "node --env-file=.env scripts/syncInstagram.mjs",
+    "sync:legacy": "node --env-file=.env scripts/sync-legacy-local.mjs",
     "build:instagram-agent": "node scripts/instagramAgent/build.mjs"
   },
   "dependencies": {
@@ -51,6 +54,7 @@
     "prettier-plugin-tailwindcss": "^0.8.0",
     "sharp": "^0.35.2",
     "tailwindcss": "^4.3.1",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "vitest": "^2.1.9"
   }
 }

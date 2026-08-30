@@ -1,0 +1,35 @@
+{
+  "get": [
+    {
+      "id": "6b8a3qf5353036550",
+      "tipo": "general",
+      "titulo": "Llamada",
+      "descripcion": "Llamar / escribir a Gustavo Bruza x Amarok 2021.\n3564 64-3253",
+      "fecha": "2026-06-06",
+      "done": 1,
+      "ref_id": null,
+      "ref_phone": null,
+      "ref_name": null,
+      "creado_por": "Bruno",
+      "asignado_a": "Cristian",
+      "created_at": "2026-06-05 14:17:24",
+      "updated_at": "2026-06-08 19:09:11",
+      "hora": "08:00"
+    }
+  ],
+  "post": {
+    "tipo": "general",
+    "titulo": "test",
+    "descripcion": "test",
+    "fecha": "2026-08-30",
+    "hora": "",
+    "asignadoA": "Bruno",
+    "refId": "6c6jqbi7l2e6eb853",
+    "refName": "test",
+    "refPhone": "test"
+  },
+  "put": {
+    "id": "6c6jqpp0pc846f763",
+    "done": 1
+  }
+}
