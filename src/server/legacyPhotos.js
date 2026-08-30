@@ -11,7 +11,9 @@ export function r2KeyForPhoto(vehiculoId, url) {
     const path = new URL(url).pathname
     const m = path.match(/\.([a-zA-Z0-9]{2,5})$/)
     if (m) ext = m[1].toLowerCase()
-  } catch {}
+  } catch {
+    // URL no parseable → queda la extensión por defecto
+  }
   return `legacy/vehiculos/${vehiculoId}/${sha1_12(url)}.${ext}`
 }
 
