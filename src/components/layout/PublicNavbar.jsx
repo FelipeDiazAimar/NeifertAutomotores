@@ -2,25 +2,21 @@ import { Link, NavLink } from 'react-router-dom'
 import { Search, Menu } from 'lucide-react'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
+import NavHintBubble from '@/components/layout/NavHintBubble'
 import { useUiStore } from '@/store/useUiStore'
-import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
-const BASE_LINKS = [
+const LINKS = [
   { to: '/', label: 'Historias', end: true },
   { to: '/catalogo', label: 'Catálogo' },
   { to: '/instagram', label: 'Instagram' },
   { to: '/cita', label: 'WhatsApp' },
+  { to: '/sobre-nosotros', label: 'Sobre Nosotros' },
 ]
 
 export default function PublicNavbar() {
   const openAiSearch = useUiStore((s) => s.setAiSearch)
   const setMobileNav = useUiStore((s) => s.setMobileNav)
-  const hasSobreNosotros = useSiteStore((s) => (s.sobreNosotros?.items || []).length > 0)
-
-  const LINKS = hasSobreNosotros
-    ? [...BASE_LINKS, { to: '/sobre-nosotros', label: 'Sobre Nosotros' }]
-    : BASE_LINKS
 
   return (
     <header className="sticky top-0 z-30 px-4 pt-3 md:px-8">
@@ -70,6 +66,8 @@ export default function PublicNavbar() {
           </button>
         </div>
       </nav>
+
+      <NavHintBubble />
     </header>
   )
 }

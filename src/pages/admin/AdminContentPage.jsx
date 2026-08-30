@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Trash2, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, Layout, Settings, Footprints, Share2, Info } from 'lucide-react'
+import { Plus, Trash2, Video, Quote, Image as ImageIcon, ArrowUp, ArrowDown, Layout, Settings, Footprints, Share2, Info, Target } from 'lucide-react'
 import Button from '@/components/common/Button'
 import ImageUploader from '@/components/admin/ImageUploader'
 import VideoUploader from '@/components/admin/VideoUploader'
@@ -500,6 +500,49 @@ function SobreNosotrosItemEditor({ item, index, count, onUpdate, onRemove, onReo
   )
 }
 
+function MisionVisionEditor({ entry, index, count, onUpdate, onRemove, onReorder }) {
+  return (
+    <div className="rounded-xl border border-line bg-surface-solid p-4 shadow-xs transition-shadow hover:shadow-sm">
+      <div className="mb-3 flex items-center justify-between">
+        <span className="inline-flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-neifert">
+          <Target size={14} />
+          {entry.title?.trim() || `Sección ${index + 1}`}
+        </span>
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => onReorder(-1)}
+            disabled={index === 0}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover antes"
+          >
+            <ArrowUp size={15} />
+          </button>
+          <button
+            onClick={() => onReorder(1)}
+            disabled={index === count - 1}
+            className="grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-line hover:text-ink disabled:opacity-30"
+            aria-label="Mover después"
+          >
+            <ArrowDown size={15} />
+          </button>
+          <button
+            onClick={onRemove}
+            className="ml-1 grid h-8 w-8 place-items-center rounded-lg text-ink-3 transition-colors hover:bg-surface hover:text-neifert"
+            aria-label="Borrar"
+          >
+            <Trash2 size={14} />
+          </button>
+        </div>
+      </div>
+
+      <div className="grid gap-4">
+        <TextField label="Título" value={entry.title} onChange={(v) => onUpdate({ title: v })} placeholder="MISIÓN" />
+        <TextField label="Descripción" value={entry.text} onChange={(v) => onUpdate({ text: v })} textarea />
+      </div>
+    </div>
+  )
+}
+
 function SobreNosotrosTab() {
   const sobreNosotros = useSiteStore((s) => s.sobreNosotros)
   const setHeading = useSiteStore((s) => s.setSobreNosotrosHeading)
@@ -507,7 +550,12 @@ function SobreNosotrosTab() {
   const updateItem = useSiteStore((s) => s.updateSobreNosotrosItem)
   const removeItem = useSiteStore((s) => s.removeSobreNosotrosItem)
   const reorderItem = useSiteStore((s) => s.reorderSobreNosotrosItem)
+  const addMV = useSiteStore((s) => s.addSobreNosotrosMV)
+  const updateMV = useSiteStore((s) => s.updateSobreNosotrosMV)
+  const removeMV = useSiteStore((s) => s.removeSobreNosotrosMV)
+  const reorderMV = useSiteStore((s) => s.reorderSobreNosotrosMV)
   const items = Array.isArray(sobreNosotros) ? sobreNosotros : sobreNosotros?.items || []
+  const misionVision = Array.isArray(sobreNosotros) ? [] : sobreNosotros?.misionVision || []
   const heading = Array.isArray(sobreNosotros) ? '' : sobreNosotros?.heading || ''
 
   return (
@@ -540,6 +588,35 @@ function SobreNosotrosTab() {
           {items.length === 0 && (
             <div className="flex min-h-[100px] items-center justify-center rounded-xl border-2 border-dashed border-line text-sm text-ink-3">
               No hay bloques. Agregá uno arriba.
+            </div>
+          )}
+        </div>
+      </Section>
+
+      <Section
+        title="Misión y Visión"
+        desc="Bloques con título y texto centrados que aparecen al final de /sobre-nosotros. Creá las secciones que quieras (Misión, Visión…) y ordenálas como prefieras."
+        action={
+          <Button size="sm" variant="glass" icon={Plus} onClick={() => addMV({})}>
+            Agregar sección
+          </Button>
+        }
+      >
+        <div className="space-y-3">
+          {misionVision.map((entry, i) => (
+            <MisionVisionEditor
+              key={entry.id}
+              entry={entry}
+              index={i}
+              count={misionVision.length}
+              onUpdate={(partial) => updateMV(entry.id, partial)}
+              onRemove={() => removeMV(entry.id)}
+              onReorder={(dir) => reorderMV(entry.id, dir)}
+            />
+          ))}
+          {misionVision.length === 0 && (
+            <div className="flex min-h-[100px] items-center justify-center rounded-xl border-2 border-dashed border-line text-sm text-ink-3">
+              No hay secciones. Agregá una arriba.
             </div>
           )}
         </div>

@@ -5,23 +5,19 @@ import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import Logo from '@/components/common/Logo'
 import { useUiStore } from '@/store/useUiStore'
-import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
-const BASE_LINKS = [
+const LINKS = [
   { to: '/', label: 'Historias', icon: Home, end: true },
   { to: '/catalogo', label: 'Catálogo', icon: LayoutGrid },
   { to: '/instagram', label: 'Instagram', icon: Camera },
   { to: '/cita', label: 'WhatsApp', icon: WhatsAppIcon },
+  { to: '/sobre-nosotros', label: 'Sobre Nosotros', icon: Info },
 ]
 
 export default function MobileSidebar() {
   const open = useUiStore((s) => s.mobileNavOpen)
   const setOpen = useUiStore((s) => s.setMobileNav)
-  const hasSobreNosotros = useSiteStore((s) => (s.sobreNosotros?.items || []).length > 0)
-  const LINKS = hasSobreNosotros
-    ? [...BASE_LINKS, { to: '/sobre-nosotros', label: 'Sobre Nosotros', icon: Info }]
-    : BASE_LINKS
 
   return (
     <AnimatePresence>

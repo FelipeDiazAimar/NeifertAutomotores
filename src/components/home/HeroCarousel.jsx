@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import Spinner from '@/components/common/Spinner'
 import { motion, AnimatePresence } from 'framer-motion'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
@@ -62,12 +63,16 @@ const textVariants = {
 }
 
 export default function HeroCarousel() {
+  const navigate = useNavigate()
   const slides = useSiteStore((s) => s.heroSlides)
   const count = slides.length
 
   const [index, setIndex] = useState(0)
   const [direction, setDirection] = useState(1)
   const pausedUntilRef = useRef(0)
+  // Distingue "tap" (navega al catálogo) de "swipe/drag" (cambia de imagen):
+  // se marca mientras se arrastra y queda activo un ratito tras soltar.
+  const draggedRef = useRef(false)
   const safeIndex = count > 0 ? ((index % count) + count) % count : 0
 
   const goTo = useCallback(
@@ -103,6 +108,14 @@ export default function HeroCarousel() {
     } else if (offset.x > SWIPE_DISTANCE || velocity.x > SWIPE_VELOCITY) {
       goTo(safeIndex - 1, -1)
     }
+    // Deja el flag activo un instante para que el click que dispara el
+    // navegador tras soltar no cuente como "tap".
+    setTimeout(() => { draggedRef.current = false }, 50)
+  }
+
+  const onSlideClick = () => {
+    if (draggedRef.current) return
+    navigate('/catalogo')
   }
 
   if (count === 0) return null
@@ -125,8 +138,12 @@ export default function HeroCarousel() {
           drag="x"
           dragConstraints={{ left: 0, right: 0 }}
           dragElastic={0.15}
+          onDragStart={() => { draggedRef.current = true }}
           onDragEnd={onDragEnd}
-          className="absolute inset-0 cursor-grab active:cursor-grabbing"
+          onClick={onSlideClick}
+          role="link"
+          aria-label="Ver catálogo"
+          className="absolute inset-0 cursor-pointer active:cursor-grabbing"
         >
           <HeroSlideImage desktopSrc={slide.image} mobileSrc={slide.imageMobile} />
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/75 via-black/15 to-black/45" />

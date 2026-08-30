@@ -94,6 +94,9 @@ const DEFAULT_CONTENT = {
   sobreNosotros: {
     heading: 'Nuestra historia, en primera persona',
     items: [],
+    // Bloques "Misión / Visión": título + texto centrados, al final de la
+    // página. Lista ordenable (el admin crea los que quiera y los ordena).
+    misionVision: [],
   },
   instagram: {
     headline: 'Seguinos en Instagram',
@@ -323,18 +326,61 @@ export const useSiteStore = create(
           ;[next[i], next[j]] = [next[j], next[i]]
           return { sobreNosotros: { ...s.sobreNosotros, items: next } }
         }),
+
+      // Bloques "Misión / Visión" de /sobre-nosotros (solo título + texto,
+      // centrados; lista ordenable e independiente de los bloques con video).
+      addSobreNosotrosMV: (entry) =>
+        set((s) => ({
+          sobreNosotros: {
+            ...s.sobreNosotros,
+            misionVision: [
+              ...(s.sobreNosotros.misionVision || []),
+              { id: uid(), title: '', text: '', ...entry },
+            ],
+          },
+        })),
+      updateSobreNosotrosMV: (id, partial) =>
+        set((s) => ({
+          sobreNosotros: {
+            ...s.sobreNosotros,
+            misionVision: (s.sobreNosotros.misionVision || []).map((it) =>
+              it.id === id ? { ...it, ...partial } : it
+            ),
+          },
+        })),
+      removeSobreNosotrosMV: (id) =>
+        set((s) => ({
+          sobreNosotros: {
+            ...s.sobreNosotros,
+            misionVision: (s.sobreNosotros.misionVision || []).filter((it) => it.id !== id),
+          },
+        })),
+      reorderSobreNosotrosMV: (id, dir) =>
+        set((s) => {
+          const list = s.sobreNosotros.misionVision || []
+          const i = list.findIndex((it) => it.id === id)
+          const j = i + dir
+          if (i === -1 || j < 0 || j >= list.length) return {}
+          const next = [...list]
+          ;[next[i], next[j]] = [next[j], next[i]]
+          return { sobreNosotros: { ...s.sobreNosotros, misionVision: next } }
+        }),
     }),
     {
       name: 'nf-site-content',
-      version: 3,
-      migrate: (persistedState) => ({
-        ...persistedState,
-        socials: { ...persistedState.socials, whatsappPhone: '543564562413' },
+      version: 4,
+      migrate: (persistedState) => {
         // v2 → v3: sobreNosotros pasó de array de bloques a { heading, items }.
-        sobreNosotros: Array.isArray(persistedState.sobreNosotros)
+        const sn = Array.isArray(persistedState.sobreNosotros)
           ? { heading: 'Nuestra historia, en primera persona', items: persistedState.sobreNosotros }
-          : persistedState.sobreNosotros || { heading: 'Nuestra historia, en primera persona', items: [] },
-      }),
+          : persistedState.sobreNosotros || { heading: 'Nuestra historia, en primera persona', items: [] }
+        return {
+          ...persistedState,
+          socials: { ...persistedState.socials, whatsappPhone: '543564562413' },
+          // v3 → v4: sobreNosotros suma la lista misionVision.
+          sobreNosotros: { ...sn, items: sn.items || [], misionVision: sn.misionVision || [] },
+        }
+      },
     }
   )
 )
@@ -360,6 +406,9 @@ export async function hydrateSiteContent() {
     // filas viejas que hayan quedado guardadas en Supabase con el formato anterior.
     if (Array.isArray(content.sobreNosotros)) {
       content.sobreNosotros = { heading: 'Nuestra historia, en primera persona', items: content.sobreNosotros }
+    }
+    if (content.sobreNosotros && !Array.isArray(content.sobreNosotros.misionVision)) {
+      content.sobreNosotros.misionVision = []
     }
     const merged = {}
     for (const k of CONTENT_KEYS) if (content[k] != null) merged[k] = content[k]

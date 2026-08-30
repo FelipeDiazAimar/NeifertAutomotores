@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { motion } from 'framer-motion'
-import { Play, Pause, Volume2, VolumeX, Loader2, Layers } from 'lucide-react'
+import { Play, Pause, Volume2, VolumeX, Loader2, Layers, Target, Telescope } from 'lucide-react'
 import { useSiteStore } from '@/store/useSiteStore'
 import { fadeUp, slideInLeft, slideInRight, staggerContainer } from '@/lib/animations'
 import { HOME_ASPECT_RATIOS } from '@/lib/mediaFormats'
@@ -181,12 +181,25 @@ function SobreNosotrosBlock({ item, index, isActive, unlocked, onActivate, regis
   )
 }
 
+/** Elige el ícono de cada bloque Misión/Visión según su título; si no coincide,
+ *  alterna Target / Telescope por posición. */
+function pickMVIcon(entry, index) {
+  const t = String(entry.title || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+  if (t.includes('vision')) return Telescope
+  if (t.includes('mision')) return Target
+  return index % 2 === 0 ? Target : Telescope
+}
+
 export default function SobreNosotrosPage() {
   const sobreNosotros = useSiteStore((s) => s.sobreNosotros)
   const { activeId, unlocked, registerVideo, setManualPaused, activate } = useActiveVideoSection()
   // Guarda defensiva: localStorage de sesiones anteriores puede traer el
   // formato viejo (array plano) si la migración del store no llegó a correr.
   const items = Array.isArray(sobreNosotros) ? sobreNosotros : sobreNosotros?.items || []
+  const misionVision = Array.isArray(sobreNosotros) ? [] : sobreNosotros?.misionVision || []
   const heading = Array.isArray(sobreNosotros)
     ? 'Nuestra historia, en primera persona'
     : sobreNosotros?.heading || ''
@@ -226,13 +239,53 @@ export default function SobreNosotrosPage() {
             setManualPaused={setManualPaused}
           />
         ))}
-        {items.length === 0 && (
+        {items.length === 0 && misionVision.length === 0 && (
           <div className="glass rounded-[20px] py-20 text-center">
             <Layers size={40} className="mx-auto mb-4 text-ink-3" />
             <p className="text-ink-3">Todavía no hay contenido cargado.</p>
           </div>
         )}
       </div>
+
+      {misionVision.length > 0 && (
+        <motion.div
+          variants={staggerContainer(0.12)}
+          initial="hidden"
+          whileInView="show"
+          viewport={{ once: true, amount: 0.2 }}
+          className="mx-auto mt-20 max-w-4xl space-y-14 md:mt-28 md:space-y-20"
+        >
+          {misionVision.map((entry, i) => {
+            const Icon = pickMVIcon(entry, i)
+            // Diagonal: los pares tiran a la izquierda, los impares a la
+            // derecha (Misión arriba-izq., Visión abajo-der.).
+            const toRight = i % 2 === 1
+            return (
+              <motion.article
+                key={entry.id}
+                variants={fadeUp}
+                className={cn(
+                  'w-full text-center md:max-w-[60%]',
+                  toRight ? 'md:ml-auto' : 'md:mr-auto'
+                )}
+              >
+                {entry.title && (
+                  <h2 className="flex items-center justify-center gap-3 font-display text-2xl font-extrabold uppercase tracking-wide text-ink md:text-3xl">
+                    <Icon className="h-7 w-7 shrink-0 text-neifert md:h-8 md:w-8" strokeWidth={1.75} />
+                    {entry.title}
+                  </h2>
+                )}
+                <span className="mx-auto mt-4 block h-[3px] w-16 rounded-full bg-neifert" />
+                {entry.text && (
+                  <p className="mx-auto mt-4 whitespace-pre-line text-ink-2 md:text-lg">
+                    {entry.text}
+                  </p>
+                )}
+              </motion.article>
+            )
+          })}
+        </motion.div>
+      )}
     </section>
   )
 }
