@@ -3,7 +3,7 @@ import { cn } from '@/lib/cn'
 
 const VARIANTS = {
   primary: 'bg-neifert text-white shadow-glow-red hover:bg-neifert-dark',
-  glass: 'glass text-ink hover:border-glassborder',
+  glass: 'glass text-ink hover:bg-surface-solid hover:border-ink/30',
   ghost: 'text-ink-2 hover:text-ink hover:bg-surface',
   outline: 'border border-neifert text-neifert hover:bg-neifert hover:text-white',
   whatsapp: 'bg-whatsapp text-white',
@@ -28,7 +28,7 @@ export default function Button({
     <motion.button
       whileTap={{ scale: 0.97 }}
       className={cn(
-        'inline-flex select-none items-center justify-center gap-2 rounded-2xl font-semibold transition-all disabled:pointer-events-none disabled:opacity-50',
+        'inline-flex cursor-pointer select-none items-center justify-center gap-2 rounded-2xl font-semibold transition-all disabled:pointer-events-none disabled:opacity-50',
         VARIANTS[variant],
         SIZES[size],
         className
