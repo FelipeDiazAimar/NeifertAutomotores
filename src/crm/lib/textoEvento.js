@@ -21,6 +21,8 @@ export function textoEvento(ev) {
       return `${quien}: ${d.texto ?? 'contacto'}`
     case 'venta':
       return `${quien} registró la venta`
+    case 'tarea':
+      return `${quien} ${d.done ? 'completó' : 'creó'} una tarea: ${d.titulo ?? ''}`.trim()
     default:
       return `${quien} — ${ev.tipo}`
   }

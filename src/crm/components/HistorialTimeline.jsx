@@ -1,6 +1,6 @@
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Plus, Pencil, ArrowRight, ClipboardCheck, FileText, Archive, Image as ImageIcon, MessageCircle, Handshake, Circle } from 'lucide-react'
+import { Plus, Pencil, ArrowRight, ClipboardCheck, FileText, Archive, Image as ImageIcon, MessageCircle, Handshake, CheckSquare, Circle } from 'lucide-react'
 import Spinner from '@/components/common/Spinner'
 import { useEventos } from '@/crm/hooks/useEventos'
 import { textoEvento } from '@/crm/lib/textoEvento'
@@ -15,6 +15,7 @@ const ICONO = {
   foto: ImageIcon,
   contacto: MessageCircle,
   venta: Handshake,
+  tarea: CheckSquare,
 }
 
 export default function HistorialTimeline({ entidad = 'vehiculo', entidadId }) {
