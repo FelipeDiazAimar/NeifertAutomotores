@@ -92,13 +92,11 @@ const cli = (await r.json())[0]
 r = await rest(bruno, `clientes?id=eq.${cli.id}`, { method: 'PATCH', body: JSON.stringify({ notas: 'editado' }) })
 ok(r.status === 200, `vendedor PATCH cliente → ${r.status} (esperado 200)`)
 
+// clientes: el borrado lo puede hacer cualquier usuario del CRM (policy
+// clientes_delete = crm.es_usuario()), no solo admin.
 r = await rest(bruno, `clientes?id=eq.${cli.id}`, { method: 'DELETE' })
 const cliBorradasVendedor = await r.json().catch(() => [])
-ok(Array.isArray(cliBorradasVendedor) && cliBorradasVendedor.length === 0, `vendedor DELETE cliente → 0 filas (RLS bloquea)`)
-
-r = await rest(cristian, `clientes?id=eq.${cli.id}`, { method: 'DELETE' })
-const cliBorradasAdmin = await r.json().catch(() => [])
-ok(Array.isArray(cliBorradasAdmin) && cliBorradasAdmin.length === 1, `admin DELETE cliente → 1 fila (limpieza)`)
+ok(Array.isArray(cliBorradasVendedor) && cliBorradasVendedor.length === 1, `vendedor DELETE cliente → 1 fila (permitido)`)
 
 // ---- Tareas -------------------------------------------------------------
 r = await rest(bruno, 'tareas', { method: 'POST', body: JSON.stringify({ titulo: 'TEST RLS', fecha: '2026-09-01' }) })
