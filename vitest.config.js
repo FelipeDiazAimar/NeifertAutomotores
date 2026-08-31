@@ -11,6 +11,7 @@ export default defineConfig({
   test: {
     // Default node; los tests de componentes ponen `// @vitest-environment jsdom`.
     environment: 'node',
+    globals: true, // habilita el auto-cleanup de @testing-library/react entre tests
     include: [
       'src/server/__tests__/**/*.test.{js,jsx}',
       'src/crm/__tests__/**/*.test.{js,jsx}',

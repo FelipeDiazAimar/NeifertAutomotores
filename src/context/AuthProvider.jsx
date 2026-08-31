@@ -31,8 +31,8 @@ export function AuthProvider({ children }) {
   // Perfil del CRM nuevo (crm.usuarios) — solo se carga en rutas /crm/*.
   const enRutaCrm =
     typeof window !== 'undefined' && window.location.pathname.startsWith('/crm')
-  const [crmPerfil, setCrmPerfil] = useState(null)
-  const [crmPerfilCargando, setCrmPerfilCargando] = useState(() => isSupabaseConfigured && enRutaCrm)
+  // undefined = todavía no se cargó; null = cargado, sin fila en crm.usuarios.
+  const [crmPerfil, setCrmPerfil] = useState(undefined)
 
   // Inicialización (solo backend real)
   useEffect(() => {
@@ -74,23 +74,14 @@ export function AuthProvider({ children }) {
   // Perfil del CRM nuevo — solo en /crm/*. Si no hay fila en crm.usuarios,
   // queda null (CrmProtectedRoute muestra "sin acceso").
   useEffect(() => {
-    if (!isSupabaseConfigured || !enRutaCrm) return
-    if (!session?.user) {
-      setCrmPerfil(null)
-      setCrmPerfilCargando(false)
-      return
-    }
+    if (!isSupabaseConfigured || !enRutaCrm || !session?.user) return
     let vivo = true
-    setCrmPerfilCargando(true)
     obtenerMiPerfil(session.user.id)
       .then((data) => {
         if (vivo) setCrmPerfil(data ?? null)
       })
       .catch(() => {
         if (vivo) setCrmPerfil(null)
-      })
-      .finally(() => {
-        if (vivo) setCrmPerfilCargando(false)
       })
     return () => {
       vivo = false
@@ -129,8 +120,9 @@ export function AuthProvider({ children }) {
     session,
     profile,
     loading,
-    crmPerfil,
-    crmPerfilCargando,
+    crmPerfil: session?.user ? (crmPerfil ?? null) : null,
+    crmPerfilCargando:
+      isSupabaseConfigured && enRutaCrm && Boolean(session?.user) && crmPerfil === undefined,
     isAuthenticated: Boolean(session),
     isDemo: !isSupabaseConfigured,
     signIn,

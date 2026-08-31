@@ -1,9 +1,10 @@
 import { lazy } from 'react'
-import { Routes, Route } from 'react-router-dom'
+import { Routes, Route, Navigate } from 'react-router-dom'
 import PublicLayout from '@/components/layout/PublicLayout'
 import AdminLayout from '@/components/layout/AdminLayout'
 import ScrollToTop from '@/components/common/ScrollToTop'
 import ProtectedRoute from './ProtectedRoute'
+import CrmProtectedRoute from '@/crm/routes/CrmProtectedRoute'
 
 // Páginas cargadas bajo demanda (code-splitting por ruta)
 const HomePage = lazy(() => import('@/pages/public/HomePage'))
@@ -24,6 +25,12 @@ const AdminUsersPage = lazy(() => import('@/pages/admin/AdminUsersPage'))
 const StoragePage = lazy(() => import('@/pages/admin/StoragePage'))
 const AdminLogErrorsPage = lazy(() => import('@/pages/admin/AdminLogErrorsPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
+
+// CRM nuevo (route group /crm)
+const CrmLoginPage = lazy(() => import('@/crm/pages/CrmLoginPage'))
+const CrmLayout = lazy(() => import('@/crm/components/CrmLayout'))
+const VehiculosPlaceholderPage = lazy(() => import('@/crm/pages/VehiculosPlaceholderPage'))
+const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
 
 export default function AppRouter() {
   return (
@@ -60,6 +67,15 @@ export default function AppRouter() {
         <Route path="/admin/usuarios" element={<AdminUsersPage />} />
         <Route path="/admin/almacenamiento" element={<StoragePage />} />
         <Route path="/admin/logerrors" element={<AdminLogErrorsPage />} />
+      </Route>
+
+      <Route path="/crm/login" element={<CrmLoginPage />} />
+      <Route element={<CrmProtectedRoute />}>
+        <Route element={<CrmLayout />}>
+          <Route path="/crm" element={<Navigate to="/crm/vehiculos" replace />} />
+          <Route path="/crm/vehiculos" element={<VehiculosPlaceholderPage />} />
+          <Route path="/crm/cambiar-password" element={<CambiarPasswordPage />} />
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
