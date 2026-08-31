@@ -1,4 +1,4 @@
-import { PERITAJE_ITEMS_ESTADO } from './peritajeSchema.js'
+export { resumenPeritaje } from './peritajeSchema.js'
 
 const b = (v) => v === true || v === 1 || v === '1'
 const n = (v) => (v === '' || v == null ? null : Number.isFinite(Number(v)) ? Number(v) : null)
@@ -68,29 +68,4 @@ export function mapGestoria(l) {
     out[`${it}_nota`] = s(l[`${it}_nota`])
   }
   return out
-}
-
-const VAL = {
-  ok: 'ok',
-  obs: 'obs',
-  'observación': 'obs',
-  observacion: 'obs',
-  falta: 'falta',
-  mal: 'falta',
-}
-
-/** Cuenta ok/observación/falta sobre las keys de condición (PERITAJE_ITEMS_ESTADO).
- *  Ignora vacío, 'na'/'n/a', y cualquier valor que no sea de estado. */
-export function resumenPeritaje(datos = {}) {
-  let items_ok = 0
-  let items_obs = 0
-  let items_falta = 0
-  for (const k of PERITAJE_ITEMS_ESTADO) {
-    const raw = s(datos[k])?.toLowerCase()
-    const v = raw && VAL[raw]
-    if (v === 'ok') items_ok++
-    else if (v === 'obs') items_obs++
-    else if (v === 'falta') items_falta++
-  }
-  return { items_ok, items_obs, items_falta }
 }
