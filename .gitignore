@@ -38,3 +38,6 @@ scripts/*.local.json
 
 
 scrap/.waylog/
+
+# Supabase CLI temp
+supabase/.temp/
