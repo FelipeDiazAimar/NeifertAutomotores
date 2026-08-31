@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
-import HistorialTimeline, { textoEvento } from '../components/HistorialTimeline.jsx'
+import HistorialTimeline from '../components/HistorialTimeline.jsx'
+import { textoEvento } from '../lib/textoEvento.js'
 
 const mockUse = vi.fn()
 vi.mock('../hooks/useEventosVehiculo.js', () => ({ useEventosVehiculo: () => mockUse() }))
