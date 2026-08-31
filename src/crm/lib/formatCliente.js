@@ -1,3 +1,5 @@
+import { cleanPhone } from '@/lib/whatsapp'
+
 const nf = new Intl.NumberFormat('es-AR')
 
 export const CANAL_OPCIONES = [
@@ -26,4 +28,20 @@ export function lineaInteres(c) {
 
 export function statusVariant(status) {
   return { activo: 'green', en_seguimiento: 'amber', vendido: 'neutral', perdido: 'red' }[status] ?? 'neutral'
+}
+
+/** Link de WhatsApp para un primer contacto con el cliente (formato
+ *  api.whatsapp.com/send). Devuelve null si el cliente no tiene teléfono. */
+export function waContactoLink(cliente) {
+  const phone = cleanPhone(cliente?.telefono)
+  if (!phone) return null
+  const nombre = (cliente?.nombre ?? '').trim()
+  const saludo = nombre ? `Hola ${nombre}!` : 'Hola!'
+  const params = new URLSearchParams({
+    phone,
+    text: `${saludo} Te contactamos desde NEIFERT Automotores. ¿Cómo estás?`,
+    type: 'phone_number',
+    app_absent: '0',
+  })
+  return `https://api.whatsapp.com/send/?${params}`
 }

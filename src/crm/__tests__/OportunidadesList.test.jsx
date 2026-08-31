@@ -29,6 +29,22 @@ describe('OportunidadesList', () => {
     expect(await screen.findByText(/Alta compatibilidad/)).toBeInTheDocument()
   })
 
+  it('muestra botón de WhatsApp solo si el cliente tiene teléfono', () => {
+    const conTel = {
+      vehiculo: { id: 'v1', marca: 'Ford', modelo: 'KA', version: '', anio: 2016, fotos: [] },
+      clientes: [{ cliente: { id: 'c1', nombre: 'Ana', telefono: '3564 55-1122', notas: null }, score: 100, bucket: 'alta', detalle }],
+    }
+    wrap(<OportunidadesList items={[conTel]} />)
+    const link = screen.getByRole('link', { name: /whatsapp/i })
+    expect(link).toHaveAttribute('href', expect.stringContaining('https://api.whatsapp.com/send/?'))
+    expect(link).toHaveAttribute('href', expect.stringContaining('phone=3564551122'))
+  })
+
+  it('sin teléfono no hay botón de WhatsApp', () => {
+    wrap(<OportunidadesList items={[item('v1')]} />)
+    expect(screen.queryByRole('link', { name: /whatsapp/i })).not.toBeInTheDocument()
+  })
+
   it('más de 20 items → "Ver más"', async () => {
     const items = Array.from({ length: 25 }, (_, i) => item('v' + i))
     wrap(<OportunidadesList items={items} />)

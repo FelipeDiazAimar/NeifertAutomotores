@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { lineaInteres, statusVariant, CANAL_OPCIONES } from '../lib/formatCliente.js'
+import { lineaInteres, statusVariant, CANAL_OPCIONES, waContactoLink } from '../lib/formatCliente.js'
 
 describe('lineaInteres', () => {
   it('junta lo que hay', () => {
@@ -23,5 +23,22 @@ describe('statusVariant', () => {
 describe('CANAL_OPCIONES', () => {
   it('tiene id y label', () => {
     expect(CANAL_OPCIONES.every((o) => o.id && o.label)).toBe(true)
+  })
+})
+
+describe('waContactoLink', () => {
+  it('arma el link api.whatsapp.com con teléfono limpio y saludo', () => {
+    const url = waContactoLink({ nombre: 'Marcelo Corbalaña', telefono: '+54 3564 56-5884' })
+    expect(url.startsWith('https://api.whatsapp.com/send/?')).toBe(true)
+    const params = new URL(url).searchParams
+    expect(params.get('phone')).toBe('543564565884')
+    expect(params.get('type')).toBe('phone_number')
+    expect(params.get('app_absent')).toBe('0')
+    expect(params.get('text')).toBe('Hola Marcelo Corbalaña! Te contactamos desde NEIFERT Automotores. ¿Cómo estás?')
+  })
+
+  it('sin teléfono → null', () => {
+    expect(waContactoLink({ nombre: 'Ana' })).toBeNull()
+    expect(waContactoLink(null)).toBeNull()
   })
 })

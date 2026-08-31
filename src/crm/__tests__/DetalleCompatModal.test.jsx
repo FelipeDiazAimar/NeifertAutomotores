@@ -29,5 +29,34 @@ describe('DetalleCompatModal', () => {
     expect(screen.getByText('Tipo')).toBeInTheDocument()
     expect(screen.getAllByText(/Cliente busca:/).length).toBe(2) // marca y tipo aplican; año no
     expect(screen.getByText('de contado')).toBeInTheDocument()
+    expect(screen.getByText('Cerrar')).toBeInTheDocument() // botón del footer
+  })
+
+  it('muestra el botón de WhatsApp cuando el cliente tiene teléfono', () => {
+    render(
+      <DetalleCompatModal
+        open
+        onClose={vi.fn()}
+        cliente={{ nombre: 'Marcelo', telefono: '3564 55-1122' }}
+        vehiculo={{ marca: 'Ford', modelo: 'KA', anio: 2016 }}
+        resultado={resultado}
+      />,
+    )
+    const link = screen.getByRole('link', { name: /whatsapp/i })
+    expect(link).toHaveAttribute('href', expect.stringContaining('https://api.whatsapp.com/send/?'))
+    expect(link).toHaveAttribute('href', expect.stringContaining('phone=3564551122'))
+  })
+
+  it('sin teléfono no muestra WhatsApp', () => {
+    render(
+      <DetalleCompatModal
+        open
+        onClose={vi.fn()}
+        cliente={{ nombre: 'Ana' }}
+        vehiculo={{ marca: 'Ford', modelo: 'KA', anio: 2016 }}
+        resultado={resultado}
+      />,
+    )
+    expect(screen.queryByRole('link', { name: /whatsapp/i })).not.toBeInTheDocument()
   })
 })
