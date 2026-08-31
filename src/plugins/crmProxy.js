@@ -86,6 +86,24 @@ export function crmProxyPlugin({
         await handleSyncLegacy(req, shim)
       })
 
+      server.middlewares.use('/api/crm/seed-usuarios', async (req, res) => {
+        const { handleSeedUsuarios } = await import('../../api/crm/seed-usuarios.js')
+        const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
+        const shim = {
+          setHeader: (k, v) => res.setHeader(k, v),
+          status: (c) => {
+            res.statusCode = c
+            return shim
+          },
+          json: (b) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(b))
+          },
+          end: (b) => res.end(b),
+        }
+        await handleSeedUsuarios({ ...req, body }, shim)
+      })
+
       server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
         if (!crmExtApiToken) {
           return sendJson(res, 501, {

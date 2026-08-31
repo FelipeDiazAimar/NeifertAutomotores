@@ -21,6 +21,9 @@ dist-ssr
 # Capturas del CRM viejo (contienen credenciales/tokens reales — nunca commitear)
 scraping/
 
+# Inputs locales de scripts (contraseñas de seed, etc. — nunca commitear)
+scripts/*.local.json
+
 # Editor / OS
 .DS_Store
 .vscode/*
