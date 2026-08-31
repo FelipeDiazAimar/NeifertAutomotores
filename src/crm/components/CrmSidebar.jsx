@@ -1,5 +1,5 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Car, Users, ListTodo, LogOut, KeyRound } from 'lucide-react'
+import { LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useTareasPendientesHoy } from '@/crm/hooks/useTareas'
@@ -8,6 +8,7 @@ import ThemeToggle from '@/components/common/ThemeToggle'
 import { cn } from '@/lib/cn'
 
 const NAV = [
+  { to: '/crm', label: 'Panel', icon: LayoutDashboard, end: true },
   { to: '/crm/clientes', label: 'Clientes', icon: Users },
   { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas' },
   { to: '/crm/vehiculos', label: 'Vehículos', icon: Car },
@@ -25,15 +26,16 @@ export default function CrmSidebar({ onNavigate }) {
 
   return (
     <div className="flex h-full flex-col gap-6 p-5">
-      <NavLink to="/crm/vehiculos" onClick={onNavigate} className="px-2 pt-2" aria-label="CRM Neifert">
+      <NavLink to="/crm" onClick={onNavigate} className="px-2 pt-2" aria-label="CRM Neifert">
         <Logo />
       </NavLink>
 
       <nav className="flex flex-col gap-1">
-        {NAV.map(({ to, label, icon: Icon, badge }) => (
+        {NAV.map(({ to, label, icon: Icon, badge, end }) => (
           <NavLink
             key={to}
             to={to}
+            end={end}
             onClick={onNavigate}
             className={({ isActive }) =>
               cn(

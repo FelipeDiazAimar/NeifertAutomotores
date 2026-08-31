@@ -24,4 +24,10 @@ describe('CrmSidebar', () => {
     render(<MemoryRouter><CrmSidebar /></MemoryRouter>)
     expect(screen.getByRole('link', { name: /tareas/i })).not.toHaveTextContent(/\d/)
   })
+
+  it('el primer ítem es Panel (dashboard)', () => {
+    pendientes.mockReturnValue({ data: 0 })
+    render(<MemoryRouter><CrmSidebar /></MemoryRouter>)
+    expect(screen.getByRole('link', { name: /panel/i })).toBeInTheDocument()
+  })
 })

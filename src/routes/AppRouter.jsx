@@ -1,5 +1,5 @@
 import { lazy } from 'react'
-import { Routes, Route, Navigate } from 'react-router-dom'
+import { Routes, Route } from 'react-router-dom'
 import PublicLayout from '@/components/layout/PublicLayout'
 import AdminLayout from '@/components/layout/AdminLayout'
 import ScrollToTop from '@/components/common/ScrollToTop'
@@ -36,6 +36,7 @@ const ClientesListPage = lazy(() => import('@/crm/pages/ClientesListPage'))
 const ClienteDetallePage = lazy(() => import('@/crm/pages/ClienteDetallePage'))
 const ClienteEditarPage = lazy(() => import('@/crm/pages/ClienteEditarPage'))
 const TareasListPage = lazy(() => import('@/crm/pages/TareasListPage'))
+const DashboardPage = lazy(() => import('@/crm/pages/DashboardPage'))
 const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
 
 export default function AppRouter() {
@@ -78,7 +79,7 @@ export default function AppRouter() {
       <Route path="/crm/login" element={<CrmLoginPage />} />
       <Route element={<CrmProtectedRoute />}>
         <Route element={<CrmLayout />}>
-          <Route path="/crm" element={<Navigate to="/crm/clientes" replace />} />
+          <Route path="/crm" element={<DashboardPage />} />
           <Route path="/crm/clientes" element={<ClientesListPage />} />
           <Route path="/crm/clientes/:id" element={<ClienteDetallePage />} />
           <Route path="/crm/clientes/:id/editar" element={<ClienteEditarPage />} />
