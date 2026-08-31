@@ -135,7 +135,7 @@ export default function VehiculoDetallePage() {
         </TabsContent>
 
         <TabsContent value="historial" className="pt-4">
-          <HistorialTimeline vehiculoId={id} />
+          <HistorialTimeline entidad="vehiculo" entidadId={id} />
         </TabsContent>
       </Tabs>
     </div>

@@ -1,8 +1,8 @@
 import { formatDistanceToNow } from 'date-fns'
 import { es } from 'date-fns/locale'
-import { Plus, Pencil, ArrowRight, ClipboardCheck, FileText, Archive, Image as ImageIcon, Circle } from 'lucide-react'
+import { Plus, Pencil, ArrowRight, ClipboardCheck, FileText, Archive, Image as ImageIcon, MessageCircle, Handshake, Circle } from 'lucide-react'
 import Spinner from '@/components/common/Spinner'
-import { useEventosVehiculo } from '@/crm/hooks/useEventosVehiculo'
+import { useEventos } from '@/crm/hooks/useEventos'
 import { textoEvento } from '@/crm/lib/textoEvento'
 
 const ICONO = {
@@ -13,10 +13,12 @@ const ICONO = {
   gestoria: FileText,
   archivado: Archive,
   foto: ImageIcon,
+  contacto: MessageCircle,
+  venta: Handshake,
 }
 
-export default function HistorialTimeline({ vehiculoId }) {
-  const { data: eventos = [], isLoading } = useEventosVehiculo(vehiculoId)
+export default function HistorialTimeline({ entidad = 'vehiculo', entidadId }) {
+  const { data: eventos = [], isLoading } = useEventos(entidad, entidadId)
 
   if (isLoading) {
     return (

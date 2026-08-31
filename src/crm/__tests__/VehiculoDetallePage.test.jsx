@@ -21,7 +21,7 @@ vi.mock('../hooks/useGestoria.js', () => ({
   useGestoria: () => ({ data: { estado: 'sin_iniciar' }, isLoading: false }),
   useGestoriaMutations: () => ({ guardarCampos: { mutate: vi.fn() } }),
 }))
-vi.mock('../hooks/useEventosVehiculo.js', () => ({ useEventosVehiculo: () => ({ data: [], isLoading: false }) }))
+vi.mock('../hooks/useEventos.js', () => ({ useEventos: () => ({ data: [], isLoading: false }) }))
 vi.mock('../hooks/useCrmPerfil.js', () => ({ useCrmPerfil: () => ({ id: 'u1', esAdmin: false }) }))
 vi.mock('../hooks/useCrmUsuarios.js', () => ({ useCrmUsuarios: () => ({ data: [] }) }))
 vi.mock('../components/FotosUploader.jsx', () => ({ default: () => <div>fotos</div> }))

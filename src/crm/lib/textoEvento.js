@@ -17,6 +17,10 @@ export function textoEvento(ev) {
       return `${quien} ${d.archivado === false ? 'desarchivó' : 'archivó'} el vehículo`
     case 'foto':
       return `${quien} agregó una foto`
+    case 'contacto':
+      return `${quien}: ${d.texto ?? 'contacto'}`
+    case 'venta':
+      return `${quien} registró la venta`
     default:
       return `${quien} — ${ev.tipo}`
   }

@@ -22,7 +22,7 @@ export function usePeritajeMutations(vehiculoId) {
   const qc = useQueryClient()
   const invalidar = () => {
     qc.invalidateQueries({ queryKey: ['crm', 'peritajes', vehiculoId] })
-    qc.invalidateQueries({ queryKey: ['crm', 'eventos', vehiculoId] })
+    qc.invalidateQueries({ queryKey: ['crm', 'eventos', 'vehiculo', vehiculoId] })
   }
 
   const crear = useMutation({

@@ -5,7 +5,7 @@ import HistorialTimeline from '../components/HistorialTimeline.jsx'
 import { textoEvento } from '../lib/textoEvento.js'
 
 const mockUse = vi.fn()
-vi.mock('../hooks/useEventosVehiculo.js', () => ({ useEventosVehiculo: () => mockUse() }))
+vi.mock('../hooks/useEventos.js', () => ({ useEventos: () => mockUse() }))
 
 describe('textoEvento', () => {
   it('cambio_estado incluye de y a', () => {

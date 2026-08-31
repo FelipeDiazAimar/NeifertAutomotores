@@ -1,10 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
-import { listarDeVehiculo } from '@/crm/services/eventos.service'
+import { useEventos } from './useEventos.js'
 
-export function useEventosVehiculo(vehiculoId) {
-  return useQuery({
-    queryKey: ['crm', 'eventos', vehiculoId],
-    queryFn: () => listarDeVehiculo(vehiculoId),
-    enabled: Boolean(vehiculoId),
-  })
-}
+/** Wrapper histórico — el historial de un vehículo. */
+export const useEventosVehiculo = (vehiculoId) => useEventos('vehiculo', vehiculoId)

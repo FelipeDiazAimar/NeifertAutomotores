@@ -19,7 +19,7 @@ export function useGestoriaMutations(vehiculoId) {
     mutationFn: (parche) => svc.guardarCampos(vehiculoId, parche, autorId),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['crm', 'gestoria', vehiculoId] })
-      qc.invalidateQueries({ queryKey: ['crm', 'eventos', vehiculoId] })
+      qc.invalidateQueries({ queryKey: ['crm', 'eventos', 'vehiculo', vehiculoId] })
       qc.invalidateQueries({ queryKey: ['crm', 'vehiculos'] })
     },
     onError: (e) => toast.error(e.message),

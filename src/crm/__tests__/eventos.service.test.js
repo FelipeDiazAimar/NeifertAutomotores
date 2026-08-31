@@ -9,7 +9,7 @@ vi.mock('@/services/supabaseClient', () => ({
   },
 }))
 
-const { registrar, listarDeVehiculo } = await import('../services/eventos.service.js')
+const { registrar, listarDeVehiculo, listarDeEntidad } = await import('../services/eventos.service.js')
 
 describe('eventos.service', () => {
   beforeEach(() => {
@@ -35,6 +35,17 @@ describe('eventos.service', () => {
       ['eq', 'entidad', 'vehiculo'],
       ['eq', 'entidad_id', 'abc'],
       ['order', 'creado_en', { ascending: false }],
+    ]))
+  })
+
+  it('listarDeEntidad filtra por la entidad pasada', async () => {
+    const { client, calls } = makeSupabase({ 'select:eventos': { data: [], error: null } })
+    holder.client = client
+    await listarDeEntidad('cliente', 'c1')
+    const call = calls.find((c) => c.table === 'eventos')
+    expect(call.filters).toEqual(expect.arrayContaining([
+      ['eq', 'entidad', 'cliente'],
+      ['eq', 'entidad_id', 'c1'],
     ]))
   })
 })

@@ -14,16 +14,17 @@ export async function registrar({ entidad, entidadId, tipo, datos = {}, usuarioI
   if (error) throw error
 }
 
-/** Historial completo de un vehículo (incluye peritajes y gestoría, que
- *  registran bajo entidad='vehiculo'). */
-export async function listarDeVehiculo(vehiculoId) {
+/** Historial de una entidad (vehículo o cliente), orden descendente. */
+export async function listarDeEntidad(entidad, id) {
   const { data, error } = await supabase
     .schema('crm')
     .from('eventos')
     .select('id, tipo, datos, usuario_id, creado_en, usuario:usuarios(nombre)')
-    .eq('entidad', 'vehiculo')
-    .eq('entidad_id', String(vehiculoId))
+    .eq('entidad', entidad)
+    .eq('entidad_id', String(id))
     .order('creado_en', { ascending: false })
   if (error) throw error
   return data ?? []
 }
+
+export const listarDeVehiculo = (vehiculoId) => listarDeEntidad('vehiculo', vehiculoId)
