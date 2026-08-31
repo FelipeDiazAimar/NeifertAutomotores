@@ -61,39 +61,44 @@ export default function TareaFilters() {
         )}
       </div>
 
-      <div className="max-w-xs">
-        <Select
-          label="Asignado a"
-          options={opcionesAsignado}
-          value={filtros.asignadoA}
-          onChange={(v) => setFiltro('asignadoA', v)}
-        />
-      </div>
-
-      <div>
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Prioridad</p>
-        <div className="flex flex-wrap gap-1.5">
-          {PRIORIDADES.map((p) => (
-            <Chip key={p.id} activo={filtros.prioridad.includes(p.id)} onClick={() => togglePrioridad(p.id)}>
-              {p.label}
-            </Chip>
-          ))}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <Select
+            label="Asignado a"
+            options={opcionesAsignado}
+            value={filtros.asignadoA}
+            onChange={(v) => setFiltro('asignadoA', v)}
+          />
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-4 text-xs text-ink-2">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filtros.soloConCliente} onChange={(e) => setFiltro('soloConCliente', e.target.checked)} />
-          Solo con cliente
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={incluirHechas} onChange={(e) => setIncluirHechas(e.target.checked)} />
-          Incluir hechas
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={incluirArchivadas} onChange={(e) => setIncluirArchivadas(e.target.checked)} />
-          Incluir archivadas
-        </label>
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Prioridad</p>
+          <div className="flex flex-wrap gap-1.5">
+            {PRIORIDADES.map((p) => (
+              <Chip key={p.id} activo={filtros.prioridad.includes(p.id)} onClick={() => togglePrioridad(p.id)}>
+                {p.label}
+              </Chip>
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Mostrar</p>
+          <div className="flex flex-col gap-2 text-xs text-ink-2">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtros.soloConCliente} onChange={(e) => setFiltro('soloConCliente', e.target.checked)} />
+              Solo con cliente
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={incluirHechas} onChange={(e) => setIncluirHechas(e.target.checked)} />
+              Incluir hechas
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={incluirArchivadas} onChange={(e) => setIncluirArchivadas(e.target.checked)} />
+              Incluir archivadas
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   )

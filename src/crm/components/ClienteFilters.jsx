@@ -50,41 +50,46 @@ export default function ClienteFilters() {
         )}
       </div>
 
-      <div>
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Estado</p>
-        <div className="flex flex-wrap gap-1.5">
-          {STATUS.map((s) => (
-            <Chip key={s.id} activo={filtros.status.includes(s.id)} onClick={() => toggleEn('status', s.id)}>
-              {s.label}
-            </Chip>
-          ))}
+      <div className="grid gap-4 md:grid-cols-3">
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Estado</p>
+          <div className="flex flex-wrap gap-1.5">
+            {STATUS.map((s) => (
+              <Chip key={s.id} activo={filtros.status.includes(s.id)} onClick={() => toggleEn('status', s.id)}>
+                {s.label}
+              </Chip>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div>
-        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Canal</p>
-        <div className="flex flex-wrap gap-1.5">
-          {CANAL_OPCIONES.map((c) => (
-            <Chip key={c.id} activo={filtros.canal.includes(c.id)} onClick={() => toggleEn('canal', c.id)}>
-              {c.label}
-            </Chip>
-          ))}
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Canal</p>
+          <div className="flex flex-wrap gap-1.5">
+            {CANAL_OPCIONES.map((c) => (
+              <Chip key={c.id} activo={filtros.canal.includes(c.id)} onClick={() => toggleEn('canal', c.id)}>
+                {c.label}
+              </Chip>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="flex flex-wrap items-center gap-4 text-xs text-ink-2">
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filtros.conAutoEntrega} onChange={(e) => setFiltro('conAutoEntrega', e.target.checked)} />
-          Con auto en entrega
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filtros.interesCeroKm} onChange={(e) => setFiltro('interesCeroKm', e.target.checked)} />
-          Interés 0 km
-        </label>
-        <label className="flex items-center gap-2">
-          <input type="checkbox" checked={filtros.incluirArchivados} onChange={(e) => setFiltro('incluirArchivados', e.target.checked)} />
-          Incluir archivados
-        </label>
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Mostrar</p>
+          <div className="flex flex-col gap-2 text-xs text-ink-2">
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtros.conAutoEntrega} onChange={(e) => setFiltro('conAutoEntrega', e.target.checked)} />
+              Con auto en entrega
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtros.interesCeroKm} onChange={(e) => setFiltro('interesCeroKm', e.target.checked)} />
+              Interés 0 km
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="checkbox" checked={filtros.incluirArchivados} onChange={(e) => setFiltro('incluirArchivados', e.target.checked)} />
+              Incluir archivados
+            </label>
+          </div>
+        </div>
       </div>
     </div>
   )
