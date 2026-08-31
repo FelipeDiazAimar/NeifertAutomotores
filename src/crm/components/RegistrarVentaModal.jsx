@@ -17,12 +17,12 @@ export default function RegistrarVentaModal({ clienteId, open, onClose }) {
     pageSize: 200,
     incluirArchivados: false,
   })
-  const todos = data?.filas ?? []
   const filtrados = useMemo(() => {
+    const todos = data?.filas ?? []
     const t = q.trim().toLowerCase()
     if (!t) return todos
     return todos.filter((v) => `${v.marca} ${v.modelo} ${v.patente ?? ''}`.toLowerCase().includes(t))
-  }, [todos, q])
+  }, [data, q])
 
   function confirmar() {
     if (!sel) return
