@@ -18,6 +18,15 @@ vi.mock('../hooks/useClientes.js', () => ({
 vi.mock('../hooks/useEventos.js', () => ({ useEventos: () => ({ data: [], isLoading: false }) }))
 vi.mock('../hooks/useCrmPerfil.js', () => ({ useCrmPerfil: () => ({ id: 'u1', esAdmin: false }) }))
 vi.mock('../hooks/useVehiculos.js', () => ({ useVehiculos: () => ({ data: { filas: [] }, isLoading: false }) }))
+vi.mock('../hooks/useTareas.js', () => ({
+  useTareas: () => ({ data: [], isLoading: false }),
+  useTareaMutations: () => ({
+    toggleDone: { mutate: vi.fn() }, archivar: { mutate: vi.fn() }, eliminar: { mutate: vi.fn() },
+    crear: { mutate: vi.fn(), isPending: false }, actualizar: { mutate: vi.fn(), isPending: false },
+  }),
+}))
+vi.mock('../hooks/useCrmUsuarios.js', () => ({ useCrmUsuarios: () => ({ data: [] }) }))
+vi.mock('lenis/react', () => ({ useLenis: () => null }))
 
 const { default: ClienteDetallePage } = await import('../pages/ClienteDetallePage.jsx')
 
@@ -32,9 +41,9 @@ function renderPage() {
 }
 
 describe('ClienteDetallePage', () => {
-  it('muestra las 5 pestañas y Datos por defecto', () => {
+  it('muestra las 6 pestañas y Datos por defecto', () => {
     renderPage()
-    for (const t of ['Datos', 'Intereses', 'Autos en entrega', 'Seguimiento', 'Historial']) {
+    for (const t of ['Datos', 'Intereses', 'Autos en entrega', 'Seguimiento', 'Tareas', 'Historial']) {
       expect(screen.getByRole('tab', { name: t })).toBeInTheDocument()
     }
     expect(screen.getAllByText('Ana López').length).toBeGreaterThan(0)

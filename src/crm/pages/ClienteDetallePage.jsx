@@ -9,6 +9,7 @@ import FichaCliente from '@/crm/components/FichaCliente'
 import InteresesCliente from '@/crm/components/InteresesCliente'
 import AutosEntregaCliente from '@/crm/components/AutosEntregaCliente'
 import SeguimientoCliente from '@/crm/components/SeguimientoCliente'
+import TareasDeCliente from '@/crm/components/TareasDeCliente'
 import RegistrarVentaModal from '@/crm/components/RegistrarVentaModal'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
 
@@ -42,6 +43,7 @@ export default function ClienteDetallePage() {
           <TabsTrigger value="intereses">Intereses</TabsTrigger>
           <TabsTrigger value="autos">Autos en entrega</TabsTrigger>
           <TabsTrigger value="seguimiento">Seguimiento</TabsTrigger>
+          <TabsTrigger value="tareas">Tareas</TabsTrigger>
           <TabsTrigger value="historial">Historial</TabsTrigger>
         </TabsList>
 
@@ -66,6 +68,10 @@ export default function ClienteDetallePage() {
 
         <TabsContent value="seguimiento" className="pt-4">
           <SeguimientoCliente clienteId={id} />
+        </TabsContent>
+
+        <TabsContent value="tareas" className="pt-4">
+          <TareasDeCliente clienteId={id} />
         </TabsContent>
 
         <TabsContent value="historial" className="pt-4">
