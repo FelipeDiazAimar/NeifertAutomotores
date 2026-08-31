@@ -100,5 +100,21 @@ r = await rest(cristian, `clientes?id=eq.${cli.id}`, { method: 'DELETE' })
 const cliBorradasAdmin = await r.json().catch(() => [])
 ok(Array.isArray(cliBorradasAdmin) && cliBorradasAdmin.length === 1, `admin DELETE cliente → 1 fila (limpieza)`)
 
+// ---- Tareas -------------------------------------------------------------
+r = await rest(bruno, 'tareas', { method: 'POST', body: JSON.stringify({ titulo: 'TEST RLS', fecha: '2026-09-01' }) })
+ok(r.status === 201, `vendedor INSERT tarea → ${r.status} (esperado 201)`)
+const tar = (await r.json())[0]
+
+r = await rest(bruno, `tareas?id=eq.${tar.id}`, { method: 'PATCH', body: JSON.stringify({ done: true }) })
+ok(r.status === 200, `vendedor PATCH tarea → ${r.status} (esperado 200)`)
+
+r = await rest(bruno, `tareas?id=eq.${tar.id}`, { method: 'DELETE' })
+const tarBorradasVendedor = await r.json().catch(() => [])
+ok(Array.isArray(tarBorradasVendedor) && tarBorradasVendedor.length === 0, `vendedor DELETE tarea → 0 filas (RLS bloquea)`)
+
+r = await rest(cristian, `tareas?id=eq.${tar.id}`, { method: 'DELETE' })
+const tarBorradasAdmin = await r.json().catch(() => [])
+ok(Array.isArray(tarBorradasAdmin) && tarBorradasAdmin.length === 1, `admin DELETE tarea → 1 fila (limpieza)`)
+
 console.log(fallos === 0 ? '\nTodos los checks PASS' : `\n${fallos} FALLARON`)
 process.exit(fallos === 0 ? 0 : 1)
