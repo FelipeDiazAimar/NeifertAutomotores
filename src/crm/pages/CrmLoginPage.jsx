@@ -2,9 +2,9 @@ import { useState } from 'react'
 import { useNavigate, useLocation, Link } from 'react-router-dom'
 import { supabase, isSupabaseConfigured } from '@/services/supabaseClient'
 import { emailDeUsuario } from '@/crm/lib/authEmail'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import Button from '@/components/common/Button'
+import Input from '@/components/common/Input'
+import GlassCard from '@/components/common/GlassCard'
 import '@/crm/styles/tokens.css'
 
 export default function CrmLoginPage() {
@@ -46,45 +46,44 @@ export default function CrmLoginPage() {
     <div className="crm-root grid min-h-screen place-items-center p-4">
       <div className="w-full max-w-sm">
         <div className="mb-8 text-center">
-          <div className="text-2xl font-semibold tracking-tight">Neifert CRM</div>
-          <div className="mt-1 text-sm text-[var(--crm-muted)]">Gestión automotor</div>
+          <div className="font-display text-2xl font-bold text-ink">
+            Neifert<span className="text-neifert">.</span>CRM
+          </div>
+          <div className="mt-1 text-[11px] uppercase tracking-wider text-ink-3">
+            Sistema de gestión automotor
+          </div>
         </div>
 
-        <form onSubmit={onSubmit} className="space-y-4 rounded-xl border border-[var(--crm-line)] bg-[var(--crm-surface)] p-6">
+        <GlassCard as="form" onSubmit={onSubmit} className="space-y-4 p-6">
+          <h1 className="font-display text-lg font-bold text-ink">Iniciar sesión</h1>
+
           {error && (
-            <p className="rounded-md bg-[var(--crm-falta)]/10 px-3 py-2 text-sm text-[var(--crm-falta)]">
+            <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">
               {error}
             </p>
           )}
 
-          <div className="space-y-1.5">
-            <Label htmlFor="usuario">Usuario</Label>
-            <Input
-              id="usuario"
-              autoComplete="username"
-              value={usuario}
-              onChange={(e) => setUsuario(e.target.value)}
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="password">Contraseña</Label>
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
+          <Input
+            label="Usuario"
+            autoComplete="username"
+            value={usuario}
+            onChange={(e) => setUsuario(e.target.value)}
+            autoFocus
+          />
+          <Input
+            label="Contraseña"
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
 
           <Button type="submit" className="w-full" disabled={enviando}>
             {enviando ? 'Ingresando…' : 'Ingresar'}
           </Button>
-        </form>
+        </GlassCard>
 
-        <p className="mt-4 text-center text-xs text-[var(--crm-muted)]">
+        <p className="mt-4 text-center text-xs text-ink-3">
           ¿Problemas para entrar? Contactá al administrador.{' '}
           <Link to="/" className="underline">Ver sitio</Link>
         </p>

@@ -1,10 +1,9 @@
-/* Theme de base-nova (shadcn) para el CRM. Los @theme inline son globales
-   (Tailwind los necesita para generar bg-primary, text-muted-foreground, etc.)
-   pero son inertes para el sitio público, que nunca usa esas clases. Los
-   VALORES de las vars viven scopeados en .crm-root (ver tokens.css). */
+/* Theme para los 3 primitivos base-nova que usa el CRM (Tabs, DropdownMenu,
+   Sheet). Los @theme inline son globales (Tailwind los necesita para generar
+   bg-primary, text-muted-foreground, etc.) pero son inertes para el sitio, que
+   nunca usa esas clases. Los VALORES viven scopeados en .crm-root (tokens.css)
+   y ahí se mapean a los --c-* del sistema glass del sitio. */
 @import 'tw-animate-css';
-@import '@fontsource-variable/geist';
-@import '@fontsource-variable/geist-mono';
 
 @theme inline {
   --color-background: var(--background);

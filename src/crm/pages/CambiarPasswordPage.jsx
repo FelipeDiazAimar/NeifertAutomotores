@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { supabase } from '@/services/supabaseClient'
-import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
+import Button from '@/components/common/Button'
+import Input from '@/components/common/Input'
+import GlassCard from '@/components/common/GlassCard'
 
 export default function CambiarPasswordPage() {
   const [nueva, setNueva] = useState('')
@@ -36,25 +36,31 @@ export default function CambiarPasswordPage() {
 
   return (
     <div className="mx-auto max-w-sm">
-      <h1 className="text-xl font-semibold tracking-tight">Cambiar contraseña</h1>
-      <form onSubmit={onSubmit} className="mt-6 space-y-4">
+      <h1 className="font-display text-xl font-bold text-ink">Cambiar contraseña</h1>
+      <GlassCard as="form" onSubmit={onSubmit} className="mt-6 space-y-4 p-6">
         {error && (
-          <p className="rounded-md bg-[var(--crm-falta)]/10 px-3 py-2 text-sm text-[var(--crm-falta)]">
+          <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">
             {error}
           </p>
         )}
-        <div className="space-y-1.5">
-          <Label htmlFor="nueva">Contraseña nueva</Label>
-          <Input id="nueva" type="password" autoComplete="new-password" value={nueva} onChange={(e) => setNueva(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <Label htmlFor="repetir">Repetir contraseña</Label>
-          <Input id="repetir" type="password" autoComplete="new-password" value={repetir} onChange={(e) => setRepetir(e.target.value)} />
-        </div>
+        <Input
+          label="Contraseña nueva"
+          type="password"
+          autoComplete="new-password"
+          value={nueva}
+          onChange={(e) => setNueva(e.target.value)}
+        />
+        <Input
+          label="Repetir contraseña"
+          type="password"
+          autoComplete="new-password"
+          value={repetir}
+          onChange={(e) => setRepetir(e.target.value)}
+        />
         <Button type="submit" disabled={enviando}>
           {enviando ? 'Guardando…' : 'Guardar'}
         </Button>
-      </form>
+      </GlassCard>
     </div>
   )
 }

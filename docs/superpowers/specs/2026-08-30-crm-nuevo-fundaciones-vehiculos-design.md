@@ -416,91 +416,71 @@ export const PERITAJE_SECCIONES = [
 
 ## 6. Dirección visual
 
-**Subject:** herramienta de piso de venta de una automotora de San Francisco
-(Córdoba). Uso rápido y diario desde la compu del salón, el celular en la playa
-de autos, o una tablet en el taller cargando el peritaje. Es un instrumento de
-medición y seguimiento, no una pieza de marketing.
+**Revisión (post Plan 1):** el dueño prefiere la estética que ya tiene el panel
+`/admin` (ver `/admin/catalogo`) — el **sistema glass del sitio**, no una capa
+Apple-minimal aparte. El CRM se ve como una extensión natural de `/admin`.
 
-**Committed a "Apple minimalista"** (el brief manda), ejecutado con precisión:
+### Sistema de diseño: reusar el del sitio
 
-### Tokens (`src/crm/styles/tokens.css`)
+- **Tokens `--c-*`** (definidos en `src/styles/index.css`, dark por clase `.dark`,
+  key `nf-theme`, script anti-FOUC ya existente): `--c-bg`, `--c-surface`,
+  `--c-surface-solid`, `--c-surface-popover`, `--c-line`, `--c-border`, `--c-text`
+  (`text-ink`), `--c-text-2` (`text-ink-2`), `--c-text-3` (`text-ink-3`),
+  `--c-shadow`. Acento: `--color-neifert` (`#be1e2d`, `text-neifert`/`bg-neifert`).
+  Semánticos: `--color-success` (`text-success`), `--color-amber` (`text-amber`).
+- **Utilidades glass** existentes: `.glass`, `.glass-nav`, `.glass-popover`,
+  `.field-glass`, `.shadow-glass`, `.shadow-glow-red`. Radios `rounded-2xl` /
+  `rounded-[20px]`. Blur + saturación.
+- **Tipografía**: `font-sans` = Inter (cuerpo), `font-display` = Sora (títulos
+  `h1..h4`, ya aplicado por `@layer base`). **No Geist.**
+- **Tema**: `src/store/useUiStore.js` (`theme` / `toggleTheme`) — reusar tal cual.
+  El toggle del CRM reusa `src/components/common/ThemeToggle.jsx`.
 
-El sitio ya usa **Tailwind v4 CSS-first** con dark mode por **clase `.dark` en
-`<html>`** (`@custom-variant dark`), key de `localStorage` `nf-theme`, y un script
-anti-FOUC en `index.html`. El CRM **reusa ese mecanismo** — no inventa `data-theme`
-ni otra key. `tokens.css` del CRM define variables `--crm-*` propias (scope: se
-importan en `CrmLayout`), en `:root` y bajo `.dark`, para no chocar con los
-`--c-*` glassy del sitio público:
+### Componentes: reusar `src/components/common/*`
 
-```
-/* src/crm/styles/tokens.css */
-:root {
-  --crm-bg:      #FBFBFD;
-  --crm-surface: #FFFFFF;
-  --crm-ink:     #1D1D1F;
-  --crm-muted:   #86868B;
-  --crm-line:    #E8E8ED;
-  --crm-accent:  #0B6BCB;   /* azul señal, tipo instrumento */
-  --crm-ok:      #1A7F52;
-  --crm-obs:     #B0740A;
-  --crm-falta:   #C1352B;
-  --crm-radius:  10px;
-}
-.dark {
-  --crm-bg:      #0A0A0C;
-  --crm-surface: #161618;
-  --crm-ink:     #F5F5F7;
-  --crm-muted:   #8E8E93;
-  --crm-line:    #2A2A2E;
-  --crm-accent:  #3B93E6;
-  --crm-ok:      #34B27B;
-  --crm-obs:     #D2963A;
-  --crm-falta:   #E0564B;
-}
-```
-Colores semánticos desaturados (no semáforo chillón). El estado de tema **ya
-existe**: `src/store/useUiStore.js` (`theme` / `toggleTheme` / `setTheme`, clase
-`.dark` + key `nf-theme` + script anti-FOUC en `index.html`). El CRM **reusa
-`useUiStore` tal cual** — no hay lógica de tema nueva. El `ThemeToggle` del CRM es
-solo un botón con estética shadcn cableado a `useUiStore.toggleTheme` (o se reusa
-`src/components/common/ThemeToggle.jsx` directamente).
+`Button` (variants `primary`/`glass`/`ghost`/`outline`), `Input` (glass + label +
+error, compat RHF), `Select` (glass propio, `options: [{id,label}]`), `Badge`
+(`red`/`green`/`amber`/`neutral`), `Modal`, `Pagination`, `Spinner`, `GlassCard`,
+`DatePicker`. El CRM importa de `@/components/common/*`.
 
-### Tipografía
+**base-nova (shadcn)** queda instalado pero se usa **solo** para los 3 primitivos
+sin equivalente en `common/*`, re-estilados a glass:
+- **Tabs** — pestañas de la ficha del vehículo (Resumen · Peritaje · Gestoría · Historial)
+- **DropdownMenu** — acciones de fila (cambiar estado, editar, archivar)
+- **Sheet** — sidebar en móvil
 
-- **Geist Sans** — UI y títulos. Pesos 400 / 500 / 600. Sin serif de exhibición.
-- **Geist Mono** — todo valor medido: patente, km, precios, IDs, códigos DTC,
-  fechas en tablas. Que los números "se sientan medidos" es fiel a un peritaje.
-- Escala: 12 / 13 / 14 / 16 / 20 / 28. Ambas fuentes por Google Fonts.
+`src/crm/styles/tokens.css` deja de definir una paleta `--crm-*` propia: solo
+**mapea las vars de base-nova a los `--c-*`** para que esos 3 primitivos hereden
+el glass (`--background: var(--c-surface-solid)`, `--foreground: var(--c-text)`,
+`--primary: #be1e2d`, `--border: var(--c-line)`, `--popover: var(--c-surface-popover)`,
+`--radius: 1rem`, etc.), scopeado a `.crm-root`. `shadcn-theme.css` deja de
+importar Geist; mantiene `tw-animate-css` y los `@theme inline`.
 
 ### Layout
 
-- Sidebar fija angosta (icono + label, colapsable a solo icono), `--surface` con
-  borde hairline. En móvil → `Sheet` de shadcn disparado por un botón en la topbar.
-- Contenido en `max-width` generoso, aire amplio, separadores `1px var(--line)`,
-  cero sombras pesadas, `--radius` 10px, foco de teclado visible siempre.
-- Densidad funcional: filas de tabla ~44px (cómodas, no el aire de una landing).
+- **Sidebar** ≥md: `<aside>` con `.glass` / borde `--c-line`, ~w-60, ítems
+  `NavLink` estilo `/admin` (activo = `.glass text-neifert`, inactivo =
+  `text-ink-2 hover:text-ink`), `rounded-2xl px-4 py-3`. Abajo: `ThemeToggle` +
+  card glass con nombre/rol + "Salir".
+- **Móvil**: topbar `.glass-nav` + botón menú → `Sheet` con la misma sidebar.
+- **Contenido**: `max-w-[1440px]`, `px-4 md:px-6`, aire generoso. Títulos de
+  página en `font-display`.
+- **Tablas** (lista de vehículos): patrón de `LeadTable` — filas glass, no un
+  `<table>` pesado; en móvil → cards (patrón `LeadCard` / `AdminCatalogPage`).
 
-### Signature
+### Elemento distintivo
 
-1. **La ficha del vehículo** como página de producto: hero de foto grande (o
-   placa-placeholder con la patente en Mono gigante), specs en fila tabular mono,
-   precio con peso de titular.
-2. **`EstadoStrip`** del peritaje: barra fina segmentada (verde/ámbar/rojo por
-   proporción de ítems) que se lee de un vistazo desde el otro lado del taller.
+**`EstadoStrip`** del peritaje: barra fina segmentada
+(`bg-success` / `bg-amber` / `bg-neifert`) por proporción `items_ok/obs/falta`, con
+`aria-label`. Se lee de un vistazo. Es el único elemento nuevo con peso visual; el
+resto es el lenguaje glass ya conocido.
 
-Todo lo demás, callado. Una sola apuesta visual, ejecutada bien.
+### Motion y piso de calidad
 
-### Motion
-
-Mínima: transición de página sutil (`framer-motion`, ya está), hover de fila
-apenas perceptible, colapso de secciones del peritaje suave. `prefers-reduced-motion`
-respetado (sin excepción).
-
-### Piso de calidad (sin anunciarlo)
-
-Responsive hasta 360px de ancho · foco de teclado visible · `reduced-motion` ·
-contraste AA en ambos temas · estados vacíos que invitan a actuar · errores que
-dicen qué pasó y cómo seguir, en la voz de la interfaz.
+`framer-motion` (ya está) para transición de página y micro-interacciones, igual
+que `/admin`. `prefers-reduced-motion` respetado. Responsive hasta 360px, foco de
+teclado visible, contraste AA en ambos temas, estados vacíos que invitan a actuar,
+errores en la voz de la interfaz.
 
 ---
 

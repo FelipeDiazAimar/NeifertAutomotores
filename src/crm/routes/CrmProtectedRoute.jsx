@@ -24,10 +24,10 @@ export default function CrmProtectedRoute() {
     return (
       <div className="crm-root grid min-h-screen place-items-center p-6 text-center">
         <div>
-          <p className="text-lg font-semibold">Tu cuenta no tiene acceso al CRM.</p>
-          <p className="mt-1 text-[var(--crm-muted)]">
-            Pedile a un administrador que te habilite.
+          <p className="font-display text-lg font-bold text-ink">
+            Tu cuenta no tiene acceso al CRM.
           </p>
+          <p className="mt-1 text-ink-3">Pedile a un administrador que te habilite.</p>
         </div>
       </div>
     )

@@ -1,13 +1,15 @@
+import GlassCard from '@/components/common/GlassCard'
+
 export default function VehiculosPlaceholderPage() {
   return (
     <div className="grid min-h-[60vh] place-items-center">
-      <div className="max-w-sm rounded-xl border border-[var(--crm-line)] bg-[var(--crm-surface)] p-8 text-center">
-        <p className="text-lg font-semibold">Módulo de vehículos</p>
-        <p className="mt-1 text-sm text-[var(--crm-muted)]">
+      <GlassCard className="max-w-sm p-8 text-center">
+        <p className="font-display text-lg font-bold text-ink">Módulo de vehículos</p>
+        <p className="mt-1 text-sm text-ink-3">
           En construcción — llega en el Plan 2 (lista, alta/edición, ficha,
           peritaje y gestoría).
         </p>
-      </div>
+      </GlassCard>
     </div>
   )
 }
