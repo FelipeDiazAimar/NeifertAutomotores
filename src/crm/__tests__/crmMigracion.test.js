@@ -17,8 +17,14 @@ describe('crm_migracion.sql', () => {
     expect(sql).toContain('into crm.gestoria')
   })
 
-  it('mapea status desconocido a baja', () => {
+  it('mapea status desconocido a baja (con trim)', () => {
     expect(sql).toMatch(/else\s+'baja'/)
     expect(sql).toContain('::crm.estado_vehiculo')
+    expect(sql).toContain("lower(trim(coalesce(v.status, '')))")
+  })
+
+  it('migra fecha_venta a crm.vehiculos', () => {
+    expect(sql).toMatch(/insert into crm\.vehiculos[^;]*fecha_venta/s)
+    expect(sql).toContain('fecha_venta = excluded.fecha_venta')
   })
 })

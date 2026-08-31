@@ -1,10 +1,9 @@
 import { useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { ArrowLeft } from 'lucide-react'
+import { useLenis } from 'lenis/react'
 import Spinner from '@/components/common/Spinner'
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs'
 import { useCliente, useClienteMutations } from '@/crm/hooks/useClientes'
-import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import FichaCliente from '@/crm/components/FichaCliente'
 import InteresesCliente from '@/crm/components/InteresesCliente'
 import AutosEntregaCliente from '@/crm/components/AutosEntregaCliente'
@@ -13,13 +12,38 @@ import TareasDeCliente from '@/crm/components/TareasDeCliente'
 import RegistrarVentaModal from '@/crm/components/RegistrarVentaModal'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
 
+const SECCIONES = [
+  { id: 'datos', label: 'Datos' },
+  { id: 'intereses', label: 'Intereses' },
+  { id: 'autos', label: 'Autos en entrega' },
+  { id: 'seguimiento', label: 'Seguimiento' },
+  { id: 'tareas', label: 'Tareas' },
+  { id: 'historial', label: 'Historial' },
+]
+
+function Seccion({ id, titulo, children }) {
+  return (
+    <section id={id} className="scroll-mt-24 space-y-3">
+      <h2 className="font-display text-lg font-bold text-ink">{titulo}</h2>
+      {children}
+    </section>
+  )
+}
+
 export default function ClienteDetallePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const lenis = useLenis()
   const { data: c, isLoading } = useCliente(id)
   const { cambiarStatus, archivar, eliminar } = useClienteMutations(id)
-  const { esAdmin } = useCrmPerfil()
   const [abrirVenta, setAbrirVenta] = useState(false)
+
+  const irA = (sid) => {
+    const el = document.getElementById(sid)
+    if (!el) return
+    if (lenis) lenis.scrollTo(el, { offset: -72 })
+    else el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }
 
   if (isLoading) {
     return (
@@ -37,47 +61,51 @@ export default function ClienteDetallePage() {
       </button>
       <h1 className="font-display text-2xl font-bold text-ink">{c.nombre}</h1>
 
-      <Tabs defaultValue="datos" className="crm-root">
-        <TabsList>
-          <TabsTrigger value="datos">Datos</TabsTrigger>
-          <TabsTrigger value="intereses">Intereses</TabsTrigger>
-          <TabsTrigger value="autos">Autos en entrega</TabsTrigger>
-          <TabsTrigger value="seguimiento">Seguimiento</TabsTrigger>
-          <TabsTrigger value="tareas">Tareas</TabsTrigger>
-          <TabsTrigger value="historial">Historial</TabsTrigger>
-        </TabsList>
+      <nav className="glass sticky top-2 z-20 flex gap-1 overflow-x-auto rounded-2xl p-1 shadow-glass">
+        {SECCIONES.map((s) => (
+          <button
+            key={s.id}
+            type="button"
+            onClick={() => irA(s.id)}
+            className="shrink-0 rounded-xl px-3 py-2 text-sm font-medium text-ink-2 transition-colors hover:bg-surface hover:text-ink"
+          >
+            {s.label}
+          </button>
+        ))}
+      </nav>
 
-        <TabsContent value="datos" className="pt-4">
+      <div className="space-y-8 pt-2">
+        <Seccion id="datos" titulo="Datos">
           <FichaCliente
             cliente={c}
-            puedeEliminar={esAdmin}
+            puedeEliminar
             onCambiarStatus={(s) => cambiarStatus.mutate({ id, de: c.status, a: s })}
             onArchivar={() => archivar.mutate(id, { onSuccess: () => navigate('/crm/clientes') })}
             onEliminar={() => eliminar.mutate(id, { onSuccess: () => navigate('/crm/clientes') })}
             onRegistrarVenta={() => setAbrirVenta(true)}
           />
-        </TabsContent>
+        </Seccion>
 
-        <TabsContent value="intereses" className="pt-4">
+        <Seccion id="intereses" titulo="Intereses">
           <InteresesCliente clienteId={id} intereses={c.intereses ?? []} />
-        </TabsContent>
+        </Seccion>
 
-        <TabsContent value="autos" className="pt-4">
+        <Seccion id="autos" titulo="Autos en entrega">
           <AutosEntregaCliente clienteId={id} autos={c.autos_entrega ?? []} />
-        </TabsContent>
+        </Seccion>
 
-        <TabsContent value="seguimiento" className="pt-4">
+        <Seccion id="seguimiento" titulo="Seguimiento">
           <SeguimientoCliente clienteId={id} />
-        </TabsContent>
+        </Seccion>
 
-        <TabsContent value="tareas" className="pt-4">
+        <Seccion id="tareas" titulo="Tareas">
           <TareasDeCliente clienteId={id} />
-        </TabsContent>
+        </Seccion>
 
-        <TabsContent value="historial" className="pt-4">
+        <Seccion id="historial" titulo="Historial">
           <HistorialTimeline entidad="cliente" entidadId={id} />
-        </TabsContent>
-      </Tabs>
+        </Seccion>
+      </div>
 
       <RegistrarVentaModal clienteId={id} open={abrirVenta} onClose={() => setAbrirVenta(false)} />
     </div>

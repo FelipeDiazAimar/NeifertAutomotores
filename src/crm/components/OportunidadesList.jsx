@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
+import { Eye } from 'lucide-react'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import CompatBar from './CompatBar'
@@ -75,7 +76,8 @@ export default function OportunidadesList({ items = [] }) {
                   )}
                   <Button
                     size="sm"
-                    variant="ghost"
+                    variant="glass"
+                    icon={Eye}
                     onClick={() => setDetalle({ cliente: c, vehiculo: v, resultado: { score, bucket, detalle: det } })}
                   >
                     Detalle

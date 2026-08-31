@@ -18,4 +18,7 @@ describe('crm_clientes_migracion.sql', () => {
   it('mapea status desconocido a activo', () => {
     expect(sql).toMatch(/else\s+'activo'/)
   })
+  it('completa el enlace recíproco crm.vehiculos.venta_cliente_id', () => {
+    expect(sql).toMatch(/update crm\.vehiculos v\s+set venta_cliente_id = c\.id/)
+  })
 })

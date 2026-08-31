@@ -78,8 +78,10 @@ drop policy if exists clientes_insert on crm.clientes;
 create policy clientes_insert on crm.clientes for insert with check (crm.es_usuario());
 drop policy if exists clientes_update on crm.clientes;
 create policy clientes_update on crm.clientes for update using (crm.es_usuario());
+-- Borrado: cualquier usuario del CRM (no solo admin).
 drop policy if exists clientes_delete_admin on crm.clientes;
-create policy clientes_delete_admin on crm.clientes for delete using (crm.mi_rol() = 'admin');
+drop policy if exists clientes_delete on crm.clientes;
+create policy clientes_delete on crm.clientes for delete using (crm.es_usuario());
 
 drop policy if exists cli_int_all on crm.cliente_intereses;
 create policy cli_int_all on crm.cliente_intereses for all using (crm.es_usuario()) with check (crm.es_usuario());

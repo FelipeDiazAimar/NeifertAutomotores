@@ -1,23 +1,28 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound } from 'lucide-react'
+import { LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound, UserCog, ShieldCheck } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useTareasPendientesHoy } from '@/crm/hooks/useTareas'
+import { useMisVistas } from '@/crm/hooks/useMisVistas'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { cn } from '@/lib/cn'
 
 const NAV = [
-  { to: '/crm', label: 'Panel', icon: LayoutDashboard, end: true },
-  { to: '/crm/clientes', label: 'Clientes', icon: Users },
-  { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas' },
-  { to: '/crm/vehiculos', label: 'Vehículos', icon: Car },
+  { to: '/crm', label: 'Panel', icon: LayoutDashboard, end: true, vista: 'panel' },
+  { to: '/crm/clientes', label: 'Clientes', icon: Users, vista: 'clientes' },
+  { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas', vista: 'tareas' },
+  { to: '/crm/vehiculos', label: 'Vehículos', icon: Car, vista: 'vehiculos' },
+  { to: '/crm/usuarios', label: 'Usuarios', icon: UserCog, vista: 'usuarios' },
+  { to: '/crm/roles', label: 'Roles', icon: ShieldCheck, vista: 'roles' },
 ]
 
 export default function CrmSidebar({ onNavigate }) {
   const navigate = useNavigate()
   const { nombre, usuario, rol } = useCrmPerfil()
   const { data: tareasHoy = 0 } = useTareasPendientesHoy()
+  const { vistas, cargando } = useMisVistas()
+  const items = cargando ? NAV : NAV.filter((n) => vistas.includes(n.vista))
 
   async function salir() {
     await supabase.auth.signOut()
@@ -31,7 +36,7 @@ export default function CrmSidebar({ onNavigate }) {
       </NavLink>
 
       <nav className="flex flex-col gap-1">
-        {NAV.map(({ to, label, icon: Icon, badge, end }) => (
+        {items.map(({ to, label, icon: Icon, badge, end }) => (
           <NavLink
             key={to}
             to={to}

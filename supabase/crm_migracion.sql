@@ -20,7 +20,7 @@ begin
     duenio_nombre, duenio_apellido, duenio_contacto,
     itv, itv_venc, consignacion, tipo_consignacion, origen,
     carpeta_completa, carpeta_con_oficio, carpeta_entregada, tiene_iva,
-    nota, estado, creado_en, actualizado_en
+    nota, estado, fecha_venta, creado_en, actualizado_en
   )
   select
     v.id,
@@ -35,12 +35,13 @@ begin
     coalesce(v.carpeta_completa, false), coalesce(v.carpeta_con_oficio, false),
     coalesce(v.carpeta_entregada, false), coalesce(v.tiene_iva, false),
     v.nota,
-    (case lower(coalesce(v.status, ''))
+    (case lower(trim(coalesce(v.status, '')))
        when 'disponible' then 'disponible'
        when 'reservado'  then 'reservado'
        when 'vendido'    then 'vendido'
        else 'baja'
      end)::crm.estado_vehiculo,
+    v.fecha_venta,
     coalesce(v.created_at, now()),
     coalesce(v.updated_at, now())
   from crm_legacy.vehiculos v
@@ -58,6 +59,7 @@ begin
     carpeta_con_oficio = excluded.carpeta_con_oficio,
     carpeta_entregada = excluded.carpeta_entregada, tiene_iva = excluded.tiene_iva,
     nota = excluded.nota, estado = excluded.estado,
+    fecha_venta = excluded.fecha_venta,
     actualizado_en = excluded.actualizado_en;
 
   -- ---- GESTORÍA ---------------------------------------------------------

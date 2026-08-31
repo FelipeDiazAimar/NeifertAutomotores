@@ -17,8 +17,8 @@ describe('crm_clientes_schema.sql', () => {
     expect(sql).toContain('add column if not exists fecha_venta')
   })
 
-  it('RLS: delete solo admin en clientes', () => {
-    expect(sql).toMatch(/create policy[^;]+on crm\.clientes[^;]+for delete[^;]+admin/s)
+  it('RLS: delete en clientes habilitado para cualquier usuario del CRM', () => {
+    expect(sql).toMatch(/create policy[^;]+on crm\.clientes[^;]+for delete[^;]+es_usuario\(\)/s)
   })
 
   it('trigger actualizado_en en clientes', () => {

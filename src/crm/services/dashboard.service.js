@@ -78,7 +78,7 @@ export async function oportunidades() {
       .select('id, marca, modelo, version, tipo, anio, km, moneda, precio_contado, fotos:vehiculo_fotos(url,es_portada)')
       .eq('estado', 'disponible').is('archivado_en', null),
     db().from('clientes')
-      .select('id, nombre, notas, marca_interes, modelo_interes, tipo_interes, anio_min, anio_max, presupuesto, intereses:cliente_intereses(marca,modelo)')
+      .select('id, nombre, telefono, notas, marca_interes, modelo_interes, tipo_interes, anio_min, anio_max, presupuesto, intereses:cliente_intereses(marca,modelo)')
       .in('status', ['activo', 'en_seguimiento']).is('archivado_en', null),
   ])
   if (veh.error) throw veh.error

@@ -61,6 +61,16 @@ begin
     from crm_legacy.cliente_autos_entrega la
     join crm.clientes c on c.id_legacy = la.cliente_id;
 
+  -- Enlace recíproco vehículo -> cliente en las ventas migradas. El dato ya
+  -- quedó en crm.clientes.venta_vehiculo_id tras el insert de arriba; acá se
+  -- completa crm.vehiculos.venta_cliente_id (que la migración de vehículos no
+  -- puede fijar porque corre antes que los clientes).
+  update crm.vehiculos v
+     set venta_cliente_id = c.id
+    from crm.clientes c
+   where c.venta_vehiculo_id = v.id
+     and v.venta_cliente_id is distinct from c.id;
+
   return query
     select 'clientes'::text, count(*) from crm.clientes where id_legacy is not null
     union all

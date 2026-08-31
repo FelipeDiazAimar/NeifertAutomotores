@@ -64,13 +64,13 @@ describe('crearUsuario / resetPassword', () => {
     holder.client = {
       auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 'tok-123' } } }) },
     }
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true, id: 'nuevo' }) })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: () => Promise.resolve({ ok: true, id: 'nuevo' }) })
   })
 
   it('crearUsuario pega a /api/crm/usuarios con bearer y accion crear', async () => {
     await svc.crearUsuario({ usuario: 'Juani', nombre: 'Juani P', rol: 'vendedor', password: 'juani123' })
-    expect(global.fetch).toHaveBeenCalledWith('/api/crm/usuarios', expect.objectContaining({ method: 'POST' }))
-    const [, opts] = global.fetch.mock.calls[0]
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/crm/usuarios', expect.objectContaining({ method: 'POST' }))
+    const [, opts] = globalThis.fetch.mock.calls[0]
     expect(opts.headers.Authorization).toBe('Bearer tok-123')
     expect(JSON.parse(opts.body)).toEqual({
       accion: 'crear', usuario: 'Juani', nombre: 'Juani P', rol: 'vendedor', password: 'juani123',
@@ -79,12 +79,12 @@ describe('crearUsuario / resetPassword', () => {
 
   it('resetPassword manda accion reset_password', async () => {
     await svc.resetPassword('u9', 'nuevapass')
-    const [, opts] = global.fetch.mock.calls[0]
+    const [, opts] = globalThis.fetch.mock.calls[0]
     expect(JSON.parse(opts.body)).toEqual({ accion: 'reset_password', id: 'u9', password: 'nuevapass' })
   })
 
   it('propaga el error del endpoint', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: false, status: 409, json: () => Promise.resolve({ ok: false, error: 'Ese usuario ya existe' }) })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 409, json: () => Promise.resolve({ ok: false, error: 'Ese usuario ya existe' }) })
     await expect(svc.crearUsuario({ usuario: 'x', nombre: 'x', rol: 'vendedor', password: 'x' })).rejects.toThrow('Ese usuario ya existe')
   })
 })

@@ -1,4 +1,4 @@
-import { Check, X, Minus } from 'lucide-react'
+import { Check, X } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
@@ -10,6 +10,8 @@ const BUCKET_LABEL = { alta: 'Alta compatibilidad', media: 'Media compatibilidad
 export default function DetalleCompatModal({ open, onClose, cliente, vehiculo, resultado }) {
   if (!resultado) return null
   const { score, bucket, detalle } = resultado
+  // Solo los criterios que el cliente definió — el resto no aporta nada.
+  const criterios = (detalle ?? []).filter((d) => d.aplica)
   const wa = waContactoLink(cliente)
   const subtitulo = `${cliente?.nombre ?? ''} · ${vehiculo?.marca ?? ''} ${vehiculo?.modelo ?? ''} ${vehiculo?.anio ?? ''}`
     .replace(/\s+/g, ' ')
@@ -25,28 +27,28 @@ export default function DetalleCompatModal({ open, onClose, cliente, vehiculo, r
           <span className="text-sm font-semibold text-ink">{BUCKET_LABEL[bucket]}</span>
         </div>
 
-        <ul className="space-y-2">
-          {detalle.map((d) => (
-            <li key={d.key} className="rounded-2xl border border-line p-3">
-              <div className="flex items-center gap-2 text-sm font-medium text-ink">
-                {!d.aplica ? (
-                  <Minus size={15} className="text-ink-3" />
-                ) : d.ok ? (
-                  <Check size={15} className="text-success" />
-                ) : (
-                  <X size={15} className="text-neifert" />
-                )}
-                {d.label}
-              </div>
-              {d.aplica && (
+        {criterios.length === 0 ? (
+          <p className="text-sm text-ink-3">El cliente todavía no cargó preferencias de búsqueda.</p>
+        ) : (
+          <ul className="space-y-2">
+            {criterios.map((d) => (
+              <li key={d.key} className="rounded-2xl border border-line p-3">
+                <div className="flex items-center gap-2 text-sm font-medium text-ink">
+                  {d.ok ? (
+                    <Check size={15} className="text-success" />
+                  ) : (
+                    <X size={15} className="text-neifert" />
+                  )}
+                  {d.label}
+                </div>
                 <div className="mt-1 space-y-0.5 text-xs text-ink-3">
                   <p>Cliente busca: {String(d.clienteDice ?? '—')}</p>
                   <p>Vehículo: {String(d.vehiculoDice ?? '—')}</p>
                 </div>
-              )}
-            </li>
-          ))}
-        </ul>
+              </li>
+            ))}
+          </ul>
+        )}
 
         {cliente?.notas && (
           <div className="rounded-2xl border border-line p-3">
