@@ -2,7 +2,13 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import VehiculoForm from '../components/VehiculoForm.jsx'
+
+const registrarNuevas = vi.fn()
+vi.mock('../hooks/useOpcionesCampo.js', () => ({
+  useOpcionesCampo: () => ({ opciones: {}, registrarNuevas }),
+}))
+
+const { default: VehiculoForm } = await import('../components/VehiculoForm.jsx')
 
 describe('VehiculoForm', () => {
   it('envía los valores editados', async () => {

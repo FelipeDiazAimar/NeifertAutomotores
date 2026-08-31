@@ -128,6 +128,19 @@ create table if not exists crm.eventos (
 );
 create index if not exists idx_crm_eventos_entidad on crm.eventos(entidad, entidad_id, creado_en desc);
 
+-- Catalogo de opciones escribibles (marca, modelo, version, tipo, color,
+-- origen, tipo_consignacion). Los combobox del alta de vehiculos las ofrecen
+-- junto con los valores ya presentes en crm.vehiculos; cada valor nuevo que
+-- el usuario tipea se guarda aca para la proxima.
+create table if not exists crm.opciones_campo (
+  campo text not null,
+  valor text not null,
+  creado_en timestamptz not null default now(),
+  primary key (campo, valor)
+);
+create unique index if not exists idx_crm_opciones_campo_lower
+  on crm.opciones_campo (campo, lower(valor));
+
 -- ---- FUNCIONES ------------------------------------------------------
 create or replace function crm.mi_rol() returns crm.rol
   language sql stable security definer set search_path = crm, public as
@@ -169,6 +182,7 @@ alter table crm.vehiculo_fotos  enable row level security;
 alter table crm.peritajes       enable row level security;
 alter table crm.gestoria        enable row level security;
 alter table crm.eventos         enable row level security;
+alter table crm.opciones_campo  enable row level security;
 
 -- usuarios: select cualquier usuario activo; escritura solo admin
 drop policy if exists usuarios_select on crm.usuarios;
@@ -225,6 +239,12 @@ drop policy if exists eventos_select on crm.eventos;
 create policy eventos_select on crm.eventos for select using (crm.es_usuario());
 drop policy if exists eventos_insert on crm.eventos;
 create policy eventos_insert on crm.eventos for insert with check (crm.es_usuario());
+
+-- opciones_campo: cualquier usuario lee y agrega opciones nuevas
+drop policy if exists opciones_campo_select on crm.opciones_campo;
+create policy opciones_campo_select on crm.opciones_campo for select using (crm.es_usuario());
+drop policy if exists opciones_campo_insert on crm.opciones_campo;
+create policy opciones_campo_insert on crm.opciones_campo for insert with check (crm.es_usuario());
 
 -- ---- GRANTS ------------------------------------------------------
 grant usage on schema crm to anon, authenticated, service_role;

@@ -30,7 +30,6 @@ const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 const CrmLoginPage = lazy(() => import('@/crm/pages/CrmLoginPage'))
 const CrmLayout = lazy(() => import('@/crm/components/CrmLayout'))
 const VehiculosListPage = lazy(() => import('@/crm/pages/VehiculosListPage'))
-const VehiculoNuevoPage = lazy(() => import('@/crm/pages/VehiculoNuevoPage'))
 const VehiculoDetallePage = lazy(() => import('@/crm/pages/VehiculoDetallePage'))
 const VehiculoEditarPage = lazy(() => import('@/crm/pages/VehiculoEditarPage'))
 const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
@@ -77,7 +76,6 @@ export default function AppRouter() {
         <Route element={<CrmLayout />}>
           <Route path="/crm" element={<Navigate to="/crm/vehiculos" replace />} />
           <Route path="/crm/vehiculos" element={<VehiculosListPage />} />
-          <Route path="/crm/vehiculos/nuevo" element={<VehiculoNuevoPage />} />
           <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
           <Route path="/crm/vehiculos/:id/editar" element={<VehiculoEditarPage />} />
           <Route path="/crm/cambiar-password" element={<CambiarPasswordPage />} />

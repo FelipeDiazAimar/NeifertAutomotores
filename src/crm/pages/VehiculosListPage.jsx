@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Plus, Search, SlidersHorizontal } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
@@ -12,17 +11,18 @@ import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import VehiculoFilters from '@/crm/components/VehiculoFilters'
 import VehiculoTable from '@/crm/components/VehiculoTable'
 import VehiculoCard from '@/crm/components/VehiculoCard'
+import VehiculoFormModal from '@/crm/components/VehiculoFormModal'
 import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 20
 
 export default function VehiculosListPage() {
-  const navigate = useNavigate()
   const esDesktop = useIsDesktop()
   const { busqueda, filtros, orden, pagina, setBusqueda, setPagina } = useVehiculosFiltros()
   const filtrosActivos = useVehiculosFiltros((s) => s.contarFiltrosActivos())
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
+  const [abrirNuevo, setAbrirNuevo] = useState(false)
   const { cambiarEstado } = useVehiculoMutations()
 
   // debounce búsqueda → store
@@ -49,7 +49,7 @@ export default function VehiculosListPage() {
           <h1 className="font-display text-2xl font-bold text-ink">Vehículos</h1>
           <p className="text-sm text-ink-3">{total} en stock</p>
         </div>
-        <Button icon={Plus} onClick={() => navigate('/crm/vehiculos/nuevo')}>
+        <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
           Cargar vehículo
         </Button>
       </div>
@@ -93,7 +93,7 @@ export default function VehiculosListPage() {
         <GlassCard className="p-10 text-center">
           <p className="font-display font-bold text-ink">No hay vehículos que coincidan</p>
           <p className="mt-1 text-sm text-ink-3">Probá quitar filtros o cargá un vehículo nuevo.</p>
-          <Button icon={Plus} className="mt-4" onClick={() => navigate('/crm/vehiculos/nuevo')}>
+          <Button icon={Plus} className="mt-4" onClick={() => setAbrirNuevo(true)}>
             Cargar vehículo
           </Button>
         </GlassCard>
@@ -111,6 +111,8 @@ export default function VehiculosListPage() {
       )}
 
       <Pagination page={pagina} totalPages={totalPaginas} onChange={setPagina} />
+
+      <VehiculoFormModal open={abrirNuevo} onClose={() => setAbrirNuevo(false)} />
     </div>
   )
 }

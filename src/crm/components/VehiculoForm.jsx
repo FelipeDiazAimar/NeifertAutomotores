@@ -3,11 +3,26 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import Select from '@/components/common/Select'
+import Combobox from '@/crm/components/Combobox'
+import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
+import { CAMPOS as CAMPOS_COMBO } from '@/crm/services/opcionesCampo.service'
 import { vehiculoSchema } from '@/crm/lib/vehiculoSchema'
 
+// Semilla para "Tipo" — se fusiona con lo que ya haya cargado.
 const TIPOS = ['Pickup', 'Sedan', 'SUV', 'Hatchback', 'Utilitario', 'Coupé', 'Familiar', 'Otro']
 const TRANS = ['manual', 'automático']
 const opt = (arr) => arr.map((x) => ({ id: x, label: x }))
+
+/** Fusiona una semilla con la lista guardada, dedup sin distinguir mayúsculas. */
+const conSemilla = (lista = [], semilla = []) => {
+  const map = new Map()
+  for (const v of [...semilla, ...lista]) {
+    const t = (v ?? '').trim()
+    const k = t.toLowerCase()
+    if (t && !map.has(k)) map.set(k, t)
+  }
+  return [...map.values()]
+}
 
 function Seccion({ titulo, children }) {
   return (
@@ -27,7 +42,27 @@ function Check({ name, label, register }) {
   )
 }
 
+/** Campo de texto que ofrece opciones ya usadas y admite valores nuevos. */
+function CampoCombo({ control, name, label, options }) {
+  return (
+    <Controller
+      control={control}
+      name={name}
+      render={({ field, fieldState }) => (
+        <Combobox
+          label={label}
+          options={options}
+          value={field.value ?? ''}
+          onChange={field.onChange}
+          error={fieldState.error?.message}
+        />
+      )}
+    />
+  )
+}
+
 export default function VehiculoForm({ inicial, onGuardar, guardando }) {
+  const { opciones, registrarNuevas } = useOpcionesCampo()
   const {
     register, handleSubmit, control, formState: { errors },
   } = useForm({
@@ -39,18 +74,28 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
     },
   })
 
+  const opcionesTipo = conSemilla(opciones.tipo, TIPOS)
+
+  // Antes de guardar, persiste los valores tipeados que no estaban en la lista.
+  const submit = (data) => {
+    const nuevas = CAMPOS_COMBO.flatMap((campo) => {
+      const v = (data[campo] ?? '').trim()
+      if (!v) return []
+      const conocidas = campo === 'tipo' ? opcionesTipo : opciones[campo] ?? []
+      const yaEsta = conocidas.some((o) => o.toLowerCase() === v.toLowerCase())
+      return yaEsta ? [] : [{ campo, valor: v }]
+    })
+    registrarNuevas(nuevas)
+    onGuardar(data)
+  }
+
   return (
-    <form onSubmit={handleSubmit(onGuardar)} className="space-y-6">
+    <form onSubmit={handleSubmit(submit)} className="space-y-6">
       <Seccion titulo="Datos">
-        <Input label="Marca" {...register('marca')} error={errors.marca?.message} />
-        <Input label="Modelo" {...register('modelo')} error={errors.modelo?.message} />
-        <Input label="Versión" {...register('version')} />
-        <Controller
-          control={control} name="tipo"
-          render={({ field }) => (
-            <Select label="Tipo" options={opt(TIPOS)} value={field.value ?? ''} onChange={field.onChange} />
-          )}
-        />
+        <CampoCombo control={control} name="marca" label="Marca" options={opciones.marca ?? []} />
+        <CampoCombo control={control} name="modelo" label="Modelo" options={opciones.modelo ?? []} />
+        <CampoCombo control={control} name="version" label="Versión" options={opciones.version ?? []} />
+        <CampoCombo control={control} name="tipo" label="Tipo" options={opcionesTipo} />
         <Input label="Año" type="number" {...register('anio')} error={errors.anio?.message} />
         <Input label="Km" type="number" {...register('km')} error={errors.km?.message} />
         <Controller
@@ -59,7 +104,7 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
             <Select label="Transmisión" options={opt(TRANS)} value={field.value ?? ''} onChange={field.onChange} />
           )}
         />
-        <Input label="Color" {...register('color')} />
+        <CampoCombo control={control} name="color" label="Color" options={opciones.color ?? []} />
         <Input label="Patente" {...register('patente')} />
       </Seccion>
 
@@ -97,8 +142,8 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
           )}
         />
         <Input label="Vencimiento ITV" type="date" {...register('itv_venc')} />
-        <Input label="Origen" {...register('origen')} />
-        <Input label="Tipo de consignación" {...register('tipo_consignacion')} />
+        <CampoCombo control={control} name="origen" label="Origen" options={opciones.origen ?? []} />
+        <CampoCombo control={control} name="tipo_consignacion" label="Tipo de consignación" options={opciones.tipo_consignacion ?? []} />
         <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2">
           <Check name="consignacion" label="En consignación" register={register} />
           <Check name="carpeta_completa" label="Carpeta completa" register={register} />
