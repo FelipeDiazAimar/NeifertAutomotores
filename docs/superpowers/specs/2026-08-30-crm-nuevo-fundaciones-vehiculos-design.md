@@ -425,33 +425,45 @@ medición y seguimiento, no una pieza de marketing.
 
 ### Tokens (`src/crm/styles/tokens.css`)
 
+El sitio ya usa **Tailwind v4 CSS-first** con dark mode por **clase `.dark` en
+`<html>`** (`@custom-variant dark`), key de `localStorage` `nf-theme`, y un script
+anti-FOUC en `index.html`. El CRM **reusa ese mecanismo** — no inventa `data-theme`
+ni otra key. `tokens.css` del CRM define variables `--crm-*` propias (scope: se
+importan en `CrmLayout`), en `:root` y bajo `.dark`, para no chocar con los
+`--c-*` glassy del sitio público:
+
 ```
+/* src/crm/styles/tokens.css */
 :root {
-  --bg:      #FBFBFD;
-  --surface: #FFFFFF;
-  --ink:     #1D1D1F;
-  --muted:   #86868B;
-  --line:    #E8E8ED;
-  --accent:  #0B6BCB;   /* azul señal, tipo instrumento */
-  --ok:      #1A7F52;
-  --obs:     #B0740A;
-  --falta:   #C1352B;
-  --radius:  10px;
+  --crm-bg:      #FBFBFD;
+  --crm-surface: #FFFFFF;
+  --crm-ink:     #1D1D1F;
+  --crm-muted:   #86868B;
+  --crm-line:    #E8E8ED;
+  --crm-accent:  #0B6BCB;   /* azul señal, tipo instrumento */
+  --crm-ok:      #1A7F52;
+  --crm-obs:     #B0740A;
+  --crm-falta:   #C1352B;
+  --crm-radius:  10px;
 }
-:root[data-theme="dark"] {
-  --bg:      #0A0A0C;
-  --surface: #161618;
-  --ink:     #F5F5F7;
-  --muted:   #8E8E93;
-  --line:    #2A2A2E;
-  --accent:  #3B93E6;
-  --ok:      #34B27B;
-  --obs:     #D2963A;
-  --falta:   #E0564B;
+.dark {
+  --crm-bg:      #0A0A0C;
+  --crm-surface: #161618;
+  --crm-ink:     #F5F5F7;
+  --crm-muted:   #8E8E93;
+  --crm-line:    #2A2A2E;
+  --crm-accent:  #3B93E6;
+  --crm-ok:      #34B27B;
+  --crm-obs:     #D2963A;
+  --crm-falta:   #E0564B;
 }
 ```
-Colores semánticos desaturados (no semáforo chillón). El toggle de tema escribe
-`data-theme` en `<html>` y persiste en `localStorage`; default = preferencia del SO.
+Colores semánticos desaturados (no semáforo chillón). El estado de tema **ya
+existe**: `src/store/useUiStore.js` (`theme` / `toggleTheme` / `setTheme`, clase
+`.dark` + key `nf-theme` + script anti-FOUC en `index.html`). El CRM **reusa
+`useUiStore` tal cual** — no hay lógica de tema nueva. El `ThemeToggle` del CRM es
+solo un botón con estética shadcn cableado a `useUiStore.toggleTheme` (o se reusa
+`src/components/common/ThemeToggle.jsx` directamente).
 
 ### Tipografía
 
