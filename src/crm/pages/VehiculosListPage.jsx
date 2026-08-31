@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
@@ -12,6 +12,7 @@ import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import VehiculoFilters from '@/crm/components/VehiculoFilters'
 import VehiculoTable from '@/crm/components/VehiculoTable'
 import VehiculoCard from '@/crm/components/VehiculoCard'
+import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 20
 
@@ -19,7 +20,9 @@ export default function VehiculosListPage() {
   const navigate = useNavigate()
   const esDesktop = useIsDesktop()
   const { busqueda, filtros, orden, pagina, setBusqueda, setPagina } = useVehiculosFiltros()
+  const filtrosActivos = useVehiculosFiltros((s) => s.contarFiltrosActivos())
   const [texto, setTexto] = useState(busqueda)
+  const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const { cambiarEstado } = useVehiculoMutations()
 
   // debounce búsqueda → store
@@ -51,17 +54,36 @@ export default function VehiculosListPage() {
         </Button>
       </div>
 
-      <div className="glass field-glass flex h-12 items-center gap-2.5 rounded-2xl px-3.5">
-        <Search size={17} className="shrink-0 text-ink-3" />
-        <input
-          value={texto}
-          onChange={(e) => setTexto(e.target.value)}
-          placeholder="Buscar por marca, modelo, patente o dueño…"
-          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
-        />
+      <div className="flex items-center gap-2">
+        <div className="glass field-glass flex h-12 flex-1 items-center gap-2.5 rounded-2xl px-3.5">
+          <Search size={17} className="shrink-0 text-ink-3" />
+          <input
+            value={texto}
+            onChange={(e) => setTexto(e.target.value)}
+            placeholder="Buscar por marca, modelo, patente o dueño…"
+            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setMostrarFiltros((v) => !v)}
+          aria-expanded={mostrarFiltros}
+          className={cn(
+            'glass flex h-12 shrink-0 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors',
+            mostrarFiltros || filtrosActivos > 0 ? 'text-neifert' : 'text-ink-2 hover:text-ink',
+          )}
+        >
+          <SlidersHorizontal size={16} />
+          <span className="hidden sm:inline">Filtros</span>
+          {filtrosActivos > 0 && (
+            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
+              {filtrosActivos}
+            </span>
+          )}
+        </button>
       </div>
 
-      <VehiculoFilters />
+      {mostrarFiltros && <VehiculoFilters />}
 
       {isLoading ? (
         <div className="grid place-items-center py-16">
