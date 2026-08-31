@@ -35,6 +35,7 @@ const VehiculoEditarPage = lazy(() => import('@/crm/pages/VehiculoEditarPage'))
 const ClientesListPage = lazy(() => import('@/crm/pages/ClientesListPage'))
 const ClienteDetallePage = lazy(() => import('@/crm/pages/ClienteDetallePage'))
 const ClienteEditarPage = lazy(() => import('@/crm/pages/ClienteEditarPage'))
+const TareasListPage = lazy(() => import('@/crm/pages/TareasListPage'))
 const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
 
 export default function AppRouter() {
@@ -81,6 +82,7 @@ export default function AppRouter() {
           <Route path="/crm/clientes" element={<ClientesListPage />} />
           <Route path="/crm/clientes/:id" element={<ClienteDetallePage />} />
           <Route path="/crm/clientes/:id/editar" element={<ClienteEditarPage />} />
+          <Route path="/crm/tareas" element={<TareasListPage />} />
           <Route path="/crm/vehiculos" element={<VehiculosListPage />} />
           <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
           <Route path="/crm/vehiculos/:id/editar" element={<VehiculoEditarPage />} />

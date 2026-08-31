@@ -2,11 +2,13 @@ import { useState } from 'react'
 import { Link, Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
+import { useAvisoTareasHoy } from '@/crm/hooks/useAvisoTareasHoy'
 import CrmSidebar from './CrmSidebar'
 import '@/crm/styles/tokens.css'
 
 export default function CrmLayout() {
   const [open, setOpen] = useState(false)
+  useAvisoTareasHoy()
 
   return (
     <div className="crm-root mx-auto flex min-h-screen max-w-[1440px] gap-2 overflow-x-hidden">

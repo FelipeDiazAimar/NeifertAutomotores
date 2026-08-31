@@ -1,19 +1,22 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { Car, Users, LogOut, KeyRound } from 'lucide-react'
+import { Car, Users, ListTodo, LogOut, KeyRound } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
+import { useTareasPendientesHoy } from '@/crm/hooks/useTareas'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import { cn } from '@/lib/cn'
 
 const NAV = [
   { to: '/crm/clientes', label: 'Clientes', icon: Users },
+  { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas' },
   { to: '/crm/vehiculos', label: 'Vehículos', icon: Car },
 ]
 
 export default function CrmSidebar({ onNavigate }) {
   const navigate = useNavigate()
   const { nombre, usuario, rol } = useCrmPerfil()
+  const { data: tareasHoy = 0 } = useTareasPendientesHoy()
 
   async function salir() {
     await supabase.auth.signOut()
@@ -27,7 +30,7 @@ export default function CrmSidebar({ onNavigate }) {
       </NavLink>
 
       <nav className="flex flex-col gap-1">
-        {NAV.map(({ to, label, icon: Icon }) => (
+        {NAV.map(({ to, label, icon: Icon, badge }) => (
           <NavLink
             key={to}
             to={to}
@@ -40,7 +43,12 @@ export default function CrmSidebar({ onNavigate }) {
             }
           >
             <Icon size={18} />
-            {label}
+            <span className="flex-1">{label}</span>
+            {badge === 'tareas' && tareasHoy > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
+                {tareasHoy}
+              </span>
+            )}
           </NavLink>
         ))}
       </nav>
