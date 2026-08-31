@@ -84,5 +84,21 @@ ok(
   `admin DELETE vehiculo → 1 fila borrada (limpieza)`,
 )
 
+// ---- Clientes -------------------------------------------------------------
+r = await rest(bruno, 'clientes', { method: 'POST', body: JSON.stringify({ nombre: 'TEST RLS' }) })
+ok(r.status === 201, `vendedor INSERT cliente → ${r.status} (esperado 201)`)
+const cli = (await r.json())[0]
+
+r = await rest(bruno, `clientes?id=eq.${cli.id}`, { method: 'PATCH', body: JSON.stringify({ notas: 'editado' }) })
+ok(r.status === 200, `vendedor PATCH cliente → ${r.status} (esperado 200)`)
+
+r = await rest(bruno, `clientes?id=eq.${cli.id}`, { method: 'DELETE' })
+const cliBorradasVendedor = await r.json().catch(() => [])
+ok(Array.isArray(cliBorradasVendedor) && cliBorradasVendedor.length === 0, `vendedor DELETE cliente → 0 filas (RLS bloquea)`)
+
+r = await rest(cristian, `clientes?id=eq.${cli.id}`, { method: 'DELETE' })
+const cliBorradasAdmin = await r.json().catch(() => [])
+ok(Array.isArray(cliBorradasAdmin) && cliBorradasAdmin.length === 1, `admin DELETE cliente → 1 fila (limpieza)`)
+
 console.log(fallos === 0 ? '\nTodos los checks PASS' : `\n${fallos} FALLARON`)
 process.exit(fallos === 0 ? 0 : 1)
