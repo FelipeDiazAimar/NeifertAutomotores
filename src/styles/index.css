@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../crm/styles/shadcn-theme.css'; /* theme del CRM (base-nova), scopeado a .crm-root */
 
 /* Dark mode por clase (.dark en <html>) en vez de prefers-color-scheme */
 @custom-variant dark (&:where(.dark, .dark *));

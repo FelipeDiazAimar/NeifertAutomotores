@@ -58,41 +58,79 @@
 
 ---
 
-## Task 1: shadcn/ui + tokens + fonts + entorno de tests de componentes
+## Task 1: base-nova (shadcn) aislado + tokens CRM + entorno de tests de componentes
+
+> **Corrección durante ejecución:** `npx shadcn init -d` instaló el estilo
+> **`base-nova`** (Base UI, no Radix) y modificó el CSS **compartido**
+> `src/styles/index.css` (font swap, `@apply` globales, imports rotos). Ese
+> archivo se revirtió a HEAD. Enfoque nuevo, **híbrido y aislado**: base-nova como
+> base del CRM, todo su theme scopeado a `.crm-root` en archivos propios del CRM,
+> el sitio público intacto. Se puede copiar algún componente Radix suelto a
+> `src/components/ui/` más adelante si base-nova no alcanza.
 
 **Files:**
-- Create: `components.json`, `src/components/ui/*` (vía CLI)
-- Create: `src/crm/styles/tokens.css`
-- Modify: `index.html` (fuentes Geist), `package.json`, `vitest.config.js`
-- Create: `src/crm/__tests__/setup-shadcn.test.jsx`
+- Keep (ya creados por el init): `components.json` (style `base-nova`), `src/lib/utils.js`, `src/components/ui/button.jsx`
+- Create: `src/crm/styles/shadcn-theme.css` (mapeos `@theme inline` + imports de animación/fuentes)
+- Create: `src/crm/styles/tokens.css` (`--crm-*` + vars semánticas de base-nova, scopeadas a `.crm-root`)
+- Modify: `src/styles/index.css` (UNA línea: `@import '../crm/styles/shadcn-theme.css';`)
+- Modify: `package.json`, `vitest.config.js`
+- Create: `vitest.setup.js`, `src/crm/__tests__/setup-shadcn.test.jsx`
 
 **Interfaces:**
 - Consumes: nada.
-- Produces: componentes shadcn importables desde `@/components/ui/<name>`; `--crm-*` tokens disponibles bajo `.crm-root`; `npm test` corre tests `node` y `jsdom`.
+- Produces: componentes base-nova importables desde `@/components/ui/<name>`, funcionales **solo dentro de `.crm-root`** (ahí viven sus vars); `--crm-*` tokens bajo `.crm-root`; `npm test` corre tests `node` y `jsdom`.
 
 - [ ] **Step 1: Instalar deps**
 
-Run: `npm i class-variance-authority && npm i -D @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom`
-(`clsx`, `tailwind-merge`, `lucide-react` ya están.)
+Run: `npm i -D tw-animate-css @fontsource-variable/geist-mono @testing-library/react @testing-library/jest-dom @testing-library/user-event jsdom`
+(`class-variance-authority`, `@fontsource-variable/geist`, `@base-ui/react`, `shadcn` ya los puso el init. `clsx`, `tailwind-merge`, `lucide-react` ya estaban.)
 
-- [ ] **Step 2: Inicializar shadcn/ui**
-
-Run: `npx shadcn@latest init`
-Respuestas: style **new-york**, base color **neutral**, CSS variables **yes**. Cuando pregunte por el archivo global CSS, apuntá a `src/styles/index.css`. Alias components → `@/components`, utils → `@/lib/cn` (ya existe `src/lib/cn.js`; si el CLI insiste en crear `src/lib/utils.js`, dejalo y en `components.json` seteá `"utils": "@/lib/cn"`).
-
-Verificá que `components.json` quedó con `"rsc": false`, `"tsx": false`, `"tailwind": { "cssVariables": true }`.
-
-- [ ] **Step 3: Agregar los componentes base**
-
-Run: `npx shadcn@latest add button input label select dialog tabs table badge dropdown-menu sheet tooltip sonner form skeleton separator`
-Quedan en `src/components/ui/*.jsx`.
-
-- [ ] **Step 4: Escribir `src/crm/styles/tokens.css`**
+- [ ] **Step 2: `src/crm/styles/shadcn-theme.css`** (mapeos globales, inertes para el sitio)
 
 ```css
-/* Tokens del CRM. Scope: .crm-root (lo pone CrmLayout en su div raíz).
-   Reusa la clase .dark en <html> que ya maneja useUiStore. */
+/* Theme de base-nova (shadcn) para el CRM. Los @theme inline son globales
+   (Tailwind los necesita para generar bg-primary, text-muted-foreground, etc.)
+   pero son inertes para el sitio público, que nunca usa esas clases. Los
+   VALORES de las vars viven scopeados en .crm-root (ver tokens.css). */
+@import 'tw-animate-css';
+@import '@fontsource-variable/geist';
+@import '@fontsource-variable/geist-mono';
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+```
+
+- [ ] **Step 3: `src/crm/styles/tokens.css`** (valores, scopeados)
+
+```css
+/* Tokens del CRM + valores de las vars semánticas de base-nova. TODO scopeado
+   a .crm-root (lo pone CrmLayout / CrmLoginPage en su div raíz). Reusa la clase
+   .dark en <html> que maneja useUiStore. */
 .crm-root {
+  /* Paleta CRM (Apple-minimal) */
   --crm-bg: #fbfbfd;
   --crm-surface: #ffffff;
   --crm-ink: #1d1d1f;
@@ -102,12 +140,34 @@ Quedan en `src/components/ui/*.jsx`.
   --crm-ok: #1a7f52;
   --crm-obs: #b0740a;
   --crm-falta: #c1352b;
-  --crm-radius: 10px;
+
+  /* Vars que consumen los componentes base-nova */
+  --background: var(--crm-bg);
+  --foreground: var(--crm-ink);
+  --card: var(--crm-surface);
+  --card-foreground: var(--crm-ink);
+  --popover: var(--crm-surface);
+  --popover-foreground: var(--crm-ink);
+  --primary: var(--crm-accent);
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f5;
+  --secondary-foreground: var(--crm-ink);
+  --muted: #f2f2f5;
+  --muted-foreground: var(--crm-muted);
+  --accent: #eef4fb;
+  --accent-foreground: var(--crm-accent);
+  --destructive: var(--crm-falta);
+  --destructive-foreground: #ffffff;
+  --border: var(--crm-line);
+  --input: var(--crm-line);
+  --ring: var(--crm-accent);
+  --radius: 0.625rem;
 
   background: var(--crm-bg);
   color: var(--crm-ink);
-  font-family: 'Geist', ui-sans-serif, system-ui, sans-serif;
+  font-family: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
 }
+
 .dark .crm-root {
   --crm-bg: #0a0a0c;
   --crm-surface: #161618;
@@ -118,13 +178,28 @@ Quedan en `src/components/ui/*.jsx`.
   --crm-ok: #34b27b;
   --crm-obs: #d2963a;
   --crm-falta: #e0564b;
+
+  --secondary: #232327;
+  --muted: #232327;
+  --accent: #1c2b3a;
+  --primary-foreground: #0a0a0c;
 }
-.crm-mono { font-family: 'Geist Mono', ui-monospace, 'SF Mono', monospace; }
+
+.crm-mono { font-family: 'Geist Mono Variable', ui-monospace, 'SF Mono', monospace; }
 ```
 
-- [ ] **Step 5: Fuentes Geist en `index.html`**
+- [ ] **Step 4: UNA línea en `src/styles/index.css`**
 
-En el `<link href="https://fonts.googleapis.com/css2?...">` existente, agregá al querystring: `&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500`.
+Justo después de `@import 'tailwindcss';`, agregá:
+```css
+@import '../crm/styles/shadcn-theme.css'; /* theme del CRM (base-nova), scopeado a .crm-root */
+```
+No tocar nada más de ese archivo (font, @layer base, etc. quedan como están).
+
+- [ ] **Step 5: Agregar el resto de componentes base-nova**
+
+Run: `npx --yes shadcn@latest add input label select dialog tabs table badge dropdown-menu sheet tooltip sonner skeleton separator --yes`
+(`button` ya está. Si algún nombre no existe en el registro base-nova, seguí sin él y anotá cuál para copiarlo a mano después.) Quedan en `src/components/ui/*.jsx`.
 
 - [ ] **Step 6: Configurar vitest para jsdom por archivo**
 
@@ -153,24 +228,28 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { Button } from '@/components/ui/button'
 
-describe('entorno shadcn + jsdom', () => {
+describe('entorno base-nova + jsdom', () => {
   it('renderiza un Button', () => {
-    render(<Button>Guardar</Button>)
+    render(<div className="crm-root"><Button>Guardar</Button></div>)
     expect(screen.getByRole('button', { name: 'Guardar' })).toBeInTheDocument()
   })
 })
 ```
 
-- [ ] **Step 8: Correr toda la suite**
+- [ ] **Step 8: Verificar que el sitio público no se rompió + suite**
 
+Run: `npm run build`
+Expected: build OK (el `@import` nuevo resuelve; `tw-animate-css` y las fuentes existen).
 Run: `npm test`
-Expected: PASS — los tests del Plan del clon (`src/server/__tests__/**`) siguen verdes + el nuevo test de componente.
+Expected: PASS — tests del clon (`src/server/__tests__/**`) verdes + el nuevo de componente.
+Run: `git diff --stat src/styles/index.css`
+Expected: solo 1 línea agregada (el `@import`), nada más.
 
 - [ ] **Step 9: Commit**
 
 ```bash
-git add components.json src/components/ui package.json package-lock.json src/crm/styles/tokens.css index.html vitest.config.js vitest.setup.js src/crm/__tests__/setup-shadcn.test.jsx src/lib
-git commit -m "$(printf 'feat(crm): shadcn/ui + tokens + fuentes Geist + tests de componentes\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>')"
+git add components.json src/components/ui src/lib/utils.js package.json package-lock.json src/crm/styles src/styles/index.css vitest.config.js vitest.setup.js src/crm/__tests__/setup-shadcn.test.jsx
+git commit -m "$(printf 'feat(crm): base-nova aislado + tokens CRM + tests de componentes\n\nCo-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>')"
 ```
 
 ---
