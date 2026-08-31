@@ -227,8 +227,15 @@ drop policy if exists eventos_insert on crm.eventos;
 create policy eventos_insert on crm.eventos for insert with check (crm.es_usuario());
 
 -- ---- GRANTS ------------------------------------------------------
-grant usage on schema crm to anon, authenticated;
+grant usage on schema crm to anon, authenticated, service_role;
+
 grant select, insert, update, delete on all tables in schema crm to authenticated;
 grant usage, select on all sequences in schema crm to authenticated;
 alter default privileges in schema crm grant select, insert, update, delete on tables to authenticated;
 alter default privileges in schema crm grant usage, select on sequences to authenticated;
+
+-- service_role (seed de usuarios, migración, jobs) — bypass RLS + acceso total
+grant all privileges on all tables in schema crm to service_role;
+grant all privileges on all sequences in schema crm to service_role;
+alter default privileges in schema crm grant all on tables to service_role;
+alter default privileges in schema crm grant all on sequences to service_role;
