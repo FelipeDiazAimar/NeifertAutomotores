@@ -28,4 +28,25 @@ describe('gestoria.service.guardarCampos', () => {
     expect(up.opts).toMatchObject({ onConflict: 'vehiculo_id' })
     expect(registrar).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'gestoria', entidadId: 'v1' }))
   })
+
+  it('el evento lista las keys del parche', async () => {
+    const { client } = makeSupabase({ 'upsert:gestoria': { data: [{}], error: null } })
+    holder.client = client
+    await svc.guardarCampos('v1', { titulo_nota: 'ok', titulo_hecho: true }, 'u1')
+    expect(registrar).toHaveBeenCalledWith(expect.objectContaining({
+      datos: { campos: ['titulo_nota', 'titulo_hecho'] },
+    }))
+  })
+})
+
+describe('gestoria.service.obtenerPorVehiculo', () => {
+  it('filtra por vehiculo_id y devuelve la fila (maybeSingle)', async () => {
+    const { client, calls } = makeSupabase({ 'select:gestoria': { data: { vehiculo_id: 'v1', estado: 'en_proceso' }, error: null } })
+    holder.client = client
+    const r = await svc.obtenerPorVehiculo('v1')
+    expect(r).toMatchObject({ estado: 'en_proceso' })
+    expect(calls.find((c) => c.table === 'gestoria').filters).toEqual(
+      expect.arrayContaining([['eq', 'vehiculo_id', 'v1']]),
+    )
+  })
 })

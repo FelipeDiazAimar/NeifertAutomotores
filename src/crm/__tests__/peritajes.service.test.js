@@ -37,3 +37,36 @@ describe('peritajes.service.crear', () => {
     }))
   })
 })
+
+describe('peritajes.service.listarPorVehiculo', () => {
+  it('filtra por vehiculo y ordena por fecha desc', async () => {
+    const { client, calls } = makeSupabase({ 'select:peritajes': { data: [{ id: 1 }], error: null } })
+    holder.client = client
+    const r = await svc.listarPorVehiculo('v9')
+    expect(r).toEqual([{ id: 1 }])
+    const f = calls.find((c) => c.table === 'peritajes').filters
+    expect(f).toEqual(expect.arrayContaining([
+      ['eq', 'vehiculo_id', 'v9'],
+      ['order', 'fecha', { ascending: false }],
+    ]))
+  })
+})
+
+describe('peritajes.service.actualizar', () => {
+  it('recalcula el resumen, hace update por id y registra evento editado', async () => {
+    const { client, calls } = makeSupabase({ 'update:peritajes': (s) => ({ data: [{ id: 7, ...s.payload }], error: null }) })
+    holder.client = client
+    await svc.actualizar(7, {
+      vehiculoId: 'v1',
+      datos: { motor: 'ok', frenos: 'ok', abs: 'falta' },
+      fecha: '',
+      peritadoPor: 'user-2',
+    })
+    const up = calls.find((c) => c.table === 'peritajes' && c.op === 'update')
+    expect(up.payload).toMatchObject({ items_ok: 2, items_falta: 1, fecha: null })
+    expect(up.filters).toEqual(expect.arrayContaining([['eq', 'id', 7]]))
+    expect(registrar).toHaveBeenCalledWith(expect.objectContaining({
+      tipo: 'peritaje', datos: expect.objectContaining({ editado: true }),
+    }))
+  })
+})
