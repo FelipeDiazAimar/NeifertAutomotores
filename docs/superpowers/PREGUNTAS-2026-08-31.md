@@ -79,7 +79,21 @@ commitear (ediciones en `DetalleCompatModal`, `ClienteDetallePage`,
 `crm_migracion.sql`, etc.). No se perdió nada y los tests pasan, pero quedaron
 bajo un mensaje que no los menciona. Si querés lo parto en dos commits.
 
-### 4. ¿Sigo con "corte del sitio público"?
+### 4. SQL: lo que ya apliqué vs lo que te queda
+
+Apliqué a la base (idempotentes, **no tocan datos**):
+- `supabase/crm_roles_schema.sql` (módulo 6)
+- `supabase/crm_schema.sql` (tabla `crm.opciones_campo` — del combobox de la
+  otra sesión)
+- `supabase/crm_clientes_schema.sql` (policy `clientes_delete` para cualquier
+  usuario)
+
+**Te queda a vos** (tocan/mueven datos, y dependen de tus respuestas a
+`docs/PENDIENTES-Y-PREGUNTAS.md`):
+- `select crm.migrar_desde_legacy();`
+- `select crm.migrar_clientes_desde_legacy();`
+
+### 5. ¿Sigo con "corte del sitio público"?
 Es el módulo que falta: que el sitio público lea de `crm.vehiculos` como fuente
 única y se apague el sync del CRM viejo. ¿Arranco spec + plan de eso, o hay otra
 prioridad?
