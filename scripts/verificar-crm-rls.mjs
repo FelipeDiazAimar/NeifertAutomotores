@@ -116,5 +116,42 @@ r = await rest(cristian, `tareas?id=eq.${tar.id}`, { method: 'DELETE' })
 const tarBorradasAdmin = await r.json().catch(() => [])
 ok(Array.isArray(tarBorradasAdmin) && tarBorradasAdmin.length === 1, `admin DELETE tarea → 1 fila (limpieza)`)
 
+// ---- Roles / Usuarios (RBAC por vistas) --------------------------------
+// vendedor NO puede tocar crm.roles (RLS: solo admin/dueno)
+r = await rest(bruno, 'roles?rol=eq.vendedor', {
+  method: 'PATCH',
+  body: JSON.stringify({ vistas_default: ['panel'] }),
+})
+const rolesVendedor = await r.json().catch(() => [])
+ok(
+  Array.isArray(rolesVendedor) && rolesVendedor.length === 0,
+  `vendedor PATCH crm.roles → 0 filas (RLS bloquea)`,
+)
+
+// vendedor NO puede editar crm.usuarios (ni el suyo)
+r = await rest(bruno, 'usuarios?usuario=eq.Bruno', {
+  method: 'PATCH',
+  body: JSON.stringify({ nombre: 'hackeado' }),
+})
+const usrVendedor = await r.json().catch(() => [])
+ok(
+  Array.isArray(usrVendedor) && usrVendedor.length === 0,
+  `vendedor PATCH crm.usuarios → 0 filas (RLS bloquea)`,
+)
+
+// admin SÍ puede editar crm.roles (y se revierte)
+r = await rest(cristian, 'roles?rol=eq.vendedor')
+const rolPrevio = (await r.json())[0]?.vistas_default ?? ['panel', 'clientes', 'vehiculos', 'tareas']
+
+r = await rest(cristian, 'roles?rol=eq.vendedor', {
+  method: 'PATCH',
+  body: JSON.stringify({ vistas_default: rolPrevio }),
+})
+const rolesAdmin = await r.json().catch(() => [])
+ok(
+  Array.isArray(rolesAdmin) && rolesAdmin.length === 1,
+  `admin PATCH crm.roles → 1 fila (permitido)`,
+)
+
 console.log(fallos === 0 ? '\nTodos los checks PASS' : `\n${fallos} FALLARON`)
 process.exit(fallos === 0 ? 0 : 1)
