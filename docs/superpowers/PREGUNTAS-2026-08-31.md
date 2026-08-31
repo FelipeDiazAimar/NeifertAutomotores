@@ -3,6 +3,12 @@
 Dejaste corriendo para que termine **Usuarios/Roles** + **gestoría y peritaje**.
 Esto es lo que hice y lo que necesito que me aclares para seguir.
 
+> Nota: hay **otro** doc de preguntas, `docs/PENDIENTES-Y-PREGUNTAS.md`, sobre los
+> KPIs del dashboard y el detalle de cliente (ediciones que ya estaban en la rama
+> sin commitear cuando arranqué — las committeé junto con lo mío en `bc2a3b7`).
+> Ese doc pide re-correr algunos `supabase/*.sql` y tiene 5 preguntas sobre
+> "Valor del stock" y "veh. vendidos". Contestá los dos.
+
 ---
 
 ## ✅ Terminado esta noche
