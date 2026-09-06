@@ -65,64 +65,69 @@ quedaba `NULL` en todos los migrados, contaba 0.
 - Las ventas registradas desde el CRM nuevo ya seteaban `fecha_venta` bien; esto
   era solo el histórico migrado.
 
-**Acción tuya**: re-correr en Supabase, en este orden:
-1. `select crm.migrar_desde_legacy();`
-2. `select crm.migrar_clientes_desde_legacy();`
+**Acción tuya**: ~~re-correr en Supabase~~ — **YA LO CORRÍ yo (2026-09-06)**.
+`crm.migrar_desde_legacy()` y `crm.migrar_clientes_desde_legacy()` no son
+archivos: son **funciones** que se definen dentro de `supabase/crm_migracion.sql`
+y `supabase/crm_clientes_migracion.sql` y se llaman con `select ...()` (o con
+`scripts/migrate-legacy-to-crm.mjs` / `scripts/migrate-clientes-to-crm.mjs`, que
+además migra peritajes). Resultado: vehiculos 60, gestoria 13, clientes 175,
+intereses 27, autos_entrega 125, peritajes 10.
 
-**Pregunta 1**: ¿el "N veh. vendidos" del legacy es del **mes calendario actual**
-(1 al último día del mes) o de los **últimos 30 días**? Lo dejé como mes calendario
-(lo que decía el spec). Si es otra cosa, decímelo y lo ajusto.
+**⚠️ Hallazgo — la migración está OK pero el origen no tiene datos de venta:**
+`crm_legacy.vehiculos.fecha_venta` está en **NULL para los 2 autos vendidos**
+(y `venta_cliente_id` también). El CRM viejo **no guarda la fecha de venta**;
+su pantalla muestra simplemente `count(status='vendido')` = 2, sin filtro de
+fecha. Por eso el KPI nuevo (que filtra por mes) da 0 y **seguirá en 0** con los
+datos migrados hasta que registres una venta desde el CRM nuevo.
 
----
-
-## 3. KPI "Valor del stock"  ← necesito tu ayuda acá
-
-**Síntoma**:
-- Legacy: `$812.132.300` (una sola cifra, etiqueta "disponible").
-- Nuevo: `$ 812.056.300` + `US$ 54.000` (separa ARS y USD).
-
-Diferencias: (a) el nuevo separa monedas; (b) la parte ARS no coincide
-(≈ 76.000 de diferencia) y encima hay 54.000 en USD que el legacy no muestra aparte.
-
-Cómo lo calcula hoy el nuevo (`src/crm/services/dashboard.service.js` → `kpis()`):
-`suma de precio_contado de vehículos con estado='disponible' y no archivados,
-agrupado por moneda`. No hay nada hardcodeado, pero necesito saber qué hace el legacy:
-
-**Pregunta 2**: en el CRM viejo, "Valor del stock" ¿suma solo los vehículos
-**disponibles**, o también los **reservados**?
-
-**Pregunta 3**: ¿el viejo guarda todos los precios en pesos (aunque el auto se
-publique en USD) y por eso muestra una sola cifra? ¿O directamente suma el número
-de `precio_contado` sin mirar la moneda?
-- Si es "todo en una cifra": ¿querés que el nuevo muestre **una sola cifra**
-  también? Para eso habría que convertir los USD a ARS con una cotización.
-  Hoy no hay una cotización real en el sistema (hay una constante `DOLAR = 1000`
-  en `compatibilidad.js` que es un placeholder). Opciones:
-  - a) Dejar ARS y USD separados como está (más honesto, sin inventar cotización).
-  - b) Cargar una cotización configurable (¿dónde la actualizás? ¿a mano en una
-    tabla de settings?) y mostrar una sola cifra en ARS equivalente.
-  - c) Sumar los números sin mirar moneda, como (aparentemente) hace el viejo
-    (rápido, pero mezcla peras con manzanas).
-
-**Pregunta 4**: ¿me pasás 2–3 patentes/IDs de autos que el viejo cuenta como stock
-y el nuevo no (o al revés)? Con eso ubico si es un tema de `estado` mal mapeado
-en la migración o de qué vehículos entran.
-
-**Pregunta 5**: ¿qué valores de `status` usa el CRM viejo para los vehículos?
-(ej: "Disponible", "Reservado", "Vendido", "Publicado", "Pausado", "Entregado"…).
-La migración hoy solo reconoce `disponible / reservado / vendido` y todo lo demás
-lo manda a `baja` (que no cuenta como stock). Si el viejo usa otros nombres para
-autos que siguen en el lote, ahí está la fuga.
+**Pregunta 1 (revisada)**: ya sé que el viejo NO usa fecha. ¿Qué querés que
+muestre el nuevo?
+- **(a)** contar todos los `estado='vendido'` sin fecha (imita exacto al viejo → mostraría 2), o
+- **(b)** mantener "vendidos del mes" (más útil a futuro, pero hoy da 0 porque el histórico no trae fechas).
+Cambio de 1 línea en `dashboard.service.js` en cualquier caso.
 
 ---
 
-## 4. Otros archivos de schema tocados esta sesión (para re-correr en Supabase)
+## 3. KPI "Valor del stock" — RESUELTO (no era bug)
 
-| Archivo | Qué cambió | Idempotente |
+Verifiqué contra la base después de migrar. Los números del nuevo son **idénticos**
+al legacy actual:
+
+| | ARS (53 autos) | USD (5 autos) | suma cruda (sin mirar moneda) |
+|---|---|---|---|
+| `crm_legacy.vehiculos` disponibles | $812.056.300 | US$54.000 | $812.110.300 |
+| `crm.vehiculos` disponibles (migrado) | $812.056.300 | US$54.000 | $812.110.300 |
+
+- El `$812.132.300` del screenshot es de **otro momento** — el stock del viejo
+  cambió desde que lo sacaste (±22k). No hay ninguna fuga de vehículos.
+- El viejo muestra **una sola cifra** porque suma `precio_contado` **ignorando
+  `moneda_contado`**: mete los US$54.000 como si fueran pesos. El nuevo separa
+  ARS y USD, que es lo correcto.
+- Los 5 autos en USD suman US$54.000 (prom. US$10.800 c/u) — precios reales en
+  dólares, no un error de carga.
+
+**Única decisión de producto (Pregunta 2)**: ¿el KPI del nuevo se queda con
+**ARS + USD separado** (recomendado, es lo honesto), o querés **una sola cifra**?
+Para una sola cifra hay que convertir USD→ARS con una cotización, y hoy no hay
+cotización real en el sistema (`DOLAR=1000` en `compatibilidad.js` es placeholder).
+Si querés cifra única decime de dónde sale la cotización (¿la cargás a mano en una
+tabla de settings?).
+
+`status` del CRM viejo (confirmado en `crm_legacy.vehiculos`): sólo se usan
+**`disponible` (58)** y **`vendido` (2)**. No hay reservado/pausado/otros → el
+mapeo de la migración está bien, no hay fuga por `status`.
+
+---
+
+## 4. SQL de esquema — TODO APLICADO (2026-09-06)
+
+| Archivo | Qué cambió | Estado |
 |---|---|---|
-| `supabase/crm_schema.sql` | tabla `crm.opciones_campo` + RLS | sí |
-| `supabase/crm_clientes_schema.sql` | política `clientes_delete` (cualquier usuario) | sí |
-| `supabase/crm_migracion.sql` | migra `fecha_venta`; `trim()` en status | sí (re-correr la función) |
-| `supabase/crm_clientes_migracion.sql` | backfill `venta_cliente_id` | sí (re-correr la función) |
+| `supabase/crm_roles_schema.sql` | `dueno` + `crm.roles` + `vistas_override` | ✅ aplicado |
+| `supabase/crm_schema.sql` | tabla `crm.opciones_campo` + RLS | ✅ aplicado |
+| `supabase/crm_clientes_schema.sql` | política `clientes_delete` (cualquier usuario) | ✅ aplicado |
+| `supabase/crm_migracion.sql` | migra `fecha_venta`; `trim()` en status | ✅ función redefinida + corrida |
+| `supabase/crm_clientes_migracion.sql` | backfill `venta_cliente_id` | ✅ función redefinida + corrida |
+| `scripts/migrate-legacy-to-crm.mjs` | peritajes (resumen en JS) | ✅ corrido (10 peritajes) |
 
-Ninguno borra datos.
+Ninguno borra datos. Todo idempotente por `id_legacy`.
