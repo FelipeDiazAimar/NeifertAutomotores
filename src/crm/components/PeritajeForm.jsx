@@ -118,9 +118,13 @@ export default function PeritajeForm({ inicial, onGuardar, guardando }) {
       </div>
       <Input as="textarea" label="Reseña" value={resena} onChange={(e) => setResena(e.target.value)} />
 
-      {PERITAJE_SECCIONES.map((sec) => (
-        <Seccion key={sec.id} sec={sec} datos={datos} set={set} />
-      ))}
+      {/* columnas tipo mampostería: cada sección fluye sin alinearse por fila,
+          así no quedan huecos cuando una es mucho más alta que la otra. */}
+      <div className="gap-3 [column-fill:balance] sm:columns-2 [&>*]:mb-3 [&>*]:break-inside-avoid">
+        {PERITAJE_SECCIONES.map((sec) => (
+          <Seccion key={sec.id} sec={sec} datos={datos} set={set} />
+        ))}
+      </div>
 
       <div className="flex justify-end">
         <Button type="submit" disabled={guardando}>

@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Pencil, ChevronDown, Archive, Trash2 } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Badge from '@/components/common/Badge'
@@ -9,6 +8,7 @@ import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
+import VehiculoFormModal from './VehiculoFormModal'
 
 const ESTADOS = ['disponible', 'reservado', 'vendido', 'baja']
 
@@ -24,6 +24,7 @@ function Dato({ k, children }) {
 
 export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar, onEliminar, puedeEliminar }) {
   const [confirmar, setConfirmar] = useState(false)
+  const [editando, setEditando] = useState(false)
   const precio = precioFmt(v)
   const portada = v.fotos?.find((f) => f.es_portada) ?? v.fotos?.[0]
 
@@ -81,12 +82,13 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
       </GlassCard>
 
       <div className="flex flex-wrap gap-2">
-        <Link
-          to={`/crm/vehiculos/${v.id}/editar`}
+        <button
+          type="button"
+          onClick={() => setEditando(true)}
           className="glass inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-sm font-semibold text-ink transition-colors hover:border-ink/30"
         >
           <Pencil size={17} /> Editar
-        </Link>
+        </button>
         <DropdownMenu>
           <DropdownMenuTrigger aria-label="Cambiar estado" className="inline-flex">
             <span className="glass inline-flex h-11 items-center gap-2 rounded-2xl px-5 text-sm font-semibold text-ink">
@@ -130,6 +132,10 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
           </Button>
         </div>
       </Modal>
+
+      {editando && (
+        <VehiculoFormModal open vehiculo={v} onClose={() => setEditando(false)} />
+      )}
     </div>
   )
 }

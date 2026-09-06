@@ -6,12 +6,32 @@ import { X } from 'lucide-react'
 import { useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import VehiculoForm from '@/crm/components/VehiculoForm'
 
-/** Alta de vehiculo como overlay: difumina y bloquea el scroll de todo lo que
- *  hay detras; el formulario largo hace scroll dentro del overlay, no en la
- *  pagina. Cierra con Escape o con click en el fondo. */
-export default function VehiculoFormModal({ open, onClose }) {
-  const { crear } = useVehiculoMutations()
+// Campos que el form maneja (sin id/auditoría/estado).
+const CAMPOS = [
+  'marca', 'modelo', 'version', 'patente', 'tipo', 'anio', 'km', 'transmision', 'color',
+  'moneda', 'precio_contado', 'precio_canje', 'duenio_nombre', 'duenio_apellido',
+  'duenio_contacto', 'itv', 'itv_venc', 'consignacion', 'tipo_consignacion', 'origen',
+  'carpeta_completa', 'carpeta_con_oficio', 'carpeta_entregada', 'tiene_iva', 'nota',
+]
+
+/** Alta o edición de vehículo como overlay: difumina y bloquea el scroll de
+ *  todo lo que hay detrás; el formulario largo hace scroll dentro del overlay,
+ *  no en la página. Cierra con Escape o con click en el fondo.
+ *  Pasando `vehiculo` entra en modo edición. */
+export default function VehiculoFormModal({ open, onClose, vehiculo = null }) {
+  const { crear, actualizar } = useVehiculoMutations()
   const lenis = useLenis()
+
+  const esEdicion = Boolean(vehiculo?.id)
+  const titulo = esEdicion ? `Editar ${vehiculo.marca} ${vehiculo.modelo}` : 'Cargar vehículo'
+  const inicial = esEdicion
+    ? Object.fromEntries(CAMPOS.map((k) => [k, vehiculo[k] ?? undefined]))
+    : undefined
+  const guardando = esEdicion ? actualizar.isPending : crear.isPending
+  const guardar = (data) =>
+    esEdicion
+      ? actualizar.mutate({ id: vehiculo.id, data }, { onSuccess: onClose })
+      : crear.mutate(data, { onSuccess: onClose })
 
   useEffect(() => {
     if (!open) return
@@ -62,7 +82,7 @@ export default function VehiculoFormModal({ open, onClose }) {
             <motion.div
               role="dialog"
               aria-modal="true"
-              aria-label="Cargar vehículo"
+              aria-label={titulo}
               className="glass relative z-10 my-4 w-full max-w-3xl rounded-[20px] p-6 shadow-glass"
               initial={{ scale: 0.96, y: 16 }}
               animate={{ scale: 1, y: 0 }}
@@ -70,7 +90,7 @@ export default function VehiculoFormModal({ open, onClose }) {
               transition={{ type: 'spring', stiffness: 280, damping: 26 }}
             >
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-lg font-bold text-ink">Cargar vehículo</h2>
+                <h2 className="font-display text-lg font-bold text-ink">{titulo}</h2>
                 <button
                   onClick={onClose}
                   aria-label="Cerrar"
@@ -79,12 +99,7 @@ export default function VehiculoFormModal({ open, onClose }) {
                   <X size={18} />
                 </button>
               </div>
-              <VehiculoForm
-                guardando={crear.isPending}
-                onGuardar={(data) =>
-                  crear.mutate(data, { onSuccess: () => onClose() })
-                }
-              />
+              <VehiculoForm inicial={inicial} guardando={guardando} onGuardar={guardar} />
             </motion.div>
           </div>
         </motion.div>
