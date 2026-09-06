@@ -46,7 +46,9 @@ function TabsTrigger({ className, ...props }) {
       className={cn(
         "inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-md border border-transparent px-3.5 py-1.5 text-sm font-medium text-foreground/60 transition-colors",
         "hover:text-foreground focus-visible:outline-1 focus-visible:outline-ring",
-        "data-[selected]:bg-neifert data-[selected]:text-white data-[selected]:shadow-sm",
+        // Base UI marca la pestaña activa con data-active y aria-selected="true"
+        "data-[active]:bg-neifert data-[active]:text-white data-[active]:shadow-sm",
+        "aria-selected:bg-neifert aria-selected:text-white aria-selected:shadow-sm",
         "disabled:pointer-events-none disabled:opacity-50",
         "[&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className

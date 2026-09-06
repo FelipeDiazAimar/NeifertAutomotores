@@ -54,4 +54,14 @@ describe('VehiculoDetallePage', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Historial' }))
     expect(await screen.findByText(/no hay movimientos/i)).toBeInTheDocument()
   })
+
+  it('marca la pestaña activa (aria-selected + data-active) para poder resaltarla', async () => {
+    renderPage()
+    expect(screen.getByRole('tab', { name: 'Resumen' })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(screen.getByRole('tab', { name: 'Peritaje' }))
+    const peritaje = screen.getByRole('tab', { name: 'Peritaje' })
+    expect(peritaje).toHaveAttribute('aria-selected', 'true')
+    expect(peritaje).toHaveAttribute('data-active')
+    expect(screen.getByRole('tab', { name: 'Resumen' })).toHaveAttribute('aria-selected', 'false')
+  })
 })
