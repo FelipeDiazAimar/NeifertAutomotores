@@ -103,30 +103,31 @@ export default function OportunidadesList({ items = [] }) {
                       {c.nombre}
                     </Link>
                     <p className="truncate text-xs text-ink-3">{lineaInteres(c)}</p>
-                    <CompatBar score={score} bucket={bucket} className="mt-1.5" />
                   </div>
-                  <div className="flex flex-1 flex-wrap items-center justify-end gap-2 sm:flex-none">
-                    {wa && (
-                      <a
-                        href={wa}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        aria-label={`Contactar a ${c.nombre} por WhatsApp`}
-                        title={`Contactar a ${c.nombre} por WhatsApp`}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-whatsapp text-white transition-opacity hover:opacity-90"
+                  <div className="flex flex-1 basis-full items-center justify-between gap-3 sm:basis-auto sm:flex-none sm:justify-end">
+                    <CompatBar score={score} bucket={bucket} />
+                    <div className="flex shrink-0 items-center gap-2">
+                      {wa && (
+                        <a
+                          href={wa}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          aria-label={`Contactar a ${c.nombre} por WhatsApp`}
+                          title={`Contactar a ${c.nombre} por WhatsApp`}
+                          className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-whatsapp text-white transition-opacity hover:opacity-90"
+                        >
+                          <WhatsAppIcon size={16} />
+                        </a>
+                      )}
+                      <Button
+                        size="sm"
+                        variant="glass"
+                        icon={Eye}
+                        onClick={() => setDetalle({ cliente: c, vehiculo: v, resultado: { score, bucket, detalle: det } })}
                       >
-                        <WhatsAppIcon size={16} />
-                      </a>
-                    )}
-                    <Button
-                      size="sm"
-                      variant="glass"
-                      icon={Eye}
-                      className="shrink-0"
-                      onClick={() => setDetalle({ cliente: c, vehiculo: v, resultado: { score, bucket, detalle: det } })}
-                    >
-                      Detalle
-                    </Button>
+                        Detalle
+                      </Button>
+                    </div>
                   </div>
                 </li>
                 )

@@ -3,6 +3,7 @@ import { Link, Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet'
 import { useAvisoTareasHoy } from '@/crm/hooks/useAvisoTareasHoy'
+import Logo from '@/components/common/Logo'
 import CrmSidebar from './CrmSidebar'
 import '@/crm/styles/tokens.css'
 
@@ -21,8 +22,8 @@ export default function CrmLayout() {
         {/* Topbar — móvil */}
         <header className="sticky top-0 z-30 px-4 pt-3 md:hidden">
           <div className="glass-nav flex h-14 items-center justify-between rounded-2xl px-4 shadow-glass">
-            <Link to="/crm/vehiculos" className="font-display font-bold text-ink">
-              Neifert<span className="text-neifert">.</span>CRM
+            <Link to="/crm/vehiculos" aria-label="CRM Neifert">
+              <Logo className="h-8" />
             </Link>
             <Sheet open={open} onOpenChange={setOpen}>
               <SheetTrigger

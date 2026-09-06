@@ -24,7 +24,9 @@ describe('DashboardPage', () => {
     expect(screen.getByText('Clientes activos')).toBeInTheDocument()
     expect(screen.getByText('175')).toBeInTheDocument()
     expect(screen.getByText('Vehículos disponibles')).toBeInTheDocument()
-    expect(screen.getByText(/812\.132\.300/)).toBeInTheDocument()
+    // valor del stock: compacto visible, cifra exacta en el title
+    expect(screen.getByText(/812,1\s*M/)).toBeInTheDocument()
+    expect(screen.getByTitle('$ 812.132.300')).toBeInTheDocument()
     expect(screen.getByText('2 veh. vendidos')).toBeInTheDocument()
     expect(screen.getByText('Marcas más pedidas')).toBeInTheDocument()
     expect(screen.getByText('Tipos más pedidos')).toBeInTheDocument()

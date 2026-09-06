@@ -6,6 +6,7 @@ import GraficoTipos from '@/crm/components/GraficoTipos'
 import OportunidadesList from '@/crm/components/OportunidadesList'
 
 const nf = new Intl.NumberFormat('es-AR')
+const nfCompacto = new Intl.NumberFormat('es-AR', { notation: 'compact', maximumFractionDigits: 1 })
 
 function Seccion({ cargando, children }) {
   if (cargando) {
@@ -33,7 +34,8 @@ export default function DashboardPage() {
           <KpiTile label="Vehículos disponibles" valor={nf.format(kpis?.vehiculosDisponibles ?? 0)} sub="en stock" />
           <KpiTile
             label="Valor del stock"
-            valor={`$ ${nf.format(Math.round(kpis?.valorStock?.ars ?? 0))}`}
+            valor={`$ ${nfCompacto.format(Math.round(kpis?.valorStock?.ars ?? 0))}`}
+            title={`$ ${nf.format(Math.round(kpis?.valorStock?.ars ?? 0))}`}
             sub={kpis?.valorStock?.usd ? `+ US$ ${nf.format(Math.round(kpis.valorStock.usd))}` : 'disponible'}
           />
           <KpiTile

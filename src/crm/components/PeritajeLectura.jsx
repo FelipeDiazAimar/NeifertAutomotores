@@ -62,13 +62,14 @@ export default function PeritajeLectura({ peritaje }) {
       {PERITAJE_SECCIONES.every(
         (sec) => !sec.items.some((it) => datos[it.key] != null && datos[it.key] !== ''),
       ) && <p className="text-sm text-ink-3">Sin detalle cargado en este peritaje.</p>}
+      <div className="lg:columns-2 lg:gap-x-8">
       {PERITAJE_SECCIONES.map((sec) => {
         const items = sec.items.filter((it) => datos[it.key] != null && datos[it.key] !== '')
         if (!items.length) return null
         return (
-          <div key={sec.id}>
+          <div key={sec.id} className="mb-5 break-inside-avoid last:mb-0">
             <h4 className="font-display text-sm font-bold text-ink">{sec.titulo}</h4>
-            <dl className="mt-2 grid gap-x-6 gap-y-1.5 sm:grid-cols-2">
+            <dl className="mt-2 grid gap-x-6 gap-y-1.5">
               {items.map((it) => {
                 const raw = datos[it.key]
                 return (
@@ -89,6 +90,7 @@ export default function PeritajeLectura({ peritaje }) {
           </div>
         )
       })}
+      </div>
     </div>
   )
 }

@@ -99,19 +99,15 @@ function PeritajePanel({ vehiculoId }) {
         </ul>
       )}
 
-      <Modal open={nuevo} onClose={() => setNuevo(false)} title="Nuevo peritaje">
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
-          <PeritajeForm
-            guardando={crear.isPending}
-            onGuardar={(data) => crear.mutate(data, { onSuccess: () => setNuevo(false) })}
-          />
-        </div>
+      <Modal open={nuevo} onClose={() => setNuevo(false)} title="Nuevo peritaje" size="xl">
+        <PeritajeForm
+          guardando={crear.isPending}
+          onGuardar={(data) => crear.mutate(data, { onSuccess: () => setNuevo(false) })}
+        />
       </Modal>
 
-      <Modal open={Boolean(verId)} onClose={() => setVerId(null)} title="Peritaje">
-        <div className="max-h-[70vh] overflow-y-auto pr-1">
-          {seleccionado ? <PeritajeLectura peritaje={seleccionado} /> : <Spinner size={20} />}
-        </div>
+      <Modal open={Boolean(verId)} onClose={() => setVerId(null)} title="Peritaje" size="xl">
+        {seleccionado ? <PeritajeLectura peritaje={seleccionado} /> : <Spinner size={20} />}
       </Modal>
     </div>
   )
