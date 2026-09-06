@@ -15,7 +15,12 @@ export async function listar({
   pageSize = 20,
   incluirArchivados = false,
 } = {}) {
-  let q = db().from('vehiculos').select('*, fotos:vehiculo_fotos(url,es_portada)', { count: 'exact' })
+  let q = db()
+    .from('vehiculos')
+    .select(
+      '*, fotos:vehiculo_fotos(url,es_portada), peritajes(items_ok,items_obs,items_falta,fecha), gestoria(estado)',
+      { count: 'exact' },
+    )
 
   if (!incluirArchivados) q = q.is('archivado_en', null)
 
@@ -30,7 +35,9 @@ export async function listar({
   if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
   if (filtros.precioMax != null && filtros.precioMax !== '') q = q.lte('precio_contado', Number(filtros.precioMax))
 
-  q = q.order(orden.campo, { ascending: orden.dir === 'asc' })
+  q = q
+    .order(orden.campo, { ascending: orden.dir === 'asc' })
+    .order('fecha', { referencedTable: 'peritajes', ascending: false })
 
   const from = (pagina - 1) * pageSize
   q = q.range(from, from + pageSize - 1)

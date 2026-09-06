@@ -29,6 +29,9 @@ describe('listar', () => {
       ['is', 'archivado_en', null],
       ['range', 20, 39],
     ]))
+    // embebe peritaje + gestoría para las columnas de la tabla
+    expect(call.select).toContain('peritajes(')
+    expect(call.select).toContain('gestoria(')
   })
 
   it('busqueda arma el or() sobre varios campos', async () => {
