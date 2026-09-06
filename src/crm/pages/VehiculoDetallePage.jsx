@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Plus } from 'lucide-react'
+import { ArrowLeft, Plus, ChevronRight } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
@@ -16,8 +16,20 @@ import PeritajeLectura from '@/crm/components/PeritajeLectura'
 import GestoriaChecklist from '@/crm/components/GestoriaChecklist'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
 import EstadoStrip from '@/crm/components/EstadoStrip'
+import { estadoPeritaje, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
+import { cn } from '@/lib/cn'
 
 const fmtFecha = (f) => (f ? new Date(f).toLocaleDateString('es-AR') : '—')
+const nfMonto = new Intl.NumberFormat('es-AR')
+
+function ChipCount({ tono, n, label }) {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-2">
+      <span className={cn('h-1.5 w-1.5 rounded-full', tono)} />
+      {n} {label}
+    </span>
+  )
+}
 
 function PeritajePanel({ vehiculoId }) {
   const { data: peritajes = [], isLoading } = usePeritajes(vehiculoId)
@@ -39,27 +51,47 @@ function PeritajePanel({ vehiculoId }) {
           <Spinner size={24} />
         </div>
       ) : peritajes.length === 0 ? (
-        <p className="py-8 text-center text-sm text-ink-3">Sin peritajes cargados.</p>
+        <GlassCard className="p-8 text-center">
+          <p className="text-sm text-ink-3">Este vehículo todavía no tiene peritajes.</p>
+        </GlassCard>
       ) : (
         <ul className="space-y-2">
           {peritajes.map((p) => {
             const quien = p.peritador?.nombre || p.peritado_por_nombre
+            const est = estadoPeritaje(p)
             return (
               <li key={p.id}>
-                <GlassCard as="button" onClick={() => setVerId(p.id)} className="flex w-full items-center gap-4 p-3 text-left">
-                  <div className="w-28 shrink-0">
+                <GlassCard
+                  as="button"
+                  onClick={() => setVerId(p.id)}
+                  className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-surface"
+                >
+                  <div className="min-w-0 flex-1 space-y-2">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                      <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
+                      <span
+                        className={cn(
+                          'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+                          est === 'completo' && 'bg-success/15 text-success',
+                          est === 'en_proceso' && 'bg-amber/15 text-amber',
+                          est === 'sin_iniciar' && 'bg-ink/10 text-ink-3',
+                        )}
+                      >
+                        {PERITAJE_ESTADO_LABEL[est]}
+                      </span>
+                      {quien && <span className="text-xs text-ink-3">· {quien}</span>}
+                      {p.costo_total ? (
+                        <span className="text-xs text-ink-3">· $ {nfMonto.format(p.costo_total)}</span>
+                      ) : null}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      <ChipCount tono="bg-success" n={p.items_ok} label="OK" />
+                      <ChipCount tono="bg-amber" n={p.items_obs} label="obs." />
+                      <ChipCount tono="bg-neifert" n={p.items_falta} label="faltas" />
+                    </div>
                     <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
-                    <p className="mt-1 text-[11px] text-ink-3">
-                      {p.items_ok} ok · {p.items_obs} obs · {p.items_falta} falta
-                    </p>
                   </div>
-                  <div className="flex-1 text-sm">
-                    <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
-                    {quien && <span className="text-ink-3"> · {quien}</span>}
-                  </div>
-                  <span className="text-xs text-ink-3">
-                    {p.costo_total ? `$ ${new Intl.NumberFormat('es-AR').format(p.costo_total)}` : ''}
-                  </span>
+                  <ChevronRight size={18} className="shrink-0 text-ink-3" />
                 </GlassCard>
               </li>
             )

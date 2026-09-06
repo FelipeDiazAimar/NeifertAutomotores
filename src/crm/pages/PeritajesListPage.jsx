@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
 import Badge from '@/components/common/Badge'
@@ -24,28 +24,31 @@ export default function PeritajesListPage() {
     return () => clearTimeout(t)
   }, [texto])
 
-  const { data: filas = [], isLoading } = usePeritajesVehiculos({
-    busqueda,
-    ...(estado ? { estado } : {}),
-  })
+  const { data: todas = [], isLoading } = usePeritajesVehiculos({ busqueda })
+
+  const counts = useMemo(() => {
+    const c = { total: todas.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
+    for (const f of todas) c[f.estadoPeritaje] = (c[f.estadoPeritaje] ?? 0) + 1
+    return c
+  }, [todas])
+
+  const filas = estado ? todas.filter((f) => f.estadoPeritaje === estado) : todas
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-bold text-ink">Peritaje</h1>
-        <p className="text-sm text-ink-3">{filas.length} vehículos</p>
+        <p className="text-sm text-ink-3">{counts.total} vehículos</p>
       </div>
 
-      <div className="flex items-center gap-2">
-        <div className="glass field-glass flex h-12 flex-1 items-center gap-2.5 rounded-2xl px-3.5">
-          <Search size={17} className="shrink-0 text-ink-3" />
-          <input
-            value={texto}
-            onChange={(e) => setTexto(e.target.value)}
-            placeholder="Buscar por marca, modelo o patente…"
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
-          />
-        </div>
+      <div className="glass field-glass flex h-12 items-center gap-2.5 rounded-2xl px-3.5">
+        <Search size={17} className="shrink-0 text-ink-3" />
+        <input
+          value={texto}
+          onChange={(e) => setTexto(e.target.value)}
+          placeholder="Buscar por marca, modelo o patente…"
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+        />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -55,11 +58,19 @@ export default function PeritajesListPage() {
             type="button"
             onClick={() => setEstado(f.id)}
             className={cn(
-              'glass rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
+              'glass flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
               estado === f.id ? 'text-neifert' : 'text-ink-2 hover:text-ink',
             )}
           >
             {f.label}
+            <span
+              className={cn(
+                'grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold',
+                estado === f.id ? 'bg-neifert text-white' : 'bg-ink/10 text-ink-3',
+              )}
+            >
+              {f.id ? counts[f.id] : counts.total}
+            </span>
           </button>
         ))}
       </div>

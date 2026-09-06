@@ -1,5 +1,6 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { Search } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
@@ -21,13 +22,40 @@ const hechos = (g) => GESTORIA_ITEMS.filter(({ key }) => g[`${key}_hecho`]).leng
 export default function GestoriaListPage() {
   const navigate = useNavigate()
   const [estado, setEstado] = useState(null)
-  const { data: filas = [], isLoading } = useGestoriasTodas(estado ? { estado } : {})
+  const [q, setQ] = useState('')
+  const { data: todas = [], isLoading } = useGestoriasTodas()
+
+  const counts = useMemo(() => {
+    const c = { total: todas.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
+    for (const g of todas) c[g.estado] = (c[g.estado] ?? 0) + 1
+    return c
+  }, [todas])
+
+  const visibles = useMemo(() => {
+    const t = q.trim().toLowerCase()
+    return todas.filter((g) => {
+      if (estado && g.estado !== estado) return false
+      if (!t) return true
+      const v = g.vehiculo ?? {}
+      return `${v.marca ?? ''} ${v.modelo ?? ''} ${v.patente ?? ''}`.toLowerCase().includes(t)
+    })
+  }, [todas, estado, q])
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-bold text-ink">Gestoría</h1>
-        <p className="text-sm text-ink-3">{filas.length} vehículos con trámites</p>
+        <p className="text-sm text-ink-3">{counts.total} vehículos con trámites</p>
+      </div>
+
+      <div className="glass field-glass flex h-12 items-center gap-2.5 rounded-2xl px-3.5">
+        <Search size={17} className="shrink-0 text-ink-3" />
+        <input
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar por marca, modelo o patente…"
+          className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+        />
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -37,11 +65,19 @@ export default function GestoriaListPage() {
             type="button"
             onClick={() => setEstado(f.id)}
             className={cn(
-              'glass rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
+              'glass flex items-center gap-2 rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
               estado === f.id ? 'text-neifert' : 'text-ink-2 hover:text-ink',
             )}
           >
             {f.label}
+            <span
+              className={cn(
+                'grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold',
+                estado === f.id ? 'bg-neifert text-white' : 'bg-ink/10 text-ink-3',
+              )}
+            >
+              {f.id ? counts[f.id] : counts.total}
+            </span>
           </button>
         ))}
       </div>
@@ -50,11 +86,15 @@ export default function GestoriaListPage() {
         <div className="grid place-items-center py-16">
           <Spinner size={28} />
         </div>
-      ) : filas.length === 0 ? (
+      ) : visibles.length === 0 ? (
         <GlassCard className="p-10 text-center">
-          <p className="font-display font-bold text-ink">Sin gestorías</p>
+          <p className="font-display font-bold text-ink">
+            {q.trim() || estado ? 'Sin resultados' : 'Sin gestorías'}
+          </p>
           <p className="mt-1 text-sm text-ink-3">
-            Se arman desde la ficha de cada vehículo, pestaña Gestoría.
+            {q.trim() || estado
+              ? 'Probá con otro filtro o búsqueda.'
+              : 'Se arman desde la ficha de cada vehículo, pestaña Gestoría.'}
           </p>
         </GlassCard>
       ) : (
@@ -70,7 +110,7 @@ export default function GestoriaListPage() {
               </tr>
             </thead>
             <tbody>
-              {filas.map((g) => {
+              {visibles.map((g) => {
                 const { inicio, cierre } = fechasGestoria(g)
                 return (
                   <tr

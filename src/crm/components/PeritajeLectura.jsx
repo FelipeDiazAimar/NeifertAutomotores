@@ -1,4 +1,4 @@
-import { PERITAJE_SECCIONES } from '@/crm/lib/peritajeSchema'
+import { PERITAJE_SECCIONES, estadoPeritaje, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
 import EstadoStrip from './EstadoStrip'
 import { cn } from '@/lib/cn'
 
@@ -22,36 +22,46 @@ function valorMostrado(item, raw) {
 export default function PeritajeLectura({ peritaje }) {
   const datos = peritaje?.datos ?? {}
   const quien = peritaje?.peritador?.nombre || peritaje?.peritado_por_nombre
+  const est = estadoPeritaje(peritaje)
   return (
     <div className="space-y-5">
-      {(peritaje?.fecha || quien || peritaje?.costo_total) && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-3">
+      <div className="rounded-2xl border border-line p-4">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
           {peritaje?.fecha && (
-            <span>
-              Fecha: <span className="text-ink">{new Date(peritaje.fecha).toLocaleDateString('es-AR')}</span>
+            <span className="font-semibold text-ink">
+              {new Date(peritaje.fecha).toLocaleDateString('es-AR')}
             </span>
           )}
-          {quien && (
-            <span>
-              Peritó: <span className="text-ink">{quien}</span>
-            </span>
-          )}
+          <span
+            className={cn(
+              'rounded-full px-2 py-0.5 text-[11px] font-semibold',
+              est === 'completo' && 'bg-success/15 text-success',
+              est === 'en_proceso' && 'bg-amber/15 text-amber',
+              est === 'sin_iniciar' && 'bg-ink/10 text-ink-3',
+            )}
+          >
+            {PERITAJE_ESTADO_LABEL[est]}
+          </span>
+          {quien && <span className="text-sm text-ink-3">Peritó {quien}</span>}
           {peritaje?.costo_total ? (
-            <span>
-              Costo: <span className="text-ink">$ {nf.format(peritaje.costo_total)}</span>
-            </span>
+            <span className="text-sm text-ink-3">· Costo $ {nf.format(peritaje.costo_total)}</span>
           ) : null}
         </div>
-      )}
-      <EstadoStrip
-        ok={peritaje?.items_ok ?? 0}
-        obs={peritaje?.items_obs ?? 0}
-        falta={peritaje?.items_falta ?? 0}
-        showLegend
-      />
+        <div className="mt-3">
+          <EstadoStrip
+            ok={peritaje?.items_ok ?? 0}
+            obs={peritaje?.items_obs ?? 0}
+            falta={peritaje?.items_falta ?? 0}
+            showLegend
+          />
+        </div>
+      </div>
       {peritaje?.resena && (
         <p className="rounded-2xl border border-line p-3 text-sm text-ink-2">{peritaje.resena}</p>
       )}
+      {PERITAJE_SECCIONES.every(
+        (sec) => !sec.items.some((it) => datos[it.key] != null && datos[it.key] !== ''),
+      ) && <p className="text-sm text-ink-3">Sin detalle cargado en este peritaje.</p>}
       {PERITAJE_SECCIONES.map((sec) => {
         const items = sec.items.filter((it) => datos[it.key] != null && datos[it.key] !== '')
         if (!items.length) return null

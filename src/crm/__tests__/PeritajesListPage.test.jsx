@@ -39,10 +39,28 @@ describe('PeritajesListPage', () => {
     expect(screen.getByText('Cristian')).toBeInTheDocument()
   })
 
-  it('los filtros de estado pasan el valor al hook', async () => {
+  it('los botones de filtro muestran el recuento por estado', () => {
     usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
     render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
-    await userEvent.click(screen.getByRole('button', { name: /^completo$/i }))
-    expect(usePeritajesVehiculos).toHaveBeenLastCalledWith(expect.objectContaining({ estado: 'completo' }))
+    const todos = screen.getByRole('button', { name: /todos/i })
+    expect(todos).toHaveTextContent('2')
+    expect(screen.getByRole('button', { name: /en proceso/i })).toHaveTextContent('1')
+    expect(screen.getByRole('button', { name: /sin peritar/i })).toHaveTextContent('1')
+  })
+
+  it('filtrar por "Completo" (sin resultados) muestra el vacío', async () => {
+    usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
+    render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: /^completo/i }))
+    expect(screen.getByText('Sin resultados')).toBeInTheDocument()
+    expect(screen.queryByText('Toyota Hilux')).not.toBeInTheDocument()
+  })
+
+  it('filtrar por "En proceso" deja solo esa fila', async () => {
+    usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
+    render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
+    await userEvent.click(screen.getByRole('button', { name: /en proceso/i }))
+    expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
+    expect(screen.queryByText('Ford Ka')).not.toBeInTheDocument()
   })
 })
