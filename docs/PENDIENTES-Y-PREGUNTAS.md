@@ -106,12 +106,9 @@ al legacy actual:
 - Los 5 autos en USD suman US$54.000 (prom. US$10.800 c/u) — precios reales en
   dólares, no un error de carga.
 
-**Única decisión de producto (Pregunta 2)**: ¿el KPI del nuevo se queda con
-**ARS + USD separado** (recomendado, es lo honesto), o querés **una sola cifra**?
-Para una sola cifra hay que convertir USD→ARS con una cotización, y hoy no hay
-cotización real en el sistema (`DOLAR=1000` en `compatibilidad.js` es placeholder).
-Si querés cifra única decime de dónde sale la cotización (¿la cargás a mano en una
-tabla de settings?).
+**Decisión tomada (2026-09-06): ARS y USD separados.** Ya funciona así —
+`dashboard.service.js` devuelve `valorStock: { ars, usd }` y `DashboardPage`
+muestra `$ 812.056.300` con subtítulo `+ US$ 54.000`. Nada que cambiar.
 
 `status` del CRM viejo (confirmado en `crm_legacy.vehiculos`): sólo se usan
 **`disponible` (58)** y **`vendido` (2)**. No hay reservado/pausado/otros → el
