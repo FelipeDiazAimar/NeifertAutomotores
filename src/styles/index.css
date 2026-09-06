@@ -1,4 +1,5 @@
 @import 'tailwindcss';
+@import '../crm/styles/shadcn-theme.css'; /* theme del CRM (base-nova), scopeado a .crm-root */
 
 /* Dark mode por clase (.dark en <html>) en vez de prefers-color-scheme */
 @custom-variant dark (&:where(.dark, .dark *));
@@ -153,9 +154,10 @@
 
   /* Fondo más opaco que .glass (no transparente del todo) para overlays
      flotantes que se leen sobre contenido variado detrás — el calendario y
-     la lista de opciones de un Select. Se usa junto con .glass (la gana por
-     ir después en la cascada), no lo reemplaza. */
-  .glass-popover {
+     la lista de opciones de un Select. Se usa junto con .glass; el selector
+     .glass.glass-popover (especificidad 0,2,0) le gana a .glass sin depender
+     del orden de la cascada, que Tailwind v4 reordena entre utilidades. */
+  .glass.glass-popover {
     background-color: var(--c-surface-popover);
   }
 

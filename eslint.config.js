@@ -30,4 +30,20 @@ export default [
       'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
     },
   },
+  {
+    // Código que corre en Node: funciones serverless, plugins de Vite,
+    // scripts y core del servidor (usan process/Buffer/global).
+    files: [
+      'api/**/*.js',
+      'scripts/**/*.{js,mjs}',
+      'src/server/**/*.js',
+      'src/plugins/**/*.js',
+      'vite.config.js',
+      'vitest.config.js',
+      'vitest.setup.js',
+    ],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+  },
 ]

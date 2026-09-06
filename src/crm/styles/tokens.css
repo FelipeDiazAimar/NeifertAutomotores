@@ -1,0 +1,30 @@
+/* El CRM usa el sistema glass del sitio (--c-*, .glass, Sora/Inter). Este
+   archivo solo mapea las vars de base-nova a los --c-* para que los 3
+   primitivos que quedan (Tabs, DropdownMenu, Sheet) hereden el mismo look.
+   Scope: .crm-root (lo pone CrmLayout / CrmLoginPage en su div raíz).
+   El dark ya lo maneja .dark en <html> vía useUiStore → los --c-* cambian solos. */
+.crm-root {
+  --background: var(--c-surface-solid);
+  --foreground: var(--c-text);
+  --card: var(--c-surface-solid);
+  --card-foreground: var(--c-text);
+  --popover: var(--c-surface-popover);
+  --popover-foreground: var(--c-text);
+  --primary: #be1e2d; /* --color-neifert */
+  --primary-foreground: #ffffff;
+  --secondary: var(--c-surface);
+  --secondary-foreground: var(--c-text);
+  --muted: var(--c-surface);
+  --muted-foreground: var(--c-text-3);
+  --accent: var(--c-surface);
+  --accent-foreground: var(--c-text);
+  --destructive: #be1e2d;
+  --destructive-foreground: #ffffff;
+  --border: var(--c-line);
+  --input: var(--c-line);
+  --ring: #be1e2d;
+  --radius: 1rem;
+
+  color: var(--c-text);
+  font-family: var(--font-sans);
+}

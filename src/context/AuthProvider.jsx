@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '@/services/supabaseClient'
 import { loginWithCrmCredentials } from '@/services/crmAuth.service'
+import { obtenerMiPerfil } from '@/crm/services/crmUsuarios.service'
 import { AuthContext } from './authContext'
 
 const DEMO_KEY = 'nf-demo-session'
@@ -26,6 +27,12 @@ export function AuthProvider({ children }) {
     demoInit ? { full_name: demoInit.nombre, role: demoInit.role } : null
   )
   const [loading, setLoading] = useState(() => isSupabaseConfigured)
+
+  // Perfil del CRM nuevo (crm.usuarios) — solo se carga en rutas /crm/*.
+  const enRutaCrm =
+    typeof window !== 'undefined' && window.location.pathname.startsWith('/crm')
+  // undefined = todavía no se cargó; null = cargado, sin fila en crm.usuarios.
+  const [crmPerfil, setCrmPerfil] = useState(undefined)
 
   // Inicialización (solo backend real)
   useEffect(() => {
@@ -64,6 +71,23 @@ export function AuthProvider({ children }) {
       })
   }, [session])
 
+  // Perfil del CRM nuevo — solo en /crm/*. Si no hay fila en crm.usuarios,
+  // queda null (CrmProtectedRoute muestra "sin acceso").
+  useEffect(() => {
+    if (!isSupabaseConfigured || !enRutaCrm || !session?.user) return
+    let vivo = true
+    obtenerMiPerfil(session.user.id)
+      .then((data) => {
+        if (vivo) setCrmPerfil(data ?? null)
+      })
+      .catch(() => {
+        if (vivo) setCrmPerfil(null)
+      })
+    return () => {
+      vivo = false
+    }
+  }, [session, enRutaCrm])
+
   // Login del panel: reutiliza el login real del CRM viejo (neifertcrm.com)
   // como fuente de verdad de usuario/contraseña, con o sin Supabase configurado.
   const signIn = useCallback(async (user, pass) => {
@@ -96,6 +120,9 @@ export function AuthProvider({ children }) {
     session,
     profile,
     loading,
+    crmPerfil: session?.user ? (crmPerfil ?? null) : null,
+    crmPerfilCargando:
+      isSupabaseConfigured && enRutaCrm && Boolean(session?.user) && crmPerfil === undefined,
     isAuthenticated: Boolean(session),
     isDemo: !isSupabaseConfigured,
     signIn,

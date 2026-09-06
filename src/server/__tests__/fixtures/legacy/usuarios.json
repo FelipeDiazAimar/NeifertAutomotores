@@ -1,0 +1,34 @@
+{
+  "get": [
+    {
+      "id": 3,
+      "user": "Bruno",
+      "nombre": "Bruno",
+      "role": "vendedor"
+    },
+    {
+      "id": 1,
+      "user": "Cristian",
+      "nombre": "Cristian",
+      "role": "admin"
+    },
+    {
+      "id": 2,
+      "user": "Juani",
+      "nombre": "Juani",
+      "role": "vendedor"
+    },
+    {
+      "id": 4,
+      "user": "Nico",
+      "nombre": "Nicolás",
+      "role": "vendedor"
+    },
+    {
+      "id": 6,
+      "user": "Valeria",
+      "nombre": "Valeria",
+      "role": ""
+    }
+  ]
+}

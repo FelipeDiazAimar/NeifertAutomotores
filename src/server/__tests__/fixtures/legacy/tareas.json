@@ -1,0 +1,26 @@
+{
+  "get": [
+    {
+      "id": "mtgdfrp21ae5c7d6",
+      "titulo": "test",
+      "descripcion": "test",
+      "fecha": "2026-08-30",
+      "done": 0,
+      "cliente_id": "6c6jqbi7l2e6eb853",
+      "cliente_nombre": "test",
+      "cliente_phone": "test",
+      "asignado_a": "Bruno",
+      "created_at": "2026-08-30 10:00:00",
+      "updated_at": "2026-08-30 10:00:00"
+    }
+  ],
+  "post": {
+    "titulo": "test",
+    "descripcion": "test",
+    "fecha": "2026-08-30",
+    "clienteId": "6c6jqbi7l2e6eb853",
+    "clienteNombre": "test",
+    "clientePhone": "test",
+    "asignadoA": "Bruno"
+  }
+}

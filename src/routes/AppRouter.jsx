@@ -4,6 +4,7 @@ import PublicLayout from '@/components/layout/PublicLayout'
 import AdminLayout from '@/components/layout/AdminLayout'
 import ScrollToTop from '@/components/common/ScrollToTop'
 import ProtectedRoute from './ProtectedRoute'
+import CrmProtectedRoute from '@/crm/routes/CrmProtectedRoute'
 
 // Páginas cargadas bajo demanda (code-splitting por ruta)
 const HomePage = lazy(() => import('@/pages/public/HomePage'))
@@ -24,6 +25,24 @@ const AdminUsersPage = lazy(() => import('@/pages/admin/AdminUsersPage'))
 const StoragePage = lazy(() => import('@/pages/admin/StoragePage'))
 const AdminLogErrorsPage = lazy(() => import('@/pages/admin/AdminLogErrorsPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
+
+// CRM nuevo (route group /crm)
+const CrmLoginPage = lazy(() => import('@/crm/pages/CrmLoginPage'))
+const CrmLayout = lazy(() => import('@/crm/components/CrmLayout'))
+const VehiculosListPage = lazy(() => import('@/crm/pages/VehiculosListPage'))
+const VehiculoDetallePage = lazy(() => import('@/crm/pages/VehiculoDetallePage'))
+const VehiculoEditarPage = lazy(() => import('@/crm/pages/VehiculoEditarPage'))
+const ClientesListPage = lazy(() => import('@/crm/pages/ClientesListPage'))
+const ClienteDetallePage = lazy(() => import('@/crm/pages/ClienteDetallePage'))
+const ClienteEditarPage = lazy(() => import('@/crm/pages/ClienteEditarPage'))
+const TareasListPage = lazy(() => import('@/crm/pages/TareasListPage'))
+const PeritajesListPage = lazy(() => import('@/crm/pages/PeritajesListPage'))
+const GestoriaListPage = lazy(() => import('@/crm/pages/GestoriaListPage'))
+const DashboardPage = lazy(() => import('@/crm/pages/DashboardPage'))
+const UsuariosPage = lazy(() => import('@/crm/pages/UsuariosPage'))
+const RolesPage = lazy(() => import('@/crm/pages/RolesPage'))
+const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
+const VistaGuard = lazy(() => import('@/crm/routes/VistaGuard'))
 
 export default function AppRouter() {
   return (
@@ -60,6 +79,27 @@ export default function AppRouter() {
         <Route path="/admin/usuarios" element={<AdminUsersPage />} />
         <Route path="/admin/almacenamiento" element={<StoragePage />} />
         <Route path="/admin/logerrors" element={<AdminLogErrorsPage />} />
+      </Route>
+
+      <Route path="/crm/login" element={<CrmLoginPage />} />
+      <Route element={<CrmProtectedRoute />}>
+        <Route element={<CrmLayout />}>
+          <Route element={<VistaGuard />}>
+            <Route path="/crm" element={<DashboardPage />} />
+            <Route path="/crm/clientes" element={<ClientesListPage />} />
+            <Route path="/crm/clientes/:id" element={<ClienteDetallePage />} />
+            <Route path="/crm/clientes/:id/editar" element={<ClienteEditarPage />} />
+            <Route path="/crm/tareas" element={<TareasListPage />} />
+            <Route path="/crm/peritaje" element={<PeritajesListPage />} />
+            <Route path="/crm/gestoria" element={<GestoriaListPage />} />
+            <Route path="/crm/vehiculos" element={<VehiculosListPage />} />
+            <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
+            <Route path="/crm/vehiculos/:id/editar" element={<VehiculoEditarPage />} />
+            <Route path="/crm/usuarios" element={<UsuariosPage />} />
+            <Route path="/crm/roles" element={<RolesPage />} />
+            <Route path="/crm/cambiar-password" element={<CambiarPasswordPage />} />
+          </Route>
+        </Route>
       </Route>
 
       <Route path="*" element={<NotFoundPage />} />
