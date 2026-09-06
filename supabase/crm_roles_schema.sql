@@ -20,13 +20,20 @@ alter table crm.usuarios add column if not exists vistas_override text[];
 
 -- 4. Seed idempotente (no pisa ediciones hechas desde la UI)
 insert into crm.roles (rol, vistas_default) values
-  ('admin',    '{panel,clientes,vehiculos,tareas,usuarios,roles}'),
-  ('vendedor', '{panel,clientes,vehiculos,tareas}')
+  ('admin',    '{panel,clientes,vehiculos,peritaje,gestoria,tareas,usuarios,roles}'),
+  ('vendedor', '{panel,clientes,vehiculos,peritaje,gestoria,tareas}')
 on conflict (rol) do nothing;
 -- 'dueno' en un statement aparte: el valor de enum recién se amplió arriba
 insert into crm.roles (rol, vistas_default) values
-  ('dueno', '{panel,clientes,vehiculos,tareas,usuarios,roles}')
+  ('dueno', '{panel,clientes,vehiculos,peritaje,gestoria,tareas,usuarios,roles}')
 on conflict (rol) do nothing;
+
+-- 4b. Para bases ya sembradas: agrega peritaje/gestoria a los defaults si faltan
+--     (todos los roles; el usuario que se las quiera sacar usa su override).
+update crm.roles set vistas_default = vistas_default || array['peritaje']
+  where not ('peritaje' = any(vistas_default));
+update crm.roles set vistas_default = vistas_default || array['gestoria']
+  where not ('gestoria' = any(vistas_default));
 
 -- 5. RLS de crm.roles
 alter table crm.roles enable row level security;

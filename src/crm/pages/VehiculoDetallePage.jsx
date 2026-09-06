@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { ArrowLeft, Plus } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
@@ -79,12 +79,21 @@ function PeritajePanel({ vehiculoId }) {
   )
 }
 
+const TABS_VALIDOS = ['resumen', 'peritaje', 'gestoria', 'historial']
+
 export default function VehiculoDetallePage() {
   const { id } = useParams()
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const { data: v, isLoading } = useVehiculo(id)
   const { cambiarEstado, archivar, eliminar } = useVehiculoMutations()
   const { esAdmin } = useCrmPerfil()
+
+  const tab = TABS_VALIDOS.includes(params.get('tab')) ? params.get('tab') : 'resumen'
+  const setTab = (t) => setParams((p) => {
+    t === 'resumen' ? p.delete('tab') : p.set('tab', t)
+    return p
+  }, { replace: true })
 
   if (isLoading) {
     return (
@@ -104,7 +113,7 @@ export default function VehiculoDetallePage() {
         {v.marca} {v.modelo}
       </h1>
 
-      <Tabs defaultValue="resumen" className="crm-root">
+      <Tabs value={tab} onValueChange={setTab} className="crm-root">
         <TabsList>
           <TabsTrigger value="resumen">Resumen</TabsTrigger>
           <TabsTrigger value="peritaje">Peritaje</TabsTrigger>

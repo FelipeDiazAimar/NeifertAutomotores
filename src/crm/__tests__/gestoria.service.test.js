@@ -39,6 +39,24 @@ describe('gestoria.service.guardarCampos', () => {
   })
 })
 
+describe('gestoria.service.listarTodas', () => {
+  it('sin estado no filtra; con estado agrega eq', async () => {
+    const { client, calls } = makeSupabase({ 'select:gestoria': { data: [{ id: 1 }], error: null } })
+    holder.client = client
+    await svc.listarTodas()
+    let c = calls.find((x) => x.table === 'gestoria')
+    expect(c.select).toContain('vehiculo:vehiculos!inner')
+    expect(c.filters).not.toEqual(expect.arrayContaining([['eq', 'estado', 'en_proceso']]))
+
+    const m2 = makeSupabase({ 'select:gestoria': { data: [], error: null } })
+    holder.client = m2.client
+    await svc.listarTodas({ estado: 'en_proceso' })
+    expect(m2.calls.find((x) => x.table === 'gestoria').filters).toEqual(
+      expect.arrayContaining([['eq', 'estado', 'en_proceso']]),
+    )
+  })
+})
+
 describe('gestoria.service.obtenerPorVehiculo', () => {
   it('filtra por vehiculo_id y devuelve la fila (maybeSingle)', async () => {
     const { client, calls } = makeSupabase({ 'select:gestoria': { data: { vehiculo_id: 'v1', estado: 'en_proceso' }, error: null } })

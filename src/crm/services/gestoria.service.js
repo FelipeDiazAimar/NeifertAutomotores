@@ -3,6 +3,20 @@ import { registrar } from './eventos.service.js'
 
 const db = () => supabase.schema('crm')
 
+/** Todas las gestorías (para la sección dedicada). `estado` filtra por
+ *  sin_iniciar / en_proceso / completo. */
+export async function listarTodas({ estado } = {}) {
+  let q = db()
+    .from('gestoria')
+    .select('*, vehiculo:vehiculos!inner(id, marca, modelo, patente, estado)')
+    .order('actualizado_en', { ascending: false })
+  if (estado) q = q.eq('estado', estado)
+
+  const { data, error } = await q
+  if (error) throw error
+  return data ?? []
+}
+
 export async function obtenerPorVehiculo(vehiculoId) {
   const { data, error } = await db()
     .from('gestoria')

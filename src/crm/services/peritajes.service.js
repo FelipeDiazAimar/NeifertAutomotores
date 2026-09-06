@@ -4,6 +4,33 @@ import { registrar } from './eventos.service.js'
 
 const db = () => supabase.schema('crm')
 
+/** Todos los peritajes (para la sección dedicada). `soloConFaltas` filtra los
+ *  que tienen al menos un ítem en falta. `busqueda` matchea marca/modelo/patente. */
+export async function listarTodos({ busqueda = '', soloConFaltas = false } = {}) {
+  let q = db()
+    .from('peritajes')
+    .select(
+      'id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
+        'vehiculo:vehiculos!inner(id, marca, modelo, patente, estado), peritador:usuarios(nombre)',
+    )
+    .order('fecha', { ascending: false })
+  if (soloConFaltas) q = q.gt('items_falta', 0)
+
+  const { data, error } = await q
+  if (error) throw error
+
+  let filas = data ?? []
+  const b = busqueda.trim().toLowerCase()
+  if (b) {
+    filas = filas.filter((p) =>
+      `${p.vehiculo?.marca ?? ''} ${p.vehiculo?.modelo ?? ''} ${p.vehiculo?.patente ?? ''}`
+        .toLowerCase()
+        .includes(b),
+    )
+  }
+  return filas
+}
+
 export async function listarPorVehiculo(vehiculoId) {
   const { data, error } = await db()
     .from('peritajes')

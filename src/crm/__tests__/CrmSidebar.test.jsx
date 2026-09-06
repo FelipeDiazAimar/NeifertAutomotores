@@ -13,7 +13,7 @@ vi.mock('@/store/useUiStore', () => ({ useUiStore: (sel) => sel({ theme: 'light'
 
 const { default: CrmSidebar } = await import('../components/CrmSidebar.jsx')
 
-const TODAS = ['panel', 'clientes', 'vehiculos', 'tareas', 'usuarios', 'roles']
+const TODAS = ['panel', 'clientes', 'vehiculos', 'peritaje', 'gestoria', 'tareas', 'usuarios', 'roles']
 
 describe('CrmSidebar', () => {
   it('muestra el badge de tareas pendientes de hoy', () => {

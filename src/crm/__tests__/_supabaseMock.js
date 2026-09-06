@@ -22,6 +22,8 @@ export function makeSupabase(handlers = {}) {
         or(expr) { state.filters.push(['or', expr]); return builder },
         gte(c, v) { state.filters.push(['gte', c, v]); return builder },
         lte(c, v) { state.filters.push(['lte', c, v]); return builder },
+        gt(c, v) { state.filters.push(['gt', c, v]); return builder },
+        lt(c, v) { state.filters.push(['lt', c, v]); return builder },
         order(c, o) { state.filters.push(['order', c, o]); return builder },
         range(a, b) { state.filters.push(['range', a, b]); return builder },
         limit() { return finalize() },

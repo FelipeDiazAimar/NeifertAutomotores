@@ -11,6 +11,13 @@ export function useGestoria(vehiculoId) {
   })
 }
 
+export function useGestoriasTodas(opts = {}) {
+  return useQuery({
+    queryKey: ['crm', 'gestoria', 'todas', opts],
+    queryFn: () => svc.listarTodas(opts),
+  })
+}
+
 export function useGestoriaMutations(vehiculoId) {
   const qc = useQueryClient()
   const { id: autorId } = useCrmPerfil()

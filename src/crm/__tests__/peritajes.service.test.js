@@ -52,6 +52,45 @@ describe('peritajes.service.listarPorVehiculo', () => {
   })
 })
 
+describe('peritajes.service.listarTodos', () => {
+  it('ordena por fecha desc y sin soloConFaltas no agrega el filtro', async () => {
+    const { client, calls } = makeSupabase({
+      'select:peritajes': { data: [{ id: 1, vehiculo: { marca: 'Toyota', modelo: 'Hilux', patente: 'AA1' } }], error: null },
+    })
+    holder.client = client
+    const r = await svc.listarTodos()
+    expect(r).toHaveLength(1)
+    const c = calls.find((x) => x.table === 'peritajes')
+    expect(c.select).toContain('vehiculo:vehiculos!inner')
+    expect(c.filters).toEqual(expect.arrayContaining([['order', 'fecha', { ascending: false }]]))
+    expect(c.filters).not.toEqual(expect.arrayContaining([['gt', 'items_falta', 0]]))
+  })
+
+  it('soloConFaltas agrega gt(items_falta,0)', async () => {
+    const { client, calls } = makeSupabase({ 'select:peritajes': { data: [], error: null } })
+    holder.client = client
+    await svc.listarTodos({ soloConFaltas: true })
+    expect(calls.find((x) => x.table === 'peritajes').filters).toEqual(
+      expect.arrayContaining([['gt', 'items_falta', 0]]),
+    )
+  })
+
+  it('busqueda filtra client-side por vehículo', async () => {
+    const { client } = makeSupabase({
+      'select:peritajes': {
+        data: [
+          { id: 1, vehiculo: { marca: 'Toyota', modelo: 'Hilux', patente: 'AA1' } },
+          { id: 2, vehiculo: { marca: 'Ford', modelo: 'Ranger', patente: 'BB2' } },
+        ],
+        error: null,
+      },
+    })
+    holder.client = client
+    const r = await svc.listarTodos({ busqueda: 'ranger' })
+    expect(r.map((x) => x.id)).toEqual([2])
+  })
+})
+
 describe('peritajes.service.actualizar', () => {
   it('recalcula el resumen, hace update por id y registra evento editado', async () => {
     const { client, calls } = makeSupabase({ 'update:peritajes': (s) => ({ data: [{ id: 7, ...s.payload }], error: null }) })

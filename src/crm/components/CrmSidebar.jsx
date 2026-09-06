@@ -1,5 +1,8 @@
 import { NavLink, useNavigate } from 'react-router-dom'
-import { LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound, UserCog, ShieldCheck } from 'lucide-react'
+import {
+  LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound, UserCog, ShieldCheck,
+  ClipboardCheck, FileStack,
+} from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useTareasPendientesHoy } from '@/crm/hooks/useTareas'
@@ -13,6 +16,8 @@ const NAV = [
   { to: '/crm/clientes', label: 'Clientes', icon: Users, vista: 'clientes' },
   { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas', vista: 'tareas' },
   { to: '/crm/vehiculos', label: 'Vehículos', icon: Car, vista: 'vehiculos' },
+  { to: '/crm/peritaje', label: 'Peritaje', icon: ClipboardCheck, vista: 'peritaje' },
+  { to: '/crm/gestoria', label: 'Gestoría', icon: FileStack, vista: 'gestoria' },
   { to: '/crm/usuarios', label: 'Usuarios', icon: UserCog, vista: 'usuarios' },
   { to: '/crm/roles', label: 'Roles', icon: ShieldCheck, vista: 'roles' },
 ]

@@ -4,6 +4,8 @@ export const VISTAS = [
   { key: 'panel', label: 'Panel', ruta: '/crm' },
   { key: 'clientes', label: 'Clientes', ruta: '/crm/clientes' },
   { key: 'vehiculos', label: 'Vehículos', ruta: '/crm/vehiculos' },
+  { key: 'peritaje', label: 'Peritaje', ruta: '/crm/peritaje' },
+  { key: 'gestoria', label: 'Gestoría', ruta: '/crm/gestoria' },
   { key: 'tareas', label: 'Tareas', ruta: '/crm/tareas' },
   { key: 'usuarios', label: 'Usuarios', ruta: '/crm/usuarios' },
   { key: 'roles', label: 'Roles', ruta: '/crm/roles' },
