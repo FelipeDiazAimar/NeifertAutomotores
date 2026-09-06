@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, Plus } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import EstadoStrip from './EstadoStrip'
 import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
@@ -12,6 +12,23 @@ const ESTADOS = ['disponible', 'reservado', 'vendido', 'baja']
 const kmFmt = new Intl.NumberFormat('es-AR')
 
 const GESTORIA_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', completo: 'Completo' }
+
+function CargarBtn({ onClick, label }) {
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation()
+        onClick()
+      }}
+      aria-label={label}
+      className="inline-flex items-center gap-1 rounded-full border border-dashed border-ink/25 px-2.5 py-1 text-xs font-semibold text-ink-3 transition-colors hover:border-neifert hover:text-neifert"
+    >
+      <Plus size={13} />
+      Cargar
+    </button>
+  )
+}
 
 export default function VehiculoTable({ filas, onCambiarEstado }) {
   const navigate = useNavigate()
@@ -74,7 +91,10 @@ export default function VehiculoTable({ filas, onCambiarEstado }) {
                       <EstadoStrip ok={per.items_ok} obs={per.items_obs} falta={per.items_falta} />
                     </div>
                   ) : (
-                    <span className="text-ink-3">—</span>
+                    <CargarBtn
+                      label={`Cargar peritaje de ${v.marca} ${v.modelo}`}
+                      onClick={() => navigate(`/crm/vehiculos/${v.id}?tab=peritaje`)}
+                    />
                   )}
                 </td>
                 <td className="px-4 py-3">
@@ -83,7 +103,10 @@ export default function VehiculoTable({ filas, onCambiarEstado }) {
                       {GESTORIA_LABEL[v.gestoria.estado] ?? v.gestoria.estado}
                     </Badge>
                   ) : (
-                    <span className="text-ink-3">—</span>
+                    <CargarBtn
+                      label={`Cargar gestoría de ${v.marca} ${v.modelo}`}
+                      onClick={() => navigate(`/crm/vehiculos/${v.id}?tab=gestoria`)}
+                    />
                   )}
                 </td>
               </tr>

@@ -36,4 +36,25 @@ describe('VehiculoTable', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /reservado/i }))
     expect(onCambiarEstado).toHaveBeenCalledWith(filas[0], 'reservado')
   })
+
+  it('sin peritaje ni gestoría muestra botones "Cargar" que llevan a su pestaña', async () => {
+    renderTable()
+    const cargarPeritaje = screen.getByRole('button', { name: /cargar peritaje de toyota hilux/i })
+    const cargarGestoria = screen.getByRole('button', { name: /cargar gestoría de toyota hilux/i })
+    expect(cargarPeritaje).toBeInTheDocument()
+    expect(cargarGestoria).toBeInTheDocument()
+  })
+
+  it('con peritaje cargado no muestra el botón "Cargar peritaje"', () => {
+    render(
+      <MemoryRouter>
+        <VehiculoTable
+          filas={[{ ...filas[0], peritajes: [{ items_ok: 30, items_obs: 0, items_falta: 1 }] }]}
+          onCambiarEstado={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByRole('button', { name: /cargar peritaje/i })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /cargar gestoría/i })).toBeInTheDocument()
+  })
 })
