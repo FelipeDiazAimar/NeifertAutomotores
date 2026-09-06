@@ -52,42 +52,50 @@ describe('peritajes.service.listarPorVehiculo', () => {
   })
 })
 
-describe('peritajes.service.listarTodos', () => {
-  it('ordena por fecha desc y sin soloConFaltas no agrega el filtro', async () => {
-    const { client, calls } = makeSupabase({
-      'select:peritajes': { data: [{ id: 1, vehiculo: { marca: 'Toyota', modelo: 'Hilux', patente: 'AA1' } }], error: null },
-    })
+describe('peritajes.service.listarVehiculos', () => {
+  const dataset = {
+    'select:vehiculos': {
+      data: [
+        { id: 'v1', marca: 'Toyota', modelo: 'Hilux', patente: 'AA1', estado: 'disponible', peritajes: [] },
+        {
+          id: 'v2', marca: 'Ford', modelo: 'Ranger', patente: 'BB2', estado: 'disponible',
+          peritajes: [{ id: 9, fecha: '2026-06-02', items_ok: 30, items_obs: 0, items_falta: 2 }],
+        },
+        {
+          id: 'v3', marca: 'VW', modelo: 'Amarok', patente: 'CC3', estado: 'disponible',
+          peritajes: [{ id: 10, fecha: '2026-06-10', items_ok: 33, items_obs: 0, items_falta: 0 }],
+        },
+      ],
+      error: null,
+    },
+  }
+
+  it('deriva el estado por vehículo desde el último peritaje', async () => {
+    const { client, calls } = makeSupabase(dataset)
     holder.client = client
-    const r = await svc.listarTodos()
-    expect(r).toHaveLength(1)
-    const c = calls.find((x) => x.table === 'peritajes')
-    expect(c.select).toContain('vehiculo:vehiculos!inner')
-    expect(c.filters).toEqual(expect.arrayContaining([['order', 'fecha', { ascending: false }]]))
-    expect(c.filters).not.toEqual(expect.arrayContaining([['gt', 'items_falta', 0]]))
+    const r = await svc.listarVehiculos()
+    expect(r.map((f) => [f.vehiculo.id, f.estadoPeritaje])).toEqual([
+      ['v1', 'sin_iniciar'],
+      ['v2', 'en_proceso'],
+      ['v3', 'completo'],
+    ])
+    const c = calls.find((x) => x.table === 'vehiculos')
+    expect(c.select).toContain('peritajes(')
+    expect(c.filters).toEqual(expect.arrayContaining([['is', 'archivado_en', null]]))
   })
 
-  it('soloConFaltas agrega gt(items_falta,0)', async () => {
-    const { client, calls } = makeSupabase({ 'select:peritajes': { data: [], error: null } })
+  it('filtra por estado derivado', async () => {
+    const { client } = makeSupabase(dataset)
     holder.client = client
-    await svc.listarTodos({ soloConFaltas: true })
-    expect(calls.find((x) => x.table === 'peritajes').filters).toEqual(
-      expect.arrayContaining([['gt', 'items_falta', 0]]),
-    )
+    const r = await svc.listarVehiculos({ estado: 'completo' })
+    expect(r.map((f) => f.vehiculo.id)).toEqual(['v3'])
   })
 
-  it('busqueda filtra client-side por vehículo', async () => {
-    const { client } = makeSupabase({
-      'select:peritajes': {
-        data: [
-          { id: 1, vehiculo: { marca: 'Toyota', modelo: 'Hilux', patente: 'AA1' } },
-          { id: 2, vehiculo: { marca: 'Ford', modelo: 'Ranger', patente: 'BB2' } },
-        ],
-        error: null,
-      },
-    })
+  it('busqueda matchea marca/modelo/patente', async () => {
+    const { client } = makeSupabase(dataset)
     holder.client = client
-    const r = await svc.listarTodos({ busqueda: 'ranger' })
-    expect(r.map((x) => x.id)).toEqual([2])
+    const r = await svc.listarVehiculos({ busqueda: 'amarok' })
+    expect(r.map((f) => f.vehiculo.id)).toEqual(['v3'])
   })
 })
 

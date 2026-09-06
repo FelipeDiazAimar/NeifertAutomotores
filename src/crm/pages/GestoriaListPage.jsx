@@ -4,7 +4,7 @@ import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
 import { cn } from '@/lib/cn'
-import { GESTORIA_ITEMS } from '@/crm/lib/gestoriaSchema'
+import { GESTORIA_ITEMS, fechasGestoria } from '@/crm/lib/gestoriaSchema'
 import { useGestoriasTodas } from '@/crm/hooks/useGestoria'
 
 const ESTADO_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', completo: 'Completo' }
@@ -70,30 +70,33 @@ export default function GestoriaListPage() {
               </tr>
             </thead>
             <tbody>
-              {filas.map((g) => (
-                <tr
-                  key={g.id}
-                  onClick={() => navigate(`/crm/vehiculos/${g.vehiculo?.id}?tab=gestoria`)}
-                  className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface"
-                >
-                  <td className="px-4 py-3">
-                    <p className="font-semibold text-ink">
-                      {g.vehiculo?.marca} {g.vehiculo?.modelo}
-                    </p>
-                    <p className="text-xs text-ink-3">{g.vehiculo?.patente || '—'}</p>
-                  </td>
-                  <td className="px-4 py-3">
-                    <Badge variant={g.estado === 'completo' ? 'green' : g.estado === 'en_proceso' ? 'amber' : 'neutral'}>
-                      {ESTADO_LABEL[g.estado] ?? g.estado}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-3 text-ink-2">
-                    {hechos(g)}/{TOTAL}
-                  </td>
-                  <td className="px-4 py-3 text-ink-2">{fmtFecha(g.fecha_inicio)}</td>
-                  <td className="px-4 py-3 text-ink-2">{fmtFecha(g.fecha_cierre)}</td>
-                </tr>
-              ))}
+              {filas.map((g) => {
+                const { inicio, cierre } = fechasGestoria(g)
+                return (
+                  <tr
+                    key={g.id}
+                    onClick={() => navigate(`/crm/vehiculos/${g.vehiculo?.id}?tab=gestoria`)}
+                    className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface"
+                  >
+                    <td className="px-4 py-3">
+                      <p className="font-semibold text-ink">
+                        {g.vehiculo?.marca} {g.vehiculo?.modelo}
+                      </p>
+                      <p className="text-xs text-ink-3">{g.vehiculo?.patente || '—'}</p>
+                    </td>
+                    <td className="px-4 py-3">
+                      <Badge variant={g.estado === 'completo' ? 'green' : g.estado === 'en_proceso' ? 'amber' : 'neutral'}>
+                        {ESTADO_LABEL[g.estado] ?? g.estado}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-3 text-ink-2">
+                      {hechos(g)}/{TOTAL}
+                    </td>
+                    <td className="px-4 py-3 text-ink-2">{fmtFecha(inicio)}</td>
+                    <td className="px-4 py-3 text-ink-2">{fmtFecha(cierre)}</td>
+                  </tr>
+                )
+              })}
             </tbody>
           </table>
         </div>

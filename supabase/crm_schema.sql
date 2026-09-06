@@ -86,6 +86,7 @@ create table if not exists crm.peritajes (
   id_legacy int unique,
   fecha date,
   peritado_por uuid references crm.usuarios(id),
+  peritado_por_nombre text, -- nombre libre (peritajes viejos apuntan a gente que no es usuario del CRM)
   resena text,
   costo_total numeric,
   datos jsonb not null default '{}'::jsonb,

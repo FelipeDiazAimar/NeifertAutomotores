@@ -1,33 +1,39 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Search } from 'lucide-react'
+import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
 import { cn } from '@/lib/cn'
-import { usePeritajesTodos } from '@/crm/hooks/usePeritajes'
+import { PERITAJE_ESTADOS, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
+import { usePeritajesVehiculos } from '@/crm/hooks/usePeritajes'
 import EstadoStrip from '@/crm/components/EstadoStrip'
 
 const nf = new Intl.NumberFormat('es-AR')
 const fmtFecha = (f) => (f ? new Date(f).toLocaleDateString('es-AR') : '—')
+const badgeVariant = (e) => (e === 'completo' ? 'green' : e === 'en_proceso' ? 'amber' : 'neutral')
 
 export default function PeritajesListPage() {
   const navigate = useNavigate()
   const [texto, setTexto] = useState('')
   const [busqueda, setBusqueda] = useState('')
-  const [soloConFaltas, setSoloConFaltas] = useState(false)
+  const [estado, setEstado] = useState(null)
 
   useEffect(() => {
     const t = setTimeout(() => setBusqueda(texto), 300)
     return () => clearTimeout(t)
   }, [texto])
 
-  const { data: filas = [], isLoading } = usePeritajesTodos({ busqueda, soloConFaltas })
+  const { data: filas = [], isLoading } = usePeritajesVehiculos({
+    busqueda,
+    ...(estado ? { estado } : {}),
+  })
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="font-display text-2xl font-bold text-ink">Peritajes</h1>
-        <p className="text-sm text-ink-3">{filas.length} peritajes cargados</p>
+        <h1 className="font-display text-2xl font-bold text-ink">Peritaje</h1>
+        <p className="text-sm text-ink-3">{filas.length} vehículos</p>
       </div>
 
       <div className="flex items-center gap-2">
@@ -40,17 +46,22 @@ export default function PeritajesListPage() {
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
           />
         </div>
-        <button
-          type="button"
-          onClick={() => setSoloConFaltas((v) => !v)}
-          aria-pressed={soloConFaltas}
-          className={cn(
-            'glass flex h-12 shrink-0 items-center rounded-2xl px-4 text-sm font-semibold transition-colors',
-            soloConFaltas ? 'text-neifert' : 'text-ink-2 hover:text-ink',
-          )}
-        >
-          Con faltas
-        </button>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        {PERITAJE_ESTADOS.map((f) => (
+          <button
+            key={f.label}
+            type="button"
+            onClick={() => setEstado(f.id)}
+            className={cn(
+              'glass rounded-2xl px-4 py-2 text-sm font-semibold transition-colors',
+              estado === f.id ? 'text-neifert' : 'text-ink-2 hover:text-ink',
+            )}
+          >
+            {f.label}
+          </button>
+        ))}
       </div>
 
       {isLoading ? (
@@ -59,17 +70,15 @@ export default function PeritajesListPage() {
         </div>
       ) : filas.length === 0 ? (
         <GlassCard className="p-10 text-center">
-          <p className="font-display font-bold text-ink">No hay peritajes</p>
-          <p className="mt-1 text-sm text-ink-3">
-            Se cargan desde la ficha de cada vehículo, pestaña Peritaje.
-          </p>
+          <p className="font-display font-bold text-ink">Sin resultados</p>
+          <p className="mt-1 text-sm text-ink-3">Probá con otro filtro o búsqueda.</p>
         </GlassCard>
       ) : (
         <div className="glass overflow-x-auto rounded-[20px] shadow-glass">
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-line">
-                {['Vehículo', 'Fecha', 'Peritó', 'Estado', 'Costo'].map((h) => (
+                {['Vehículo', 'Estado', 'Resultado', 'Fecha', 'Peritó'].map((h) => (
                   <th key={h} className="px-4 py-3.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">
                     {h}
                   </th>
@@ -77,27 +86,40 @@ export default function PeritajesListPage() {
               </tr>
             </thead>
             <tbody>
-              {filas.map((p) => (
+              {filas.map(({ vehiculo: v, peritaje: p, estadoPeritaje: ep, cantidad }) => (
                 <tr
-                  key={p.id}
-                  onClick={() => navigate(`/crm/vehiculos/${p.vehiculo?.id}?tab=peritaje`)}
+                  key={v.id}
+                  onClick={() => navigate(`/crm/vehiculos/${v.id}?tab=peritaje`)}
                   className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface"
                 >
                   <td className="px-4 py-3">
                     <p className="font-semibold text-ink">
-                      {p.vehiculo?.marca} {p.vehiculo?.modelo}
+                      {v.marca} {v.modelo}
                     </p>
-                    <p className="text-xs text-ink-3">{p.vehiculo?.patente || '—'}</p>
+                    <p className="text-xs text-ink-3">{v.patente || '—'}</p>
                   </td>
-                  <td className="px-4 py-3 text-ink-2">{fmtFecha(p.fecha)}</td>
-                  <td className="px-4 py-3 text-ink-2">{p.peritador?.nombre || '—'}</td>
                   <td className="px-4 py-3">
-                    <div className="w-24">
-                      <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
-                    </div>
+                    <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
                   </td>
+                  <td className="px-4 py-3">
+                    {p ? (
+                      <div className="w-32">
+                        <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
+                        <p className="mt-1 text-xs text-ink-3">
+                          {p.items_ok} ok · {p.items_obs} obs · {p.items_falta} falta
+                          {cantidad > 1 ? ` · ${cantidad} peritajes` : ''}
+                        </p>
+                      </div>
+                    ) : (
+                      <span className="text-ink-3">—</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-3 text-ink-2">{fmtFecha(p?.fecha)}</td>
                   <td className="px-4 py-3 text-ink-2">
-                    {p.costo_total ? `$ ${nf.format(p.costo_total)}` : '—'}
+                    {p?.peritador?.nombre || p?.peritado_por_nombre || '—'}
+                    {p?.costo_total ? (
+                      <span className="block text-xs text-ink-3">$ {nf.format(p.costo_total)}</span>
+                    ) : null}
                   </td>
                 </tr>
               ))}

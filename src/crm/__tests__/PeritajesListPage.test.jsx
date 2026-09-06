@@ -4,39 +4,45 @@ import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
-const usePeritajesTodos = vi.fn()
-vi.mock('../hooks/usePeritajes.js', () => ({ usePeritajesTodos: (o) => usePeritajesTodos(o) }))
+const usePeritajesVehiculos = vi.fn()
+vi.mock('../hooks/usePeritajes.js', () => ({ usePeritajesVehiculos: (o) => usePeritajesVehiculos(o) }))
 
 const { default: PeritajesListPage } = await import('../pages/PeritajesListPage.jsx')
 
 const filas = [
   {
-    id: 'p1', fecha: '2026-06-04', costo_total: 150000,
-    items_ok: 30, items_obs: 1, items_falta: 2,
     vehiculo: { id: 'v1', marca: 'Toyota', modelo: 'Hilux', patente: 'AA123BB' },
-    peritador: { nombre: 'Nico' },
+    peritaje: {
+      id: 'p1', fecha: '2026-06-04', costo_total: null,
+      items_ok: 31, items_obs: 0, items_falta: 1,
+      peritado_por_nombre: 'Cristian', peritador: null,
+    },
+    cantidad: 1,
+    estadoPeritaje: 'en_proceso',
+  },
+  {
+    vehiculo: { id: 'v2', marca: 'Ford', modelo: 'Ka', patente: 'CC456DD' },
+    peritaje: null, cantidad: 0, estadoPeritaje: 'sin_iniciar',
   },
 ]
 
 describe('PeritajesListPage', () => {
-  it('lista los peritajes con su vehículo y quien peritó', () => {
-    usePeritajesTodos.mockReturnValue({ data: filas, isLoading: false })
+  it('lista vehículos con su estado y el resultado del peritaje', () => {
+    usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
     render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
     expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
-    expect(screen.getByText('Nico')).toBeInTheDocument()
-    expect(screen.getByText('$ 150.000')).toBeInTheDocument()
+    expect(screen.getByText('Ford Ka')).toBeInTheDocument()
+    // "En proceso" / "Sin peritar" salen también como botón de filtro
+    expect(screen.getAllByText('En proceso').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getAllByText('Sin peritar').length).toBeGreaterThanOrEqual(2)
+    expect(screen.getByText(/31 ok · 0 obs · 1 falta/)).toBeInTheDocument()
+    expect(screen.getByText('Cristian')).toBeInTheDocument()
   })
 
-  it('el toggle "Con faltas" cambia el parámetro del hook', async () => {
-    usePeritajesTodos.mockReturnValue({ data: filas, isLoading: false })
+  it('los filtros de estado pasan el valor al hook', async () => {
+    usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
     render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
-    await userEvent.click(screen.getByRole('button', { name: /con faltas/i }))
-    expect(usePeritajesTodos).toHaveBeenLastCalledWith(expect.objectContaining({ soloConFaltas: true }))
-  })
-
-  it('estado vacío', () => {
-    usePeritajesTodos.mockReturnValue({ data: [], isLoading: false })
-    render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
-    expect(screen.getByText('No hay peritajes')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^completo$/i }))
+    expect(usePeritajesVehiculos).toHaveBeenLastCalledWith(expect.objectContaining({ estado: 'completo' }))
   })
 })

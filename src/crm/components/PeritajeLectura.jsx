@@ -21,8 +21,28 @@ function valorMostrado(item, raw) {
 
 export default function PeritajeLectura({ peritaje }) {
   const datos = peritaje?.datos ?? {}
+  const quien = peritaje?.peritador?.nombre || peritaje?.peritado_por_nombre
   return (
     <div className="space-y-5">
+      {(peritaje?.fecha || quien || peritaje?.costo_total) && (
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-ink-3">
+          {peritaje?.fecha && (
+            <span>
+              Fecha: <span className="text-ink">{new Date(peritaje.fecha).toLocaleDateString('es-AR')}</span>
+            </span>
+          )}
+          {quien && (
+            <span>
+              Peritó: <span className="text-ink">{quien}</span>
+            </span>
+          )}
+          {peritaje?.costo_total ? (
+            <span>
+              Costo: <span className="text-ink">$ {nf.format(peritaje.costo_total)}</span>
+            </span>
+          ) : null}
+        </div>
+      )}
       <EstadoStrip
         ok={peritaje?.items_ok ?? 0}
         obs={peritaje?.items_obs ?? 0}

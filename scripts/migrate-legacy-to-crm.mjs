@@ -40,6 +40,7 @@ for (const p of legacyPer ?? []) {
       id_legacy: p.id,
       vehiculo_id,
       fecha: p.fecha_peritaje ?? null,
+      peritado_por_nombre: p.peritado_por ?? null,
       resena: p.resena_texto ?? null,
       costo_total: p.costo_total ?? null,
       datos,

@@ -1,5 +1,7 @@
 import { describe, it, expect } from 'vitest'
-import { PERITAJE_SECCIONES, PERITAJE_ITEMS_ESTADO, resumenPeritaje } from '../lib/peritajeSchema.js'
+import {
+  PERITAJE_SECCIONES, PERITAJE_ITEMS_ESTADO, resumenPeritaje, estadoPeritaje,
+} from '../lib/peritajeSchema.js'
 
 describe('PERITAJE_SECCIONES', () => {
   it('todo ítem tiene key único, label y tipo válido', () => {
@@ -41,5 +43,21 @@ describe('resumenPeritaje', () => {
   })
   it('objeto vacío → 0/0/0', () => {
     expect(resumenPeritaje({})).toEqual({ items_ok: 0, items_obs: 0, items_falta: 0 })
+  })
+})
+
+describe('estadoPeritaje', () => {
+  it('sin peritaje → sin_iniciar', () => {
+    expect(estadoPeritaje(null)).toBe('sin_iniciar')
+  })
+  it('peritaje sin ningún ítem cargado → en_proceso', () => {
+    expect(estadoPeritaje({ items_ok: 0, items_obs: 0, items_falta: 0 })).toBe('en_proceso')
+  })
+  it('con faltas u observaciones → en_proceso', () => {
+    expect(estadoPeritaje({ items_ok: 30, items_obs: 0, items_falta: 2 })).toBe('en_proceso')
+    expect(estadoPeritaje({ items_ok: 30, items_obs: 1, items_falta: 0 })).toBe('en_proceso')
+  })
+  it('todo OK → completo', () => {
+    expect(estadoPeritaje({ items_ok: 33, items_obs: 0, items_falta: 0 })).toBe('completo')
   })
 })

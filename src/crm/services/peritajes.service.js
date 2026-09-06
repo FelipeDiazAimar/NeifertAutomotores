@@ -1,29 +1,40 @@
 import { supabase } from '@/services/supabaseClient'
-import { resumenPeritaje } from '@/crm/lib/peritajeSchema'
+import { resumenPeritaje, estadoPeritaje } from '@/crm/lib/peritajeSchema'
 import { registrar } from './eventos.service.js'
 
 const db = () => supabase.schema('crm')
 
-/** Todos los peritajes (para la sección dedicada). `soloConFaltas` filtra los
- *  que tienen al menos un ítem en falta. `busqueda` matchea marca/modelo/patente. */
-export async function listarTodos({ busqueda = '', soloConFaltas = false } = {}) {
-  let q = db()
-    .from('peritajes')
+/** Para la sección dedicada: TODOS los vehículos no archivados con su peritaje
+ *  más reciente y el estado derivado (sin_iniciar / en_proceso / completo).
+ *  `estado` filtra por ese estado; `busqueda` matchea marca/modelo/patente. */
+export async function listarVehiculos({ busqueda = '', estado } = {}) {
+  const { data, error } = await db()
+    .from('vehiculos')
     .select(
-      'id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
-        'vehiculo:vehiculos!inner(id, marca, modelo, patente, estado), peritador:usuarios(nombre)',
+      'id, marca, modelo, patente, estado, ' +
+        'peritajes(id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
+        'peritado_por_nombre, peritador:usuarios(nombre))',
     )
-    .order('fecha', { ascending: false })
-  if (soloConFaltas) q = q.gt('items_falta', 0)
-
-  const { data, error } = await q
+    .is('archivado_en', null)
+    .order('marca', { ascending: true })
+    .order('fecha', { referencedTable: 'peritajes', ascending: false })
   if (error) throw error
 
-  let filas = data ?? []
+  let filas = (data ?? []).map((v) => {
+    const ultimo = v.peritajes?.[0] ?? null
+    return {
+      vehiculo: { id: v.id, marca: v.marca, modelo: v.modelo, patente: v.patente, estado: v.estado },
+      peritaje: ultimo,
+      cantidad: v.peritajes?.length ?? 0,
+      estadoPeritaje: estadoPeritaje(ultimo),
+    }
+  })
+
+  if (estado) filas = filas.filter((f) => f.estadoPeritaje === estado)
   const b = busqueda.trim().toLowerCase()
   if (b) {
-    filas = filas.filter((p) =>
-      `${p.vehiculo?.marca ?? ''} ${p.vehiculo?.modelo ?? ''} ${p.vehiculo?.patente ?? ''}`
+    filas = filas.filter((f) =>
+      `${f.vehiculo.marca ?? ''} ${f.vehiculo.modelo ?? ''} ${f.vehiculo.patente ?? ''}`
         .toLowerCase()
         .includes(b),
     )
@@ -34,7 +45,10 @@ export async function listarTodos({ busqueda = '', soloConFaltas = false } = {})
 export async function listarPorVehiculo(vehiculoId) {
   const { data, error } = await db()
     .from('peritajes')
-    .select('id, fecha, costo_total, items_ok, items_obs, items_falta, resena, peritado_por, peritador:usuarios(nombre)')
+    .select(
+      'id, fecha, costo_total, items_ok, items_obs, items_falta, resena, ' +
+        'peritado_por, peritado_por_nombre, peritador:usuarios(nombre)',
+    )
     .eq('vehiculo_id', vehiculoId)
     .order('fecha', { ascending: false })
   if (error) throw error
@@ -42,7 +56,11 @@ export async function listarPorVehiculo(vehiculoId) {
 }
 
 export async function obtener(id) {
-  const { data, error } = await db().from('peritajes').select('*').eq('id', id).single()
+  const { data, error } = await db()
+    .from('peritajes')
+    .select('*, peritador:usuarios(nombre)')
+    .eq('id', id)
+    .single()
   if (error) throw error
   return data
 }

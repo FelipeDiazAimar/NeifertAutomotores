@@ -42,22 +42,28 @@ function PeritajePanel({ vehiculoId }) {
         <p className="py-8 text-center text-sm text-ink-3">Sin peritajes cargados.</p>
       ) : (
         <ul className="space-y-2">
-          {peritajes.map((p) => (
-            <li key={p.id}>
-              <GlassCard as="button" onClick={() => setVerId(p.id)} className="flex w-full items-center gap-4 p-3 text-left">
-                <div className="w-28 shrink-0">
-                  <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
-                </div>
-                <div className="flex-1 text-sm">
-                  <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
-                  <span className="text-ink-3"> · {p.peritador?.nombre ?? '—'}</span>
-                </div>
-                <span className="text-xs text-ink-3">
-                  {p.costo_total ? `$ ${new Intl.NumberFormat('es-AR').format(p.costo_total)}` : ''}
-                </span>
-              </GlassCard>
-            </li>
-          ))}
+          {peritajes.map((p) => {
+            const quien = p.peritador?.nombre || p.peritado_por_nombre
+            return (
+              <li key={p.id}>
+                <GlassCard as="button" onClick={() => setVerId(p.id)} className="flex w-full items-center gap-4 p-3 text-left">
+                  <div className="w-28 shrink-0">
+                    <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
+                    <p className="mt-1 text-[11px] text-ink-3">
+                      {p.items_ok} ok · {p.items_obs} obs · {p.items_falta} falta
+                    </p>
+                  </div>
+                  <div className="flex-1 text-sm">
+                    <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
+                    {quien && <span className="text-ink-3"> · {quien}</span>}
+                  </div>
+                  <span className="text-xs text-ink-3">
+                    {p.costo_total ? `$ ${new Intl.NumberFormat('es-AR').format(p.costo_total)}` : ''}
+                  </span>
+                </GlassCard>
+              </li>
+            )
+          })}
         </ul>
       )}
 

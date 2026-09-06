@@ -139,6 +139,30 @@ export const PERITAJE_ITEMS_ESTADO = PERITAJE_SECCIONES.flatMap((s) => s.items)
 
 const VAL = { ok: 'ok', obs: 'obs', 'observación': 'obs', observacion: 'obs', falta: 'falta', mal: 'falta' }
 
+export const PERITAJE_ESTADOS = [
+  { id: null, label: 'Todos' },
+  { id: 'sin_iniciar', label: 'Sin peritar' },
+  { id: 'en_proceso', label: 'En proceso' },
+  { id: 'completo', label: 'Completo' },
+]
+
+export const PERITAJE_ESTADO_LABEL = {
+  sin_iniciar: 'Sin peritar',
+  en_proceso: 'En proceso',
+  completo: 'Completo',
+}
+
+/** Estado derivado del peritaje más reciente de un vehículo:
+ *  sin peritaje → 'sin_iniciar'; con faltas/observaciones o sin cargar nada →
+ *  'en_proceso'; todo OK → 'completo'. */
+export function estadoPeritaje(peritaje) {
+  if (!peritaje) return 'sin_iniciar'
+  const total = (peritaje.items_ok ?? 0) + (peritaje.items_obs ?? 0) + (peritaje.items_falta ?? 0)
+  if (total === 0) return 'en_proceso'
+  if ((peritaje.items_falta ?? 0) > 0 || (peritaje.items_obs ?? 0) > 0) return 'en_proceso'
+  return 'completo'
+}
+
 /** Cuenta ok/observación/falta sobre los ítems de condición. Ignora vacío,
  *  'na'/'n/a' y cualquier valor que no sea de estado. */
 export function resumenPeritaje(datos = {}) {

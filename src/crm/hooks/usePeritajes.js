@@ -10,10 +10,10 @@ export function usePeritajes(vehiculoId) {
   })
 }
 
-export function usePeritajesTodos(opts = {}) {
+export function usePeritajesVehiculos(opts = {}) {
   return useQuery({
-    queryKey: ['crm', 'peritajes', 'todos', opts],
-    queryFn: () => svc.listarTodos(opts),
+    queryKey: ['crm', 'peritajes', 'vehiculos', opts],
+    queryFn: () => svc.listarVehiculos(opts),
   })
 }
 
