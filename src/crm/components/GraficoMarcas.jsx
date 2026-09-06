@@ -25,7 +25,8 @@ export default function GraficoMarcas({ datos = [] }) {
               axisLine={false}
             />
             <Tooltip
-              cursor={{ fill: 'var(--c-line)' }}
+              cursor={{ fill: 'var(--c-line)', fillOpacity: 0.4 }}
+              formatter={(v) => [v, 'Pedidos']}
               contentStyle={{ background: 'var(--c-surface-solid)', border: '1px solid var(--c-line)', borderRadius: 12 }}
             />
             <Bar dataKey="n" radius={[0, 6, 6, 0]}>
