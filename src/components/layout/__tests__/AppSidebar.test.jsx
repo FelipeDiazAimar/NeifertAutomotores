@@ -7,7 +7,7 @@ import AppSidebar from '../AppSidebar'
 vi.mock('@/services/supabaseClient', () => ({ supabase: { auth: { signOut: vi.fn() } } }))
 vi.mock('@/store/useUiStore', () => ({ useUiStore: (sel) => sel({ theme: 'light', toggleTheme: vi.fn() }) }))
 vi.mock('@/crm/hooks/useMisVistas', () => ({
-  useMisVistas: () => ({ vistas: ['leads', 'vehiculos', 'clientes'], cargando: false }),
+  useMisVistas: () => ({ vistas: ['panel', 'leads', 'vehiculos', 'clientes'], cargando: false }),
 }))
 vi.mock('@/crm/hooks/useTareas', () => ({ useTareasPendientesHoy: () => ({ data: 0 }) }))
 vi.mock('@/crm/hooks/useCrmPerfil', () => ({
@@ -27,5 +27,11 @@ describe('AppSidebar', () => {
     render(<MemoryRouter><AppSidebar /></MemoryRouter>)
     const link = screen.getByText('Catálogo').closest('a')
     expect(link).toHaveAttribute('href', '/crm/vehiculos')
+  })
+
+  it('Panel aparece cuando esa vista está habilitada y apunta a /crm', () => {
+    render(<MemoryRouter><AppSidebar /></MemoryRouter>)
+    const link = screen.getByText('Panel').closest('a')
+    expect(link).toHaveAttribute('href', '/crm')
   })
 })

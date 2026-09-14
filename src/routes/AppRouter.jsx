@@ -57,12 +57,12 @@ export default function AppRouter() {
       <Route path="/crm/login" element={<CrmLoginPage />} />
       <Route element={<AppProtectedRoute />}>
         <Route element={<AppLayout />}>
-          <Route path="/admin/crm" element={<CrmPage />} />
-          <Route path="/admin/crm/:id" element={<LeadDetailPage />} />
-          <Route path="/admin/contenido" element={<AdminContentPage />} />
-          <Route path="/admin/estadisticas" element={<StatsPage />} />
-          <Route path="/admin/admin" element={<AdminPage />} />
           <Route element={<VistaGuard />}>
+            <Route path="/admin/crm" element={<CrmPage />} />
+            <Route path="/admin/crm/:id" element={<LeadDetailPage />} />
+            <Route path="/admin/contenido" element={<AdminContentPage />} />
+            <Route path="/admin/estadisticas" element={<StatsPage />} />
+            <Route path="/admin/admin" element={<AdminPage />} />
             <Route path="/crm" element={<DashboardPage />} />
             <Route path="/crm/clientes" element={<ClientesListPage />} />
             <Route path="/crm/clientes/:id" element={<ClienteDetallePage />} />

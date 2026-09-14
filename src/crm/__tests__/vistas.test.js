@@ -31,6 +31,11 @@ describe('vistas.js', () => {
       expect(vistaDeRuta('/crm/tareas')).toBe('tareas')
       expect(vistaDeRuta('/crm/usuarios')).toBe('usuarios')
       expect(vistaDeRuta('/crm/roles')).toBe('roles')
+      expect(vistaDeRuta('/admin/crm')).toBe('leads')
+      expect(vistaDeRuta('/admin/crm/lead-123')).toBe('leads')
+      expect(vistaDeRuta('/admin/contenido')).toBe('contenido')
+      expect(vistaDeRuta('/admin/estadisticas')).toBe('estadisticas')
+      expect(vistaDeRuta('/admin/admin')).toBe('admin')
     })
     it('rutas sin gate → null', () => {
       expect(vistaDeRuta('/crm/cambiar-password')).toBeNull()
