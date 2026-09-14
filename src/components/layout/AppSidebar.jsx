@@ -38,36 +38,38 @@ export default function AppSidebar() {
   }
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-6 py-5 pl-2 pr-3 md:flex">
-      <Link to="/" className="px-2 pt-2" aria-label="Inicio">
+    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-3 py-5 pl-2 pr-3 md:flex">
+      <Link to="/" className="shrink-0 px-2 pt-2" aria-label="Inicio">
         <Logo />
       </Link>
 
-      <nav className="flex flex-col gap-1">
-        {items.map(({ to, label, icon: Icon, badge, end }) => (
-          <NavLink
-            key={to}
-            to={to}
-            end={end}
-            className={({ isActive }) =>
-              cn(
-                'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
-                isActive ? 'glass text-neifert' : 'text-ink-2 hover:text-ink'
-              )
-            }
-          >
-            <Icon size={18} />
-            <span className="flex-1">{label}</span>
-            {badge === 'tareas' && tareasHoy > 0 && (
-              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
-                {tareasHoy}
-              </span>
-            )}
-          </NavLink>
-        ))}
-      </nav>
+      <div dir="rtl" className="crm-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <nav dir="ltr" className="flex flex-col gap-1 pr-1.5">
+          {items.map(({ to, label, icon: Icon, badge, end }) => (
+            <NavLink
+              key={to}
+              to={to}
+              end={end}
+              className={({ isActive }) =>
+                cn(
+                  'flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors',
+                  isActive ? 'glass text-neifert' : 'text-ink-2 hover:text-ink'
+                )
+              }
+            >
+              <Icon size={18} />
+              <span className="flex-1">{label}</span>
+              {badge === 'tareas' && tareasHoy > 0 && (
+                <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
+                  {tareasHoy}
+                </span>
+              )}
+            </NavLink>
+          ))}
+        </nav>
+      </div>
 
-      <div className="mt-auto flex flex-col gap-3">
+      <div className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-2">
           <ThemeToggle />
           <NavLink
