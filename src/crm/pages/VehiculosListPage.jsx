@@ -8,10 +8,13 @@ import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { useVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
+import { useViewModeStore } from '@/crm/store/useViewModeStore'
 import VehiculoFilters from '@/crm/components/VehiculoFilters'
 import VehiculoTable from '@/crm/components/VehiculoTable'
 import VehiculoCard from '@/crm/components/VehiculoCard'
+import VehiculoGridCard from '@/crm/components/VehiculoGridCard'
 import VehiculoFormModal from '@/crm/components/VehiculoFormModal'
+import ViewModeToggle from '@/crm/components/ViewModeToggle'
 import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 20
@@ -24,6 +27,7 @@ export default function VehiculosListPage() {
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [abrirNuevo, setAbrirNuevo] = useState(false)
   const { cambiarEstado, actualizar } = useVehiculoMutations()
+  const viewMode = useViewModeStore((s) => s.viewMode)
 
   // debounce búsqueda → store
   useEffect(() => {
@@ -64,6 +68,7 @@ export default function VehiculosListPage() {
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
           />
         </div>
+        <ViewModeToggle className="h-12" />
         <button
           type="button"
           onClick={() => setMostrarFiltros((v) => !v)}
@@ -97,6 +102,17 @@ export default function VehiculosListPage() {
             Cargar vehículo
           </Button>
         </GlassCard>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filas.map((v) => (
+            <VehiculoGridCard
+              key={v.id}
+              vehiculo={v}
+              onCambiarEstado={(veh, e) => cambiarEstado.mutate({ id: veh.id, de: veh.estado, a: e })}
+              onCambiarPublicado={(veh, publicado) => actualizar.mutate({ id: veh.id, data: { publicado } })}
+            />
+          ))}
+        </div>
       ) : esDesktop ? (
         <VehiculoTable
           filas={filas}

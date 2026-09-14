@@ -9,8 +9,10 @@ import { cn } from '@/lib/cn'
 import { PERITAJE_ESTADOS, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
 import { usePeritajesVehiculos } from '@/crm/hooks/usePeritajes'
 import { usePeritajeFiltros } from '@/crm/store/usePeritajeFiltros'
+import { useViewModeStore } from '@/crm/store/useViewModeStore'
 import EstadoStrip from '@/crm/components/EstadoStrip'
 import VehiculoThumb from '@/crm/components/VehiculoThumb'
+import ViewModeToggle from '@/crm/components/ViewModeToggle'
 
 const nf = new Intl.NumberFormat('es-AR')
 const fmtFecha = (f) => (f ? new Date(f).toLocaleDateString('es-AR') : '—')
@@ -41,6 +43,7 @@ export default function PeritajesListPage() {
     setBusqueda, setEstado, setOrden, toggleTipo, setMostrarFiltros,
   } = usePeritajeFiltros()
   const [texto, setTexto] = useState(busqueda)
+  const viewMode = useViewModeStore((s) => s.viewMode)
 
   useEffect(() => {
     const t = setTimeout(() => setBusqueda(texto), 300)
@@ -107,6 +110,7 @@ export default function PeritajesListPage() {
             </button>
           ))}
           <SortDropdown sort={orden} setSort={setOrden} options={ORDEN_OPCIONES} label="Orden:" />
+          <ViewModeToggle />
           {tiposDisponibles.length > 0 && (
             <button
               type="button"
@@ -156,6 +160,43 @@ export default function PeritajesListPage() {
           <p className="font-display font-bold text-ink">Sin resultados</p>
           <p className="mt-1 text-sm text-ink-3">Probá con otro filtro o búsqueda.</p>
         </GlassCard>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filas.map(({ vehiculo: v, peritaje: p, estadoPeritaje: ep, cantidad }) => (
+            <GlassCard
+              key={v.id}
+              onClick={() => navigate(`/crm/vehiculos/${v.id}?tab=peritaje`)}
+              className="cursor-pointer p-3 transition-colors hover:border-ink/20"
+            >
+              <div className="flex items-start gap-3">
+                <VehiculoThumb fotos={v.fotos} />
+                <div className="min-w-0 flex-1">
+                  <p className="font-semibold text-ink">
+                    {v.marca} {v.modelo}
+                  </p>
+                  <p className="text-xs text-ink-3">{v.patente || '—'}</p>
+                </div>
+                <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
+              </div>
+              {p && (
+                <div className="mt-3 border-t border-line pt-3">
+                  <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
+                  <p className="mt-1 text-xs text-ink-3">
+                    {p.items_ok} ok · {p.items_obs} obs · {p.items_falta} falta
+                    {cantidad > 1 ? ` · ${cantidad} peritajes` : ''}
+                  </p>
+                </div>
+              )}
+              <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-ink-2">
+                <span>{fmtFecha(p?.fecha)}</span>
+                <span className="text-right">
+                  {p?.peritador?.nombre || p?.peritado_por_nombre || '—'}
+                  {p?.costo_total ? <span className="block text-ink-3">$ {nf.format(p.costo_total)}</span> : null}
+                </span>
+              </div>
+            </GlassCard>
+          ))}
+        </div>
       ) : (
         <div className="glass overflow-x-auto rounded-[20px] shadow-glass">
           <table className="w-full text-left text-sm">

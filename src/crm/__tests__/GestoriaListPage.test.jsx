@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -8,6 +8,13 @@ const useGestoriasTodas = vi.fn()
 vi.mock('../hooks/useGestoria.js', () => ({ useGestoriasTodas: (o) => useGestoriasTodas(o) }))
 
 const { default: GestoriaListPage } = await import('../pages/GestoriaListPage.jsx')
+const { useViewModeStore } = await import('../store/useViewModeStore.js')
+const { useGestoriaFiltros } = await import('../store/useGestoriaFiltros.js')
+
+beforeEach(() => {
+  useViewModeStore.setState({ viewMode: 'list' })
+  useGestoriaFiltros.setState({ busqueda: '', estado: null, orden: 'marca-asc', tipos: [], mostrarFiltros: false })
+})
 
 const g1 = {
   id: 'g1', estado: 'en_proceso', fecha_inicio: '2026-06-01', fecha_cierre: null,
@@ -47,5 +54,17 @@ describe('GestoriaListPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /completas/i }))
     expect(screen.getByText('Ford Ka')).toBeInTheDocument()
     expect(screen.queryByText('VW Amarok')).not.toBeInTheDocument()
+  })
+
+  it('el toggle de vista cambia a tarjetas y sigue mostrando los datos', async () => {
+    useGestoriasTodas.mockReturnValue({ data: [g1, g2], isLoading: false })
+    render(<MemoryRouter><GestoriaListPage /></MemoryRouter>)
+    expect(document.querySelector('table')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /ver como tarjetas/i }))
+
+    expect(document.querySelector('table')).not.toBeInTheDocument()
+    expect(screen.getByText('VW Amarok')).toBeInTheDocument()
+    expect(screen.getByText('2/8 trámites')).toBeInTheDocument()
   })
 })

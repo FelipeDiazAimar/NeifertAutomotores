@@ -9,7 +9,9 @@ import { cn } from '@/lib/cn'
 import { GESTORIA_ITEMS, fechasGestoria } from '@/crm/lib/gestoriaSchema'
 import { useGestoriasTodas } from '@/crm/hooks/useGestoria'
 import { useGestoriaFiltros } from '@/crm/store/useGestoriaFiltros'
+import { useViewModeStore } from '@/crm/store/useViewModeStore'
 import VehiculoThumb from '@/crm/components/VehiculoThumb'
+import ViewModeToggle from '@/crm/components/ViewModeToggle'
 
 const ESTADO_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', completo: 'Completo' }
 const FILTROS = [
@@ -47,6 +49,7 @@ export default function GestoriaListPage() {
     setBusqueda: setQ, setEstado, setOrden, toggleTipo, setMostrarFiltros,
   } = useGestoriaFiltros()
   const { data: todas = [], isLoading } = useGestoriasTodas()
+  const viewMode = useViewModeStore((s) => s.viewMode)
 
   const tiposDisponibles = useMemo(
     () => [...new Set(todas.map((g) => g.vehiculo?.tipo).filter(Boolean))].sort(),
@@ -112,6 +115,7 @@ export default function GestoriaListPage() {
             </button>
           ))}
           <SortDropdown sort={orden} setSort={setOrden} options={ORDEN_OPCIONES} label="Orden:" />
+          <ViewModeToggle />
           {tiposDisponibles.length > 0 && (
             <button
               type="button"
@@ -167,6 +171,40 @@ export default function GestoriaListPage() {
               : 'Se arman desde la ficha de cada vehículo, pestaña Gestoría.'}
           </p>
         </GlassCard>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {visibles.map((g) => {
+            const { inicio, cierre } = fechasGestoria(g)
+            return (
+              <GlassCard
+                key={g.id}
+                onClick={() => navigate(`/crm/vehiculos/${g.vehiculo?.id}?tab=gestoria`)}
+                className="cursor-pointer p-3 transition-colors hover:border-ink/20"
+              >
+                <div className="flex items-start gap-3">
+                  <VehiculoThumb fotos={g.vehiculo?.fotos} />
+                  <div className="min-w-0 flex-1">
+                    <p className="font-semibold text-ink">
+                      {g.vehiculo?.marca} {g.vehiculo?.modelo}
+                    </p>
+                    <p className="text-xs text-ink-3">{g.vehiculo?.patente || '—'}</p>
+                  </div>
+                  <Badge variant={g.estado === 'completo' ? 'green' : g.estado === 'en_proceso' ? 'amber' : 'neutral'}>
+                    {ESTADO_LABEL[g.estado] ?? g.estado}
+                  </Badge>
+                </div>
+                <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-xs text-ink-2">
+                  <span>
+                    {hechos(g)}/{TOTAL} trámites
+                  </span>
+                  <span className="text-right">
+                    {fmtFecha(inicio)} → {fmtFecha(cierre)}
+                  </span>
+                </div>
+              </GlassCard>
+            )
+          })}
+        </div>
       ) : (
         <div className="glass overflow-x-auto rounded-[20px] shadow-glass">
           <table className="w-full text-left text-sm">

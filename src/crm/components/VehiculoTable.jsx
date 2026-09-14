@@ -50,7 +50,7 @@ function IconBtn({ icon: Icon, label, onClick }) {
   )
 }
 
-async function copiarEnlace(v) {
+export async function copiarEnlace(v) {
   const url = `${window.location.origin}/catalogo/${v.id}`
   try {
     await navigator.clipboard.writeText(url)
