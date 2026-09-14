@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronDown, Share2, Link2, Eye, EyeOff } from 'lucide-react'
 import Badge from '@/components/common/Badge'
@@ -36,6 +37,7 @@ export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambi
   const navigate = useNavigate()
   const precio = precioFmt(v)
   const portada = v.fotos?.find((f) => f.es_portada) ?? v.fotos?.[0]
+  const [rota, setRota] = useState(false)
 
   return (
     <GlassCard
@@ -44,8 +46,16 @@ export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambi
     >
       <div className="flex gap-3 p-3">
         <div className="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-neifert/5">
-          {portada ? (
-            <img src={portada.url} alt="" className="h-full w-full object-cover" />
+          {portada && !rota ? (
+            <img
+              src={portada.url}
+              alt=""
+              className="h-full w-full object-cover"
+              onError={() => {
+                console.error('[VehiculoGridCard] no se pudo cargar la foto', portada.id, portada.url)
+                setRota(true)
+              }}
+            />
           ) : (
             <span className="text-[9px] font-bold uppercase text-neifert/50">Sin foto</span>
           )}

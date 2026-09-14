@@ -12,6 +12,7 @@ export default function VehiculoFotoCarousel({ vehiculoId, patente }) {
     enabled: !!vehiculoId,
   })
   const [i, setI] = useState(0)
+  const [rotas, setRotas] = useState(() => new Set())
 
   useEffect(() => {
     if (lista.length < 2) return
@@ -24,11 +25,21 @@ export default function VehiculoFotoCarousel({ vehiculoId, patente }) {
   }, [lista.length, i])
 
   const actual = lista[i]
+  const actualRota = actual && rotas.has(actual.id)
 
   return (
     <div className="relative aspect-[16/7] w-full overflow-hidden bg-neifert/5">
-      {actual ? (
-        <img key={actual.id} src={actual.url} alt="" className="h-full w-full object-cover" />
+      {actual && !actualRota ? (
+        <img
+          key={actual.id}
+          src={actual.url}
+          alt=""
+          className="h-full w-full object-cover"
+          onError={() => {
+            console.error('[VehiculoFotoCarousel] no se pudo cargar la foto', actual.id, actual.url)
+            setRotas((prev) => new Set(prev).add(actual.id))
+          }}
+        />
       ) : (
         <div className="grid h-full w-full place-items-center">
           <span className="font-display text-3xl font-bold tracking-widest text-neifert/70">

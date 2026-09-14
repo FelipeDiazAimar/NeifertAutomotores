@@ -18,6 +18,9 @@ vi.mock('@/crm/services/fotos.service', () => ({
 }))
 vi.mock('@/crm/hooks/useCrmPerfil', () => ({ useCrmPerfil: () => ({ id: 'u1' }) }))
 
+const { toast } = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({ toast }))
+
 import VehiculoFotosGaleria from '../components/VehiculoFotosGaleria'
 
 function renderGaleria() {
@@ -62,5 +65,38 @@ describe('VehiculoFotosGaleria', () => {
     fireEvent.pointerUp(asas[0], { pointerId: 1 })
 
     await waitFor(() => expect(reordenar).toHaveBeenCalledWith(['f2', 'f1']))
+  })
+
+  it('si una foto no carga, muestra un ícono roto en vez del <img> y loguea en consola', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { container } = renderGaleria()
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2))
+
+    fireEvent.error(container.querySelectorAll('img')[0])
+
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(1))
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    consoleErrorSpy.mockRestore()
+  })
+
+  it('si falla el reordenamiento en el servidor, avisa y loguea en consola', async () => {
+    Element.prototype.setPointerCapture = vi.fn()
+    reordenar.mockRejectedValueOnce(new Error('no se pudo guardar el orden'))
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { container } = renderGaleria()
+    await waitFor(() => expect(container.querySelectorAll('img')).toHaveLength(2))
+
+    const fotos = container.querySelectorAll('.group')
+    fotos[0].getBoundingClientRect = () => ({ top: 0, bottom: 100 })
+    fotos[1].getBoundingClientRect = () => ({ top: 100, bottom: 200 })
+
+    const asas = screen.getAllByRole('button', { name: /arrastrar para reordenar/i })
+    fireEvent.pointerDown(asas[0], { pointerId: 1, clientY: 50 })
+    fireEvent.pointerMove(asas[0], { pointerId: 1, clientY: 150 })
+    fireEvent.pointerUp(asas[0], { pointerId: 1 })
+
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('no se pudo guardar el orden'))
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    consoleErrorSpy.mockRestore()
   })
 })

@@ -51,6 +51,7 @@ export default function FotoSlot({ label, url, carpeta, onChange, hideLabel = fa
   const [subiendo, setSubiendo] = useState(false)
   const [viendo, setViendo] = useState(false)
   const [arrastrando, setArrastrando] = useState(false)
+  const [rota, setRota] = useState(false)
 
   async function subirArchivo(file) {
     if (!file) return
@@ -58,8 +59,11 @@ export default function FotoSlot({ label, url, carpeta, onChange, hideLabel = fa
     try {
       const nuevaUrl = await fotos.subirArchivoUnico(carpeta, file)
       onChange(nuevaUrl)
+      setRota(false)
+      toast.success('Foto subida correctamente.')
       if (url) deleteMedia(url).catch((e) => console.warn('[fotoSlot] no se pudo borrar en R2', url, e.message))
     } catch (err) {
+      console.error('[FotoSlot] falló la subida de', label, err)
       toast.error(err.message)
     } finally {
       setSubiendo(false)
@@ -99,9 +103,23 @@ export default function FotoSlot({ label, url, carpeta, onChange, hideLabel = fa
               type="button"
               onClick={() => setViendo(true)}
               aria-label={`Ver ${label}`}
-              className="block h-full w-full"
+              className="glass flex h-full w-full items-center justify-center"
             >
-              <img src={url} alt={label} className="h-full w-full object-cover" />
+              {rota ? (
+                <span className="px-2 text-center text-[11px] font-medium leading-tight text-ink-3">
+                  No se pudo cargar la imagen
+                </span>
+              ) : (
+                <img
+                  src={url}
+                  alt={label}
+                  className="h-full w-full object-cover"
+                  onError={() => {
+                    console.error('[FotoSlot] no se pudo cargar la imagen de', label, url)
+                    setRota(true)
+                  }}
+                />
+              )}
             </button>
             <button
               type="button"
@@ -153,16 +171,24 @@ export default function FotoSlot({ label, url, carpeta, onChange, hideLabel = fa
       <Modal open={viendo} onClose={() => setViendo(false)} title={label} size="lg">
         {url && (
           <div className="space-y-4">
-            <img src={url} alt={label} className="max-h-[70vh] w-full rounded-2xl object-contain" />
-            <div className="flex justify-end">
-              <button
-                type="button"
-                onClick={() => descargarImagen(url, nombreArchivo)}
-                className="glass inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-semibold text-ink transition-colors hover:border-ink/30"
-              >
-                <Download size={16} /> Descargar
-              </button>
-            </div>
+            {rota ? (
+              <p className="py-10 text-center text-sm text-ink-3">
+                No se pudo cargar la imagen. Probá subirla de nuevo.
+              </p>
+            ) : (
+              <>
+                <img src={url} alt={label} className="max-h-[70vh] w-full rounded-2xl object-contain" />
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={() => descargarImagen(url, nombreArchivo)}
+                    className="glass inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-semibold text-ink transition-colors hover:border-ink/30"
+                  >
+                    <Download size={16} /> Descargar
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         )}
       </Modal>

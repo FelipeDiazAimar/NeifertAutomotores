@@ -1,7 +1,7 @@
 import { useId, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { ImagePlus, Star, Trash2, Loader2, GripVertical } from 'lucide-react'
+import { ImagePlus, ImageOff, Star, Trash2, Loader2, GripVertical } from 'lucide-react'
 import ImageCropper from '@/components/admin/ImageCropper'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import * as fotosSvc from '@/crm/services/fotos.service'
@@ -27,6 +27,7 @@ export default function VehiculoFotosGaleria({ vehiculoId }) {
   const [arrastrandoArchivo, setArrastrandoArchivo] = useState(false)
   const [draggingId, setDraggingId] = useState(null)
   const [overId, setOverId] = useState(null)
+  const [rotas, setRotas] = useState(() => new Set())
   const itemRefs = useRef(new Map())
 
   const key = ['crm', 'fotos', vehiculoId]
@@ -81,7 +82,9 @@ export default function VehiculoFotosGaleria({ vehiculoId }) {
     try {
       await fotosSvc.subir(vehiculoId, croppedFile, autorId)
       refrescar()
+      toast.success('Foto subida correctamente.')
     } catch (err) {
+      console.error('[VehiculoFotosGaleria] falló la subida de la foto', err)
       toast.error(err.message)
     } finally {
       setSubiendo(false)
@@ -94,6 +97,7 @@ export default function VehiculoFotosGaleria({ vehiculoId }) {
       refrescar()
       if (msg) toast.success(msg)
     } catch (err) {
+      console.error('[VehiculoFotosGaleria] falló la acción sobre la foto', err)
       toast.error(err.message)
     }
   }
@@ -128,6 +132,7 @@ export default function VehiculoFotosGaleria({ vehiculoId }) {
         reordenada.splice(toIdx, 0, movida)
         qc.setQueryData(key, reordenada)
         fotosSvc.reordenar(reordenada.map((f) => f.id)).catch((err) => {
+          console.error('[VehiculoFotosGaleria] falló el reordenamiento', err)
           toast.error(err.message)
           refrescar()
         })
@@ -194,7 +199,22 @@ export default function VehiculoFotosGaleria({ vehiculoId }) {
             draggingId === f.id && 'opacity-40',
           )}
         >
-          <img src={f.url} alt="" className="h-full w-full object-cover" draggable={false} />
+          {rotas.has(f.id) ? (
+            <div className="grid h-full w-full place-items-center bg-neifert/5 text-ink-3">
+              <ImageOff size={20} />
+            </div>
+          ) : (
+            <img
+              src={f.url}
+              alt=""
+              className="h-full w-full object-cover"
+              draggable={false}
+              onError={() => {
+                console.error('[VehiculoFotosGaleria] no se pudo cargar la foto', f.id, f.url)
+                setRotas((prev) => new Set(prev).add(f.id))
+              }}
+            />
+          )}
           {arrastrandoArchivo && (
             <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-neifert/20 text-xs font-semibold text-white">
               Soltar acá

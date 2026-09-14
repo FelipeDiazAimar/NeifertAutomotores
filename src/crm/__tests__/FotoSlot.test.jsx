@@ -1,15 +1,23 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-vi.mock('@/crm/services/fotos.service', () => ({
-  subirArchivoUnico: vi.fn().mockResolvedValue('https://r2/x.jpg'),
-}))
+const { subirArchivoUnico } = vi.hoisted(() => ({ subirArchivoUnico: vi.fn() }))
+vi.mock('@/crm/services/fotos.service', () => ({ subirArchivoUnico }))
 
 const { deleteMedia } = vi.hoisted(() => ({ deleteMedia: vi.fn().mockResolvedValue(undefined) }))
 vi.mock('@/services/media.service', () => ({ deleteMedia }))
 
+const { toast } = vi.hoisted(() => ({ toast: { success: vi.fn(), error: vi.fn() } }))
+vi.mock('sonner', () => ({ toast }))
+
 import FotoSlot from '../components/FotoSlot'
+
+beforeEach(() => {
+  subirArchivoUnico.mockReset().mockResolvedValue('https://r2/x.jpg')
+  toast.success.mockClear()
+  toast.error.mockClear()
+})
 
 describe('FotoSlot', () => {
   it('sin foto, al elegir archivo llama onChange con la URL subida', async () => {
@@ -19,6 +27,30 @@ describe('FotoSlot', () => {
     const file = new File(['x'], 'seguro.jpg', { type: 'image/jpeg' })
     fireEvent.change(input, { target: { files: [file] } })
     await waitFor(() => expect(onChange).toHaveBeenCalledWith('https://r2/x.jpg'))
+    expect(toast.success).toHaveBeenCalledWith('Foto subida correctamente.')
+  })
+
+  it('si la subida falla, muestra el error y lo loguea en consola', async () => {
+    subirArchivoUnico.mockRejectedValue(new Error('falló la red'))
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const onChange = vi.fn()
+    render(<FotoSlot label="Foto del seguro" url={null} carpeta="crm/gestoria/1" onChange={onChange} />)
+    const input = screen.getByLabelText('Foto del seguro')
+    const file = new File(['x'], 'seguro.jpg', { type: 'image/jpeg' })
+    fireEvent.change(input, { target: { files: [file] } })
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('falló la red'))
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    expect(onChange).not.toHaveBeenCalled()
+    consoleErrorSpy.mockRestore()
+  })
+
+  it('si la imagen ya cargada no puede mostrarse, cae a un aviso en vez de un ícono roto', () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    render(<FotoSlot label="Título — frente" url="https://r2/rota.jpg" carpeta="crm/gestoria/1" onChange={vi.fn()} />)
+    fireEvent.error(screen.getByRole('img'))
+    expect(screen.getByText(/no se pudo cargar la imagen/i)).toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalled()
+    consoleErrorSpy.mockRestore()
   })
 
   it('con foto cargada, muestra la imagen en 4:3 y un botón borrar que llama onChange(null) y borra en R2', () => {
