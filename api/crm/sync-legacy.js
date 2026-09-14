@@ -1,15 +1,18 @@
 import { syncLegacyCrm } from '../../src/server/legacySync.js'
 
 /** Vercel Serverless Function — sincroniza el clon del CRM viejo.
- *  Se dispara por Vercel Cron (ver vercel.json) con
- *  `Authorization: Bearer <CRON_SECRET>`. En `vite dev` la ruta la expone
- *  src/plugins/crmProxy.js.
+ *  Se dispara por Vercel Cron (ver vercel.json), que invoca por GET con
+ *  `Authorization: Bearer <CRON_SECRET>` (no POST — eso hacía que el cron
+ *  nunca corriera, devolvía 405 siempre). Se acepta también POST para
+ *  disparar el sync a mano (scripts, `vite dev` vía src/plugins/crmProxy.js).
  *
- * POST /api/crm/sync-legacy
+ * GET|POST /api/crm/sync-legacy
  */
 export async function handleSyncLegacy(req, res, { env = process.env, runner = syncLegacyCrm } = {}) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  if (req.method !== 'GET' && req.method !== 'POST') {
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  }
 
   const expected = env.CRON_SECRET
   const got = (req.headers.authorization || req.headers.Authorization || '').replace(/^Bearer\s+/i, '')

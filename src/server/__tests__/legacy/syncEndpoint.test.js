@@ -14,10 +14,24 @@ function mockRes() {
 const env = { CRON_SECRET: 's3cr3t', VITE_SUPABASE_URL: 'u', SUPABASE_SERVICE_ROLE_KEY: 'k', CRM_SYNC_USER: 'x', CRM_SYNC_PASS: 'y' }
 
 describe('handleSyncLegacy', () => {
-  it('405 on GET', async () => {
+  it('405 on unsupported methods', async () => {
+    const res = mockRes()
+    await handleSyncLegacy({ method: 'DELETE', headers: {} }, res, { env, runner: vi.fn() })
+    expect(res.statusCode).toBe(405)
+  })
+
+  it('401 without the bearer secret on GET (lo que manda Vercel Cron)', async () => {
     const res = mockRes()
     await handleSyncLegacy({ method: 'GET', headers: {} }, res, { env, runner: vi.fn() })
-    expect(res.statusCode).toBe(405)
+    expect(res.statusCode).toBe(401)
+  })
+
+  it('runs the sync on GET with the bearer secret (Vercel Cron)', async () => {
+    const res = mockRes()
+    const runner = vi.fn().mockResolvedValue({ ok: true, runId: 7, estado: 'ok' })
+    await handleSyncLegacy({ method: 'GET', headers: { authorization: 'Bearer s3cr3t' } }, res, { env, runner })
+    expect(runner).toHaveBeenCalledWith(expect.objectContaining({ disparadoPor: 'cron' }))
+    expect(res.statusCode).toBe(200)
   })
 
   it('401 without the bearer secret', async () => {
