@@ -40,4 +40,10 @@ export const vehiculoSchema = z.object({
   carpeta_entregada: z.boolean().optional(),
   tiene_iva: z.boolean().optional(),
   nota: textoOpc,
+  categoria: textoOpc,
+  descripcion: textoOpc,
+  es_nuevo: z.boolean().optional(),
+  combustible: textoOpc,
+  precio_usd: numOpc(0),
+  publicado: z.boolean().optional(),
 })

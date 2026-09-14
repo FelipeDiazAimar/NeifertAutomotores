@@ -1,10 +1,8 @@
 import {
-  crmLogin,
   fetchExtVehiculos,
   createExtLead,
   fetchExtWebLeads,
   fetchCrmClientes,
-  bridgeCrmSession,
 } from '../server/crmCore.js'
 
 /**
@@ -16,9 +14,6 @@ import {
  * GET  /api/crm/leads          → leads que empujamos nosotros (verificación)
  * POST /api/crm/leads          → empuja un lead nuevo del sitio
  * GET  /api/crm/clientes       → cartera completa (panel interno, login de empleado)
- * POST /api/crm/login          → valida usuario/contraseña contra el login real
- * POST /api/crm/bridge-session → crea/encuentra la cuenta puente en Supabase
- *                                 Auth y devuelve un token de un solo uso
  */
 
 function readJsonBody(req) {
@@ -44,8 +39,6 @@ function sendJson(res, status, payload) {
 }
 
 export function crmProxyPlugin({
-  supabaseUrl,
-  supabaseServiceRoleKey,
   crmExtApiToken,
   crmSyncUser,
   crmSyncPass,
@@ -165,29 +158,6 @@ export function crmProxyPlugin({
         sendJson(res, 405, { ok: false, error: 'Method not allowed' })
       })
 
-      server.middlewares.use('/api/crm/login', async (req, res) => {
-        if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' })
-        try {
-          const { user, pass } = await readJsonBody(req)
-          const { status, json } = await crmLogin(user, pass)
-          sendJson(res, status, json)
-        } catch (e) {
-          console.error('[crm-proxy] login:', e.message)
-          sendJson(res, 502, { ok: false, error: 'Error de conexión con el CRM.' })
-        }
-      })
-
-      server.middlewares.use('/api/crm/bridge-session', async (req, res) => {
-        if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' })
-        try {
-          const { user, nombre, role } = await readJsonBody(req)
-          const result = await bridgeCrmSession({ supabaseUrl, supabaseServiceRoleKey, user, nombre, role })
-          sendJson(res, 200, { ok: true, ...result })
-        } catch (e) {
-          console.error('[crm-proxy] bridge-session:', e.message)
-          sendJson(res, 500, { ok: false, error: e.message })
-        }
-      })
     },
   }
 }

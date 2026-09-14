@@ -10,12 +10,13 @@ import { useVehiculo, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import { usePeritajes, usePeritaje, usePeritajeMutations } from '@/crm/hooks/usePeritajes'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import FichaVehiculo from '@/crm/components/FichaVehiculo'
-import FotosUploader from '@/crm/components/FotosUploader'
 import PeritajeForm from '@/crm/components/PeritajeForm'
 import PeritajeLectura from '@/crm/components/PeritajeLectura'
 import GestoriaChecklist from '@/crm/components/GestoriaChecklist'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
 import EstadoStrip from '@/crm/components/EstadoStrip'
+import FotoSlot from '@/crm/components/FotoSlot'
+import { useGestoria, useGestoriaMutations } from '@/crm/hooks/useGestoria'
 import { estadoPeritaje, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
 import { cn } from '@/lib/cn'
 
@@ -31,9 +32,11 @@ function ChipCount({ tono, n, label }) {
   )
 }
 
-function PeritajePanel({ vehiculoId }) {
+function PeritajePanel({ vehiculoId, vehiculo }) {
   const { data: peritajes = [], isLoading } = usePeritajes(vehiculoId)
   const { crear } = usePeritajeMutations(vehiculoId)
+  const { data: g } = useGestoria(vehiculoId)
+  const { guardarCampos } = useGestoriaMutations(vehiculoId)
   const [nuevo, setNuevo] = useState(false)
   const [verId, setVerId] = useState(null)
   const { data: seleccionado } = usePeritaje(verId)
@@ -109,6 +112,17 @@ function PeritajePanel({ vehiculoId }) {
       <Modal open={Boolean(verId)} onClose={() => setVerId(null)} title="Peritaje" size="xl">
         {seleccionado ? <PeritajeLectura peritaje={seleccionado} /> : <Spinner size={20} />}
       </Modal>
+
+      <GlassCard className="p-5">
+        <h3 className="mb-4 font-display text-sm font-bold text-ink">Documentación</h3>
+        <FotoSlot
+          label="Foto del seguro"
+          url={g?.foto_seguro_url ?? null}
+          carpeta={`crm/gestoria/${vehiculoId}`}
+          onChange={(url) => guardarCampos.mutate({ foto_seguro_url: url })}
+          vehiculo={vehiculo}
+        />
+      </GlassCard>
     </div>
   )
 }
@@ -139,7 +153,7 @@ export default function VehiculoDetallePage() {
   if (!v) return <p className="text-ink-3">Vehículo no encontrado.</p>
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="space-y-4">
       <button onClick={() => navigate('/crm/vehiculos')} className="flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
         <ArrowLeft size={16} /> Vehículos
       </button>
@@ -163,18 +177,14 @@ export default function VehiculoDetallePage() {
             onArchivar={() => archivar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
             onEliminar={() => eliminar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
           />
-          <GlassCard className="mt-4 p-5">
-            <h3 className="mb-3 font-display text-sm font-bold text-ink">Fotos</h3>
-            <FotosUploader vehiculoId={id} />
-          </GlassCard>
         </TabsContent>
 
         <TabsContent value="peritaje" className="pt-4">
-          <PeritajePanel vehiculoId={id} />
+          <PeritajePanel vehiculoId={id} vehiculo={v} />
         </TabsContent>
 
         <TabsContent value="gestoria" className="pt-4">
-          <GestoriaChecklist vehiculoId={id} />
+          <GestoriaChecklist vehiculoId={id} vehiculo={v} />
         </TabsContent>
 
         <TabsContent value="historial" className="pt-4">

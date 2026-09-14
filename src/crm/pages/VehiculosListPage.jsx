@@ -23,7 +23,7 @@ export default function VehiculosListPage() {
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [abrirNuevo, setAbrirNuevo] = useState(false)
-  const { cambiarEstado } = useVehiculoMutations()
+  const { cambiarEstado, actualizar } = useVehiculoMutations()
 
   // debounce búsqueda → store
   useEffect(() => {
@@ -101,6 +101,7 @@ export default function VehiculosListPage() {
         <VehiculoTable
           filas={filas}
           onCambiarEstado={(v, e) => cambiarEstado.mutate({ id: v.id, de: v.estado, a: e })}
+          onCambiarPublicado={(v, publicado) => actualizar.mutate({ id: v.id, data: { publicado } })}
         />
       ) : (
         <div className="space-y-2">

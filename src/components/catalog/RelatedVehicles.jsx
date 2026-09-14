@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { fetchVehicles } from '@/services/vehicles.service'
+import { listarPublicos } from '@/crm/services/vehiculosPublico.service'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
 
 /** Carrusel horizontal con desplazamiento lento de autos de la misma
@@ -10,7 +10,7 @@ export default function RelatedVehicles({ current }) {
 
   const { data: list = [] } = useQuery({
     queryKey: ['vehicles', 'related', category],
-    queryFn: () => fetchVehicles({ category, sort: 'price-asc' }),
+    queryFn: () => listarPublicos({ category, sort: 'price-asc' }),
     enabled: Boolean(category),
   })
 

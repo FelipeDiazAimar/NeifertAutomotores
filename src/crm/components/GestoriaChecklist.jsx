@@ -1,6 +1,8 @@
 import { Check } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
+import GlassCard from '@/components/common/GlassCard'
+import FotoSlot from '@/crm/components/FotoSlot'
 import { GESTORIA_ITEMS } from '@/crm/lib/gestoriaSchema'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useGestoria, useGestoriaMutations } from '@/crm/hooks/useGestoria'
@@ -10,7 +12,7 @@ const ESTADO_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', com
 const hoy = () => new Date().toISOString().slice(0, 10)
 const fechaCorta = (f) => (f ? new Date(f).toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' }) : '')
 
-export default function GestoriaChecklist({ vehiculoId }) {
+export default function GestoriaChecklist({ vehiculoId, vehiculo }) {
   const { id: miId } = useCrmPerfil()
   const { data: g, isLoading } = useGestoria(vehiculoId)
   const { guardarCampos } = useGestoriaMutations(vehiculoId)
@@ -46,27 +48,30 @@ export default function GestoriaChecklist({ vehiculoId }) {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <Badge variant={estado === 'completo' ? 'green' : estado === 'en_proceso' ? 'amber' : 'neutral'}>
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <Badge
+          className="w-fit shrink-0 whitespace-nowrap"
+          variant={estado === 'completo' ? 'green' : estado === 'en_proceso' ? 'amber' : 'neutral'}
+        >
           {ESTADO_LABEL[estado]}
         </Badge>
-        <div className="flex gap-3 text-xs text-ink-3">
-          <label>
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex flex-1 items-center gap-1.5 text-xs text-ink-3 sm:flex-none">
             Inicio
             <input
               type="date"
               defaultValue={g?.fecha_inicio ?? ''}
               onBlur={(e) => guardarFechaTop('fecha_inicio', e.target.value)}
-              className="glass field-glass ml-1 h-8 rounded-xl px-2 text-ink outline-none"
+              className="glass field-glass h-8 min-w-0 flex-1 rounded-xl px-2 text-ink outline-none sm:flex-none"
             />
           </label>
-          <label>
+          <label className="flex flex-1 items-center gap-1.5 text-xs text-ink-3 sm:flex-none">
             Cierre
             <input
               type="date"
               defaultValue={g?.fecha_cierre ?? ''}
               onBlur={(e) => guardarFechaTop('fecha_cierre', e.target.value)}
-              className="glass field-glass ml-1 h-8 rounded-xl px-2 text-ink outline-none"
+              className="glass field-glass h-8 min-w-0 flex-1 rounded-xl px-2 text-ink outline-none sm:flex-none"
             />
           </label>
         </div>
@@ -104,6 +109,26 @@ export default function GestoriaChecklist({ vehiculoId }) {
           )
         })}
       </ul>
+
+      <GlassCard className="p-5">
+        <h3 className="mb-4 font-display text-sm font-bold text-ink">Documentación</h3>
+        <div className="flex flex-wrap gap-4">
+          <FotoSlot
+            label="Título — frente"
+            url={g?.foto_titulo_frente_url ?? null}
+            carpeta={`crm/gestoria/${vehiculoId}`}
+            onChange={(url) => guardarCampos.mutate({ foto_titulo_frente_url: url })}
+            vehiculo={vehiculo}
+          />
+          <FotoSlot
+            label="Título — dorso"
+            url={g?.foto_titulo_dorso_url ?? null}
+            carpeta={`crm/gestoria/${vehiculoId}`}
+            onChange={(url) => guardarCampos.mutate({ foto_titulo_dorso_url: url })}
+            vehiculo={vehiculo}
+          />
+        </div>
+      </GlassCard>
     </div>
   )
 }

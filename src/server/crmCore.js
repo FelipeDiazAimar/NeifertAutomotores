@@ -1,5 +1,3 @@
-import { createClient } from '@supabase/supabase-js'
-
 /**
  * Lógica del proxy del CRM viejo (neifertcrm.com), sin dependencias de Vite
  * ni Vercel, para poder llamarse desde el plugin de dev
@@ -14,8 +12,9 @@ const CRM_BASE = 'https://neifertcrm.com/backend/api'
 const CRM_EXT_BASE = 'https://neifertcrm.com/backend/api/public'
 
 /** Login real contra el CRM viejo. Devuelve el JSON tal cual responde su API.
- *  Se usa solo para el puente de login del panel (ver crmAuth.service.js) —
- *  la sincronización de vehículos/leads usa la API pública (más abajo). */
+ *  Se usa solo para la cuenta de sincronización de la cartera de clientes
+ *  (`fetchCrmClientes`) — la sincronización de vehículos/leads usa la API
+ *  pública (más abajo). */
 export async function crmLogin(user, pass) {
   const r = await fetch(`${CRM_BASE}/auth/login.php`, {
     method: 'POST',
@@ -124,45 +123,3 @@ export async function fetchExtWebLeads(token) {
   return unwrapList(await r.json())
 }
 
-/** Email estable por usuario del CRM viejo, para crear/encontrar siempre la
- *  misma cuenta puente en Supabase Auth (no es un email real, solo un id). */
-function crmShadowEmail(user) {
-  return `${String(user).toLowerCase().replace(/[^a-z0-9]/g, '')}@crm-viejo.neifert.local`
-}
-
-/** Crea/encuentra la cuenta puente en Supabase Auth para ese usuario del CRM
- *  viejo y devuelve un token de un solo uso (magic link) para verifyOtp. */
-export async function bridgeCrmSession({ supabaseUrl, supabaseServiceRoleKey, user, nombre, role }) {
-  if (!supabaseUrl || !supabaseServiceRoleKey) {
-    throw new Error('Falta SUPABASE_SERVICE_ROLE_KEY en el servidor para crear la sesión puente.')
-  }
-  const admin = createClient(supabaseUrl, supabaseServiceRoleKey, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  })
-
-  const email = crmShadowEmail(user)
-
-  const { data: list, error: listErr } = await admin.auth.admin.listUsers({ page: 1, perPage: 200 })
-  if (listErr) throw listErr
-  let userId = list.users.find((u) => u.email === email)?.id
-
-  if (!userId) {
-    const { data: created, error: createErr } = await admin.auth.admin.createUser({
-      email,
-      email_confirm: true,
-      user_metadata: { nombre_completo: nombre, rol: role, crm_user: user },
-    })
-    if (createErr) throw createErr
-    userId = created.user.id
-  }
-
-  // Mantiene el perfil al día con lo que dice el CRM viejo (nombre/rol/usuario)
-  await admin
-    .from('perfiles')
-    .upsert({ id: userId, nombre_completo: nombre, rol: role, usuario_crm: user }, { onConflict: 'id' })
-
-  const { data: link, error: linkErr } = await admin.auth.admin.generateLink({ type: 'magiclink', email })
-  if (linkErr) throw linkErr
-
-  return { email, token: link.properties?.hashed_token }
-}
