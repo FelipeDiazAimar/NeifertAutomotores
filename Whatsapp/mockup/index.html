@@ -1,0 +1,148 @@
+<title>WhatsApp Neifert</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Sora:wght@600;700&display=swap">
+<link rel="stylesheet" href="styles.css">
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-dashboard" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="9" rx="1"/><rect x="14" y="3" width="7" height="5" rx="1"/><rect x="14" y="12" width="7" height="9" rx="1"/><rect x="3" y="16" width="7" height="5" rx="1"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-list" viewBox="0 0 24 24"><path d="M13 5h8M13 12h8M13 19h8"/><path d="m3 17 2 2 4-4"/><rect x="3" y="4" width="6" height="6" rx="1"/></symbol>
+  <symbol id="i-car" viewBox="0 0 24 24"><path d="M19 17h2c.6 0 1-.4 1-1v-3c0-.9-.7-1.7-1.5-1.9C18.7 10.6 16 10 16 10s-1.3-1.4-2.2-2.3c-.5-.4-1.1-.7-1.8-.7H5c-.6 0-1.1.4-1.4.9l-1.4 2.9A3.7 3.7 0 0 0 2 12v4c0 .6.4 1 1 1h2"/><circle cx="7" cy="17" r="2"/><path d="M9 17h6"/><circle cx="17" cy="17" r="2"/></symbol>
+  <symbol id="i-clipboard" viewBox="0 0 24 24"><rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="m9 14 2 2 4-4"/></symbol>
+  <symbol id="i-files" viewBox="0 0 24 24"><path d="M15 2H8a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V7z"/><path d="M15 2v5h5"/><path d="M4 7v13a2 2 0 0 0 2 2h10"/></symbol>
+  <symbol id="i-usercog" viewBox="0 0 24 24"><circle cx="9" cy="7" r="4"/><path d="M3 21v-2a4 4 0 0 1 4-4h4"/><circle cx="18" cy="17" r="3"/><path d="M18 12v2M18 20v2M13 17h2M21 17h2"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.6 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.5 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M7.9 20A9 9 0 1 0 4 16.1L2 22z"/></symbol>
+  <symbol id="i-logout" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/></symbol>
+  <symbol id="i-sun" viewBox="0 0 24 24"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M6.3 17.7l-1.4 1.4M19.1 4.9l-1.4 1.4"/></symbol>
+  <symbol id="i-moon" viewBox="0 0 24 24"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-checks" viewBox="0 0 24 24"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M12 7v5l4 2"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"/></symbol>
+  <symbol id="i-mic" viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><path d="M12 19v3"/></symbol>
+  <symbol id="i-clip" viewBox="0 0 24 24"><path d="m21.4 11.1-9.2 9.2a6 6 0 0 1-8.5-8.5l8.6-8.6a4 4 0 0 1 5.7 5.7l-8.6 8.6a2 2 0 0 1-2.8-2.8l8.5-8.5"/></symbol>
+  <symbol id="i-send" viewBox="0 0 24 24"><path d="M14.5 21.7a.5.5 0 0 0 .9 0L22 2.5a.5.5 0 0 0-.6-.6L2.3 8.5a.5.5 0 0 0 0 .9l7.9 3.2a2 2 0 0 1 1.1 1.1z"/><path d="m21.9 2.1-11 10.9"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></symbol>
+  <symbol id="i-back" viewBox="0 0 24 24"><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="M7 4.5v15a1 1 0 0 0 1.5.9l12-7.5a1 1 0 0 0 0-1.8l-12-7.5A1 1 0 0 0 7 4.5Z"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><rect x="6" y="4" width="4" height="16" rx="1"/><rect x="14" y="4" width="4" height="16" rx="1"/></symbol>
+  <symbol id="i-userplus" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6M22 11h-6"/></symbol>
+  <symbol id="i-task" viewBox="0 0 24 24"><path d="M8 2v4M16 2v4"/><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M3 10h18M12 14v4M10 16h4"/></symbol>
+  <symbol id="i-external" viewBox="0 0 24 24"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></symbol>
+  <symbol id="i-unlink" viewBox="0 0 24 24"><path d="m18.84 12.25 1.72-1.71a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="m5.17 11.75-1.71 1.71a5 5 0 0 0 7.07 7.07l1.71-1.71"/><path d="M8 2v3M2 8h3M16 22v-3M22 16h-3"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2"/><path d="M12 18h.01"/></symbol>
+  <symbol id="i-circle-check" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-key" viewBox="0 0 24 24"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6M15.5 7.5l3 3L22 7l-3-3"/></symbol>
+</svg>
+
+<div class="app">
+  <aside class="sidebar" aria-label="Menú del CRM">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">N</span>
+      <span class="brand-name">Neifert<small>CRM</small></span>
+    </div>
+    <nav class="nav">
+      <a href="#"><svg class="i"><use href="#i-dashboard"/></svg>Panel</a>
+      <a href="#"><svg class="i"><use href="#i-users"/></svg>Clientes</a>
+      <a href="#" class="active" aria-current="page"><svg class="i"><use href="#i-chat"/></svg>WhatsApp<span class="count tnum" id="navUnread">5</span></a>
+      <a href="#"><svg class="i"><use href="#i-list"/></svg>Tareas<span class="count">3</span></a>
+      <a href="#"><svg class="i"><use href="#i-car"/></svg>Vehículos</a>
+      <a href="#"><svg class="i"><use href="#i-clipboard"/></svg>Peritaje</a>
+      <a href="#"><svg class="i"><use href="#i-files"/></svg>Gestoría</a>
+      <a href="#"><svg class="i"><use href="#i-usercog"/></svg>Usuarios</a>
+      <a href="#"><svg class="i"><use href="#i-shield"/></svg>Roles</a>
+    </nav>
+    <div class="anno"><b>Menú</b> WhatsApp entra como una vista más del CRM, con permiso propio en Roles (como Peritaje o Gestoría).</div>
+    <div class="side-foot">
+      <div style="display:flex;gap:4px">
+        <button class="theme-btn" data-act="theme" aria-label="Cambiar tema"><svg class="i"><use href="#i-moon"/></svg></button>
+        <button class="theme-btn" aria-label="Cambiar contraseña"><svg class="i"><use href="#i-key"/></svg></button>
+      </div>
+      <div class="me glass">
+        <span class="avatar">LR</span>
+        <div><b>Lucas R.</b><span>Vendedor</span></div>
+        <button class="icon-btn" aria-label="Salir"><svg class="i"><use href="#i-logout"/></svg></button>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main">
+    <div class="mobile-top glass">
+      <span class="brand"><span class="brand-mark" aria-hidden="true">N</span><span class="brand-name">Neifert<small>CRM</small></span></span>
+      <button class="theme-btn" data-act="theme" aria-label="Cambiar tema"><svg class="i"><use href="#i-moon"/></svg></button>
+    </div>
+
+    <div class="topbar">
+      <div>
+        <div class="crumb">CRM / WhatsApp</div>
+        <h1>WhatsApp</h1>
+      </div>
+      <div class="tabs glass" role="tablist" aria-label="Secciones de WhatsApp">
+        <button role="tab" id="tabInbox" data-view="inbox" aria-selected="true">Bandeja</button>
+        <button role="tab" id="tabConnect" data-view="connect" aria-selected="false">Conexión</button>
+      </div>
+      <button class="line-pill glass" id="linePill" data-view="connect"></button>
+      <label class="notes-toggle glass" for="notesToggle"><input type="checkbox" id="notesToggle"> Notas del mockup</label>
+    </div>
+
+    <!-- ===================== BANDEJA ===================== -->
+    <section id="viewInbox" class="inbox" aria-label="Bandeja de WhatsApp">
+      <div class="pane glass shadow list-pane">
+        <div class="list-head">
+          <label class="search" for="search">
+            <svg class="i"><use href="#i-search"/></svg>
+            <input id="search" type="search" placeholder="Buscar por nombre, teléfono o mensaje" autocomplete="off">
+          </label>
+          <div class="chips" id="filters"></div>
+        </div>
+        <div class="anno"><b>Lista</b> Solo chats 1 a 1 de la línea de la agencia (los grupos se ignoran, al revés que el bot de Electron). "Sin asignar" = ningún vendedor lo tomó.</div>
+        <div class="chat-list" id="chatList"></div>
+      </div>
+
+      <div class="pane glass shadow conv-pane">
+        <div class="conv-head" id="convHead"></div>
+        <div class="messages" id="messages" aria-live="polite"></div>
+        <div class="anno"><b>Anti-borrado</b> Si el cliente usa "Eliminar para todos", el mensaje queda visible acá con el aviso. <button data-act="simulate-revoke">Simular que el cliente borra su último mensaje</button></div>
+        <div class="composer" id="composer"></div>
+      </div>
+
+      <div class="pane glass shadow client-pane client" id="clientPanel"></div>
+    </section>
+
+    <!-- ===================== CONEXIÓN ===================== -->
+    <section id="viewConnect" class="connect" aria-label="Conexión de la línea" hidden>
+      <div class="col" id="connectMain"></div>
+      <div class="col">
+        <div class="card glass shadow">
+          <h2>Actividad de la línea</h2>
+          <ul class="log" id="logList"></ul>
+        </div>
+        <div class="card glass shadow">
+          <h2>Preferencias</h2>
+          <div>
+            <div class="toggle-row"><div>Guardar mensajes eliminados<span>El original queda en la bandeja con el aviso de borrado.</span></div><button class="switch" role="switch" aria-checked="true" data-act="switch" aria-label="Guardar mensajes eliminados"></button></div>
+            <div class="toggle-row"><div>Descargar fotos, audios y documentos<span>Se guardan al llegar; si el cliente los borra, siguen disponibles.</span></div><button class="switch" role="switch" aria-checked="true" data-act="switch" aria-label="Descargar multimedia"></button></div>
+            <div class="toggle-row"><div>Ignorar grupos<span>La bandeja muestra solo conversaciones con clientes.</span></div><button class="switch" role="switch" aria-checked="true" data-act="switch" aria-label="Ignorar grupos"></button></div>
+            <div class="toggle-row"><div>Marcar como leído al abrir<span>Apagado: el cliente no ve el tilde azul hasta que alguien responde.</span></div><button class="switch" role="switch" aria-checked="false" data-act="switch" aria-label="Marcar como leído al abrir"></button></div>
+            <div class="toggle-row"><div>Repartir chats nuevos entre vendedores<span>Asigna por turno los números que no tienen vendedor.</span></div><button class="switch" role="switch" aria-checked="false" data-act="switch" aria-label="Repartir chats nuevos"></button></div>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+
+<div class="lightbox" id="lightbox" hidden>
+  <button class="close" data-act="lb-close" aria-label="Cerrar foto"><svg class="i"><use href="#i-x"/></svg></button>
+  <figure id="lbFig"></figure>
+</div>
+<div class="toast" id="toast" role="status" hidden></div>
+
+<script src="data.js"></script>
+<script src="app.js"></script>

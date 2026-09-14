@@ -1,0 +1,5 @@
+node_modules/
+
+# Sesión de WhatsApp (da acceso completo a la cuenta), chats y multimedia reales:
+# nunca se suben al repo.
+data/

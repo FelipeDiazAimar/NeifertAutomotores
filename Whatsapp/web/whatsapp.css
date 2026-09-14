@@ -1,0 +1,151 @@
+/* Capa "WhatsApp Web" con la identidad de Neifert: estructura y comportamiento de
+   WhatsApp, colores y marca de Neifert. Se carga después de base.css y app.css. */
+
+:root {
+  --tick-read: #34a5e0;
+  --burbuja-sombra: 0 1px 0.5px rgba(11, 11, 15, 0.13);
+  --hover: rgba(11, 11, 15, 0.05);
+  --cita-fondo: rgba(11, 11, 15, 0.05);
+  --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%230b0b0f' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.07'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --tick-read: #53bdeb;
+    --burbuja-sombra: 0 1px 0.5px rgba(0, 0, 0, 0.5);
+    --hover: rgba(255, 255, 255, 0.05);
+    --cita-fondo: rgba(255, 255, 255, 0.06);
+    --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
+  }
+}
+:root[data-theme="dark"] {
+  --tick-read: #53bdeb;
+  --burbuja-sombra: 0 1px 0.5px rgba(0, 0, 0, 0.5);
+  --hover: rgba(255, 255, 255, 0.05);
+  --cita-fondo: rgba(255, 255, 255, 0.06);
+  --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
+}
+
+/* ---------- Marca Neifert ---------- */
+.marca { display: flex; align-items: center; gap: 12px; }
+.marca-logo { height: 34px; width: auto; display: block; }
+.marca-logo.logo-light { mix-blend-mode: multiply; }
+.marca-logo.logo-dark { display: none; mix-blend-mode: screen; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .marca-logo.logo-light { display: none; }
+  :root:not([data-theme="light"]) .marca-logo.logo-dark { display: block; }
+}
+:root[data-theme="dark"] .marca-logo.logo-light { display: none; }
+:root[data-theme="dark"] .marca-logo.logo-dark { display: block; }
+.marca-sep { width: 1px; height: 26px; background: var(--line); }
+.marca-modulo { display: flex; align-items: center; gap: 7px; font: 600 15px "Sora", sans-serif; letter-spacing: -0.01em; }
+.marca-modulo svg.i { color: var(--wa); width: 20px; height: 20px; }
+@media (max-width: 560px) { .marca-sep, .marca-modulo span { display: none; } }
+
+/* ---------- Avatares con foto ---------- */
+.avatar { position: relative; overflow: hidden; }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+
+/* ---------- Lista de chats ---------- */
+.row:hover, .archivados-row:hover { background: var(--hover); }
+.row-prev { gap: 3px; }
+.row-prev .tick { display: inline-flex; flex: none; color: var(--ink-3); }
+.row-prev .tick svg.i { width: 16px; height: 16px; }
+.row-prev .tick.read { color: var(--tick-read); }
+.row-prev.escribiendo { color: var(--wa); font-weight: 500; }
+.row-prev .borrador { color: var(--red); font-weight: 600; }
+.row.silenciado .unread { background: var(--ink-3); color: var(--solid); }
+
+/* ---------- Encabezado de la conversación ---------- */
+.conv-head { gap: 12px; padding: 9px 16px; background: color-mix(in srgb, var(--solid) 45%, transparent); }
+.conv-head .avatar { width: 40px; height: 40px; }
+.who .estado-en-linea { color: var(--ink-2); }
+.who .estado-escribiendo { color: var(--wa); font-weight: 500; }
+.conv-head .tag { display: inline-flex; align-items: center; gap: 4px; }
+.conv-head .tag svg.i { width: 13px; height: 13px; }
+
+/* ---------- Fondo y burbujas ---------- */
+.messages { background: var(--doodle) 0 0 / 180px 180px repeat, var(--chat-ground); }
+.day { font-size: 11.5px; letter-spacing: 0.02em; text-transform: none; color: var(--ink-2); padding: 5px 12px; border-radius: 8px; }
+
+.msg-list .msg { max-width: min(65%, 560px); padding: 6px 9px 7px; border-radius: 8px; box-shadow: var(--burbuja-sombra); font-size: 14.2px; line-height: 19px; margin-top: 2px; }
+.msg-list .msg.in + .msg.out, .msg-list .msg.out + .msg.in { margin-top: 2px; }
+.msg-list .msg.cola { margin-top: 10px; }
+.msg.cola.in { border-top-left-radius: 0; }
+.msg.cola.out { border-top-right-radius: 0; }
+.msg.cola::before { content: ""; position: absolute; top: 0; width: 8px; height: 13px; }
+.msg.cola.in::before { left: -8px; background: var(--bubble-in); clip-path: polygon(0 0, 100% 0, 100% 100%); }
+.msg.cola.out::before { right: -8px; background: var(--bubble-out); clip-path: polygon(0 0, 100% 0, 0 100%); }
+.msg.deleted::before, .msg.sticker-msg::before { display: none; }
+.msg.sticker-msg { box-shadow: none; }
+
+/* La hora va dentro de la burbuja, abajo a la derecha, como en WhatsApp */
+.msg .meta { position: absolute; right: 8px; bottom: 4px; margin: 0; white-space: nowrap; }
+.msg .meta .read { color: var(--tick-read); }
+.msg.con-texto .txt::after { content: ""; display: inline-block; width: var(--meta-ancho, 62px); height: 1px; }
+.msg.out.con-texto { --meta-ancho: 80px; }
+.msg.con-texto.editado { --meta-ancho: 110px; }
+.msg.out.con-texto.editado { --meta-ancho: 128px; }
+.msg.sin-texto { padding-bottom: 22px; }
+.msg.con-media { padding: 3px 3px 7px; }
+.msg.con-media .txt, .msg.con-media .del-note, .msg.con-media details.ediciones { padding-inline: 6px; }
+.msg.con-media .media-img, .msg.con-media .media-video { width: 330px; margin: 0 0 5px; border-radius: 6px; }
+.msg.solo-media { padding: 3px; }
+.msg.solo-media .media-img, .msg.solo-media .media-video { width: 330px; margin: 0; border-radius: 6px; }
+.msg.solo-media .meta { right: 7px; bottom: 7px; padding: 10px 6px 2px 22px; color: #fff; border-radius: 0 0 6px 0; background: radial-gradient(at 100% 100%, rgba(0, 0, 0, 0.5), transparent 70%); }
+.msg.solo-media .meta .read { color: #9fdcff; }
+.msg.sticker-msg .meta { background: var(--bubble-in); color: var(--ink-3); padding: 1px 6px; border-radius: 8px; }
+
+/* Formato de WhatsApp dentro del texto */
+.txt a { color: var(--tick-read); text-decoration: none; overflow-wrap: anywhere; }
+.txt a:hover { text-decoration: underline; }
+.txt code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: 13px; }
+.txt.emoji-grande { font-size: 34px; line-height: 42px; }
+
+/* Mensaje citado (respuesta) */
+.cita { display: block; width: 100%; text-align: left; margin: 0 0 5px; padding: 5px 10px 6px; border-radius: 6px; border-left: 4px solid var(--red); background: var(--cita-fondo); font-size: 13px; line-height: 18px; color: var(--ink-2); cursor: pointer; overflow: hidden; }
+.cita b { display: block; font-size: 12.5px; font-weight: 600; color: var(--red); }
+.cita.de-contacto { border-left-color: var(--wa); }
+.cita.de-contacto b { color: var(--wa); }
+.cita .cita-txt { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+.msg.con-media .cita { width: auto; margin: 3px 3px 5px; }
+.msg.resaltado { animation: resaltar 1.8s ease; }
+@keyframes resaltar { 0%, 45% { box-shadow: 0 0 0 3px var(--red-line), var(--burbuja-sombra); } 100% { box-shadow: var(--burbuja-sombra); } }
+
+/* Reacciones */
+.reacts { bottom: -14px; padding: 1px 6px; font-size: 14px; box-shadow: var(--burbuja-sombra); cursor: default; }
+.msg.has-reacts { margin-bottom: 14px; }
+
+/* Botón de opciones del mensaje (aparece al pasar el mouse) */
+.msg .opciones { position: absolute; top: 3px; right: 3px; z-index: 1; width: 26px; height: 22px; display: grid; place-items: center; border-radius: 6px; color: var(--ink-3); opacity: 0; background: radial-gradient(at 70% 30%, var(--bubble-in) 45%, transparent 80%); transition: opacity 0.12s; }
+.msg.out .opciones { background: radial-gradient(at 70% 30%, var(--bubble-out) 45%, transparent 80%); }
+.msg .opciones svg.i { width: 18px; height: 18px; }
+.msg:hover .opciones, .msg .opciones:focus-visible, .msg .opciones[aria-expanded="true"] { opacity: 1; }
+.msg.solo-media .opciones { color: #fff; background: radial-gradient(at 70% 30%, rgba(0, 0, 0, 0.45), transparent 75%); }
+
+.menu-msg { position: fixed; z-index: 40; min-width: 210px; padding: 6px 0; border-radius: 12px; background: var(--popover); border: 1px solid var(--line); box-shadow: 0 18px 40px -16px var(--shadow); }
+.menu-msg .reac-bar { display: flex; gap: 2px; padding: 2px 8px 8px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.menu-msg .reac-bar button { width: 36px; height: 36px; border-radius: 99px; display: grid; place-items: center; font-size: 21px; transition: transform 0.1s; }
+.menu-msg .reac-bar button:hover { background: var(--hover); transform: scale(1.15); }
+.menu-msg .reac-bar button[aria-pressed="true"] { background: var(--red-soft); }
+.menu-msg .item { display: flex; align-items: center; gap: 12px; width: 100%; padding: 9px 16px; font-size: 14px; text-align: left; }
+.menu-msg .item:hover { background: var(--hover); }
+.menu-msg .item svg.i { width: 17px; height: 17px; color: var(--ink-3); }
+
+/* Barra "respondiendo a…" encima de la caja de texto */
+.respuesta { flex: none; display: flex; align-items: center; gap: 8px; padding: 8px 12px 0 60px; }
+.respuesta .cita { margin: 0; cursor: default; }
+.conv-pane.con-respuesta .bajar { bottom: 136px; }
+
+/* Separador de no leídos */
+.sin-leer { align-self: stretch; margin: 12px calc(-1 * clamp(12px, 4vw, 60px)); padding: 6px; text-align: center; font-size: 12.5px; font-weight: 600; color: var(--wa); background: color-mix(in srgb, var(--solid) 75%, transparent); }
+
+/* Notas de voz: velocidad 1× / 1,5× / 2× */
+.voice { grid-template-columns: 36px minmax(0, 1fr) auto; width: 290px; }
+.voice .voice-meta { justify-content: flex-start; gap: 6px; }
+.voice .velocidad { grid-row: 1; grid-column: 3; min-width: 38px; padding: 3px 7px; border-radius: 99px; font-size: 11.5px; font-weight: 700; color: var(--ink-2); background: var(--hover); }
+
+/* Caja de texto que crece como en WhatsApp */
+.composer { align-items: flex-end; gap: 4px; padding: 8px 12px; }
+.composer .field { align-items: flex-end; border-radius: 10px; padding: 0 12px; }
+.composer textarea { flex: 1; min-width: 0; min-height: 40px; max-height: 136px; padding: 10px 0; border: 0; outline: 0; resize: none; background: none; font: inherit; line-height: 20px; color: inherit; overflow-y: auto; }
+.composer .icon-btn { margin-bottom: 3px; }
