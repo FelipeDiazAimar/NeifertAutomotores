@@ -28,3 +28,24 @@
   color: var(--c-text);
   font-family: var(--font-sans);
 }
+
+/* El sitio oculta la scrollbar nativa en todos lados (*, con !important) y
+   la reemplaza por un indicador propio de la página. Para regiones con su
+   propio scroll interno (galería de fotos, listas largas) esa ocultación
+   global hace invisible la única señal de que hay más contenido — acá se
+   revierte puntualmente con más especificidad. */
+.crm-scrollbar {
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--c-border) transparent;
+}
+.crm-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+}
+.crm-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--c-border);
+  border-radius: 999px;
+}
+.crm-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}

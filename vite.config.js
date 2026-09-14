@@ -21,8 +21,6 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       instagramProxyPlugin(),
       crmProxyPlugin({
-        supabaseUrl: env.VITE_SUPABASE_URL,
-        supabaseServiceRoleKey: env.SUPABASE_SERVICE_ROLE_KEY,
         crmExtApiToken: env.CRM_EXT_API_TOKEN,
         crmSyncUser: env.CRM_SYNC_USER,
         crmSyncPass: env.CRM_SYNC_PASS,

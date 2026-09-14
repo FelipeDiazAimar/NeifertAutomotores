@@ -712,7 +712,7 @@ export default function AdminContentPage() {
         <div className="flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-bold uppercase tracking-widest text-neifert">Gestión</p>
-            <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Contenido</h1>
+            <h1 className="mt-1 font-display text-3xl font-extrabold text-ink">Administración Contenido Web</h1>
             <p className="mt-1 text-sm text-ink-3">Guardá los cambios con el botón de abajo a la derecha.</p>
           </div>
         </div>

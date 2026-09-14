@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
 import { supabase, isSupabaseConfigured } from '@/services/supabaseClient'
-import { loginWithCrmCredentials } from '@/services/crmAuth.service'
 import { obtenerMiPerfil } from '@/crm/services/crmUsuarios.service'
 import { AuthContext } from './authContext'
 
@@ -28,9 +27,9 @@ export function AuthProvider({ children }) {
   )
   const [loading, setLoading] = useState(() => isSupabaseConfigured)
 
-  // Perfil del CRM nuevo (crm.usuarios) — solo se carga en rutas /crm/*.
-  const enRutaCrm =
-    typeof window !== 'undefined' && window.location.pathname.startsWith('/crm')
+  // Perfil del CRM nuevo (crm.usuarios) — gate único de todo el panel
+  // (/admin/* y /crm/*), se carga para cualquier ruta protegida.
+  const enRutaCrm = true
   // undefined = todavía no se cargó; null = cargado, sin fila en crm.usuarios.
   const [crmPerfil, setCrmPerfil] = useState(undefined)
 
@@ -88,24 +87,6 @@ export function AuthProvider({ children }) {
     }
   }, [session, enRutaCrm])
 
-  // Login del panel: reutiliza el login real del CRM viejo (neifertcrm.com)
-  // como fuente de verdad de usuario/contraseña, con o sin Supabase configurado.
-  const signIn = useCallback(async (user, pass) => {
-    const res = await loginWithCrmCredentials(user, pass)
-    if (!res.ok) return { error: { message: res.error } }
-
-    if (!isSupabaseConfigured) {
-      // Sin Supabase: la sesión es local, pero con los datos reales del CRM.
-      const demoSession = { user, nombre: res.nombre, role: res.role }
-      localStorage.setItem(DEMO_KEY, JSON.stringify(demoSession))
-      setSession({ user: { email: user } })
-      setProfile({ full_name: res.nombre, role: res.role })
-    }
-    // Con Supabase configurado, verifyOtp (dentro de loginWithCrmCredentials)
-    // ya disparó onAuthStateChange → session/profile se actualizan solos.
-    return { error: null }
-  }, [])
-
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured) {
       localStorage.removeItem(DEMO_KEY)
@@ -125,7 +106,6 @@ export function AuthProvider({ children }) {
       isSupabaseConfigured && enRutaCrm && Boolean(session?.user) && crmPerfil === undefined,
     isAuthenticated: Boolean(session),
     isDemo: !isSupabaseConfigured,
-    signIn,
     signOut,
   }
 

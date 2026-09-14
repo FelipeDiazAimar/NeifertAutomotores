@@ -11,7 +11,7 @@ export async function listarVehiculos({ busqueda = '', estado } = {}) {
   const { data, error } = await db()
     .from('vehiculos')
     .select(
-      'id, marca, modelo, patente, estado, ' +
+      'id, marca, modelo, patente, estado, tipo, fotos:vehiculo_fotos(url,es_portada), ' +
         'peritajes(id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
         'peritado_por_nombre, peritador:usuarios(nombre))',
     )
@@ -23,7 +23,7 @@ export async function listarVehiculos({ busqueda = '', estado } = {}) {
   let filas = (data ?? []).map((v) => {
     const ultimo = v.peritajes?.[0] ?? null
     return {
-      vehiculo: { id: v.id, marca: v.marca, modelo: v.modelo, patente: v.patente, estado: v.estado },
+      vehiculo: { id: v.id, marca: v.marca, modelo: v.modelo, patente: v.patente, estado: v.estado, tipo: v.tipo, fotos: v.fotos },
       peritaje: ultimo,
       cantidad: v.peritajes?.length ?? 0,
       estadoPeritaje: estadoPeritaje(ultimo),

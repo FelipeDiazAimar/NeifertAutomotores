@@ -42,14 +42,9 @@ export default function ClientesListPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold text-ink">Clientes</h1>
-          <p className="text-sm text-ink-3">{total} en cartera</p>
-        </div>
-        <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
-          Cargar cliente
-        </Button>
+      <div>
+        <h1 className="font-display text-2xl font-bold text-ink">Clientes</h1>
+        <p className="text-sm text-ink-3">{total} en cartera</p>
       </div>
 
       <div className="flex items-center gap-2">
@@ -79,6 +74,9 @@ export default function ClientesListPage() {
             </span>
           )}
         </button>
+        <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
+          Cargar cliente
+        </Button>
       </div>
 
       {mostrarFiltros && <ClienteFilters />}

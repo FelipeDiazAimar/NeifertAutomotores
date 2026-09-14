@@ -15,6 +15,9 @@ export default defineConfig({
     include: [
       'src/server/__tests__/**/*.test.{js,jsx}',
       'src/crm/__tests__/**/*.test.{js,jsx}',
+      'src/routes/__tests__/**/*.test.{js,jsx}',
+      'src/components/**/__tests__/**/*.test.{js,jsx}',
+      'src/hooks/__tests__/**/*.test.{js,jsx}',
     ],
     setupFiles: ['./vitest.setup.js'],
   },

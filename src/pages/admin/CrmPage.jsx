@@ -45,6 +45,8 @@ export default function CrmPage() {
   const originFilter = useCrmStore((s) => s.originFilter)
   const setOriginFilter = useCrmStore((s) => s.setOriginFilter)
   const quickFilter = useCrmStore((s) => s.quickFilter)
+  const page = useCrmStore((s) => s.page)
+  const setPage = useCrmStore((s) => s.setPage)
   const qc = useQueryClient()
   const [syncing, setSyncing] = useState(false)
   const autoSyncedRef = useRef(false)
@@ -52,7 +54,6 @@ export default function CrmPage() {
   // Reset a la página 1 cuando cambia búsqueda/orden/filtro. Ajuste durante
   // el render (patrón recomendado por React) en vez de un useEffect, que
   // dispararía un render en cascada.
-  const [page, setPage] = useState(1)
   const pageKey = JSON.stringify({ search, sort, quickFilter, originFilter })
   const [prevPageKey, setPrevPageKey] = useState(pageKey)
   if (pageKey !== prevPageKey) {
@@ -157,7 +158,7 @@ export default function CrmPage() {
           </div>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <div className="glass field-glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3 sm:max-w-xs">
+            <div className="glass field-glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3">
               <Search size={16} className="shrink-0 text-ink-3" />
               <input
                 value={search}
@@ -166,8 +167,8 @@ export default function CrmPage() {
                 className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
               />
             </div>
-            <div className="flex items-center gap-2">
-              <div className="w-36 sm:w-40">
+            <div className="flex shrink-0 items-center gap-2">
+              <div className="w-48 sm:w-56">
                 <Select
                   size="sm"
                   value={originFilter}

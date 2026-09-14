@@ -9,6 +9,7 @@ vi.mock('@/services/supabaseClient', () => ({
   isSupabaseConfigured: true,
   supabase: { auth: { signInWithPassword: (...a) => signInWithPassword(...a) } },
 }))
+vi.mock('@/store/useUiStore', () => ({ useUiStore: (sel) => sel({ theme: 'light' }) }))
 
 const { default: CrmLoginPage } = await import('../pages/CrmLoginPage.jsx')
 

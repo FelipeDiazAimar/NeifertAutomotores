@@ -19,7 +19,7 @@ import { Eye, MessageCircle, TrendingUp, Radio, Share2, Expand } from 'lucide-re
 import GlassCard from '@/components/common/GlassCard'
 import KpiCard from '@/components/crm/KpiCard'
 import TopVehiclesModal from '@/components/stats/TopVehiclesModal'
-import { fetchAllVehicles } from '@/services/vehicles.service'
+import { listarTodos } from '@/crm/services/vehiculosPublico.service'
 import { SOURCES, SOURCE_COLORS } from '@/lib/provenance'
 import {
   aggregateBySource,
@@ -58,14 +58,17 @@ export default function VehicleAnalytics({ range = {} }) {
   const c = useChartColors()
   const { data: vehicles = [] } = useQuery({
     queryKey: ['vehicles', 'analytics'],
-    queryFn: fetchAllVehicles,
+    queryFn: listarTodos,
   })
 
   const nameById = useMemo(
     () => Object.fromEntries(vehicles.map((v) => [v.id, `${v.brand} ${v.model}`])),
     [vehicles]
   )
-  const shortName = (id) => nameById[id] || id
+  // Eventos históricos de antes de la unificación de catálogos pueden traer
+  // un vehiculo_id que ya no existe (apuntaba a la tabla vieja); en vez de
+  // mostrar el UUID crudo, se etiquetan como no disponibles.
+  const shortName = (id) => nameById[id] || 'Vehículo no disponible'
 
   const r = { from: range.from ?? null, to: range.to ?? null }
   const { data: real } = useEventStats(r)

@@ -11,6 +11,7 @@ import SeguimientoCliente from '@/crm/components/SeguimientoCliente'
 import TareasDeCliente from '@/crm/components/TareasDeCliente'
 import RegistrarVentaModal from '@/crm/components/RegistrarVentaModal'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
+import GlassCard from '@/components/common/GlassCard'
 
 const SECCIONES = [
   { id: 'datos', label: 'Datos' },
@@ -21,11 +22,11 @@ const SECCIONES = [
   { id: 'historial', label: 'Historial' },
 ]
 
-function Seccion({ id, titulo, children }) {
+function Seccion({ id, titulo, children, plain = false }) {
   return (
     <section id={id} className="scroll-mt-24 space-y-3">
       <h2 className="font-display text-lg font-bold text-ink">{titulo}</h2>
-      {children}
+      {plain ? children : <GlassCard className="p-5">{children}</GlassCard>}
     </section>
   )
 }
@@ -75,7 +76,7 @@ export default function ClienteDetallePage() {
       </nav>
 
       <div className="space-y-8 pt-2">
-        <Seccion id="datos" titulo="Datos">
+        <Seccion id="datos" titulo="Datos" plain>
           <FichaCliente
             cliente={c}
             puedeEliminar

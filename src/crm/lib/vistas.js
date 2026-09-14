@@ -9,6 +9,10 @@ export const VISTAS = [
   { key: 'tareas', label: 'Tareas', ruta: '/crm/tareas' },
   { key: 'usuarios', label: 'Usuarios', ruta: '/crm/usuarios' },
   { key: 'roles', label: 'Roles', ruta: '/crm/roles' },
+  { key: 'leads', label: 'Carga Leads', ruta: '/admin/crm' },
+  { key: 'contenido', label: 'Administración Contenido Web', ruta: '/admin/contenido' },
+  { key: 'estadisticas', label: 'Estadísticas', ruta: '/admin/estadisticas' },
+  { key: 'admin', label: 'Admin', ruta: '/admin/admin' },
 ]
 
 export const ROL_LABEL = { admin: 'Admin', dueno: 'Dueño', vendedor: 'Vendedor' }

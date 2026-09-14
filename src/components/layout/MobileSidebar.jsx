@@ -76,7 +76,7 @@ export default function MobileSidebar() {
 
             <div className="px-3 pb-2">
               <Link
-                to="/login"
+                to="/crm/login"
                 onClick={() => setOpen(false)}
                 className="flex items-center gap-3 rounded-xl px-4 py-3 text-sm font-medium text-ink-3 transition-colors hover:bg-line hover:text-ink"
               >

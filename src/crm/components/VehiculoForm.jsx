@@ -11,6 +11,8 @@ import { vehiculoSchema } from '@/crm/lib/vehiculoSchema'
 // Semilla para "Tipo" — se fusiona con lo que ya haya cargado.
 const TIPOS = ['Pickup', 'Sedan', 'SUV', 'Hatchback', 'Utilitario', 'Coupé', 'Familiar', 'Otro']
 const TRANS = ['manual', 'automático']
+const CATEGORIAS = ['sedan', 'suv', 'pickup', 'hatchback', 'utilitario', 'coupe', 'familiar']
+const COMBUSTIBLES = ['Nafta', 'Diésel', 'GNC', 'Híbrido', 'Eléctrico']
 const opt = (arr) => arr.map((x) => ({ id: x, label: x }))
 
 /** Fusiona una semilla con la lista guardada, dedup sin distinguir mayúsculas. */
@@ -156,6 +158,26 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
       <Seccion titulo="Nota">
         <div className="sm:col-span-2">
           <Input as="textarea" {...register('nota')} />
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Publicación en la web">
+        <Controller
+          control={control} name="categoria"
+          render={({ field }) => (
+            <Select label="Categoría" options={opt(CATEGORIAS)} value={field.value ?? ''} onChange={field.onChange} />
+          )}
+        />
+        <Controller
+          control={control} name="combustible"
+          render={({ field }) => (
+            <Select label="Combustible" options={opt(COMBUSTIBLES)} value={field.value ?? ''} onChange={field.onChange} />
+          )}
+        />
+        <Input label="Precio en USD (referencia web)" type="number" {...register('precio_usd')} error={errors.precio_usd?.message} />
+        <span />
+        <div className="sm:col-span-2">
+          <Input as="textarea" label="Descripción (para la web)" {...register('descripcion')} />
         </div>
       </Seccion>
 

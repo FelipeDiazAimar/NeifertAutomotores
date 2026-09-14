@@ -8,7 +8,7 @@ const db = () => supabase.schema('crm')
 export async function listarTodas({ estado } = {}) {
   let q = db()
     .from('gestoria')
-    .select('*, vehiculo:vehiculos!inner(id, marca, modelo, patente, estado)')
+    .select('*, vehiculo:vehiculos!inner(id, marca, modelo, patente, estado, tipo, fotos:vehiculo_fotos(url,es_portada))')
     .order('actualizado_en', { ascending: false })
   if (estado) q = q.eq('estado', estado)
 

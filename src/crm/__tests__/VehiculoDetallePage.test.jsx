@@ -3,6 +3,7 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const vehiculo = { id: 'v1', marca: 'Toyota', modelo: 'Hilux', estado: 'disponible', fotos: [] }
 
@@ -24,17 +25,26 @@ vi.mock('../hooks/useGestoria.js', () => ({
 vi.mock('../hooks/useEventos.js', () => ({ useEventos: () => ({ data: [], isLoading: false }) }))
 vi.mock('../hooks/useCrmPerfil.js', () => ({ useCrmPerfil: () => ({ id: 'u1', esAdmin: false }) }))
 vi.mock('../hooks/useCrmUsuarios.js', () => ({ useCrmUsuarios: () => ({ data: [] }) }))
-vi.mock('../components/FotosUploader.jsx', () => ({ default: () => <div>fotos</div> }))
+vi.mock('@/crm/services/fotos.service', () => ({
+  listar: vi.fn().mockResolvedValue([]),
+  subir: vi.fn(),
+  marcarPortada: vi.fn(),
+  borrar: vi.fn(),
+  subirArchivoUnico: vi.fn(),
+}))
 
 const { default: VehiculoDetallePage } = await import('../pages/VehiculoDetallePage.jsx')
 
 function renderPage() {
+  const qc = new QueryClient()
   return render(
-    <MemoryRouter initialEntries={['/crm/vehiculos/v1']}>
-      <Routes>
-        <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
-      </Routes>
-    </MemoryRouter>,
+    <QueryClientProvider client={qc}>
+      <MemoryRouter initialEntries={['/crm/vehiculos/v1']}>
+        <Routes>
+          <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
+        </Routes>
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
 }
 

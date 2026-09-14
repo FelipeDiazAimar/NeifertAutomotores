@@ -3,7 +3,16 @@ import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import FichaVehiculo from '../components/FichaVehiculo.jsx'
+
+vi.mock('@/crm/services/fotos.service', () => ({
+  listar: vi.fn().mockResolvedValue([]),
+  subir: vi.fn(),
+  marcarPortada: vi.fn(),
+  borrar: vi.fn(),
+  subirArchivoUnico: vi.fn(),
+}))
 
 const v = {
   id: 'v1', marca: 'Toyota', modelo: 'Hilux', version: 'SRX', patente: 'AB123CD',
@@ -12,7 +21,14 @@ const v = {
   duenio_nombre: 'Juan', duenio_apellido: 'Pérez', nota: null, fotos: [],
 }
 
-const wrap = (ui) => render(<MemoryRouter>{ui}</MemoryRouter>)
+const wrap = (ui) => {
+  const qc = new QueryClient()
+  return render(
+    <QueryClientProvider client={qc}>
+      <MemoryRouter>{ui}</MemoryRouter>
+    </QueryClientProvider>,
+  )
+}
 
 describe('FichaVehiculo', () => {
   it('sin fotos muestra la patente como placeholder', () => {
