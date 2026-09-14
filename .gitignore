@@ -24,6 +24,9 @@ scraping/
 # Inputs locales de scripts (contraseñas de seed, etc. — nunca commitear)
 scripts/*.local.json
 
+# Backups de datos del CRM (contienen PII de clientes reales — nunca commitear)
+scripts/backup-crm-*.json
+
 # Editor / OS
 .DS_Store
 .vscode/*
