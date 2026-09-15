@@ -1,25 +1,39 @@
 import { supabase } from '@/services/supabaseClient'
+import { obtenerCotizacionUsd } from '@/lib/exchangeRate'
 
 const db = () => supabase.schema('crm')
 
 /** Solo columnas públicas: nunca las privadas de crm.vehiculos (dueño, ITV,
  *  patente, nota, consignación, carpetas, IVA). */
 const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, precio_contado,
-  precio_usd, km, combustible, transmision, categoria, es_nuevo, descripcion, estado,
+  km, combustible, transmision, categoria, es_nuevo, descripcion, estado,
   creado_en, vehiculo_fotos ( url, es_portada, orden )`
 
+// year-desc/km-asc ordenan en el server. price-asc/price-desc se resuelven
+// aparte (ver listarPublicos): conviven vehículos en ARS y en USD, así que
+// para ordenarlos por precio hay que pasarlos a una moneda común primero —
+// eso no lo puede hacer un ORDER BY simple en la base.
 const SORT_MAP = {
-  'price-desc': ['precio_usd', false],
-  'price-asc': ['precio_usd', true],
   'year-desc': ['anio', false],
   'km-asc': ['km', true],
 }
 
 /** Traduce una fila de crm.vehiculos (+ sus fotos) al shape en inglés que ya
- *  usa la UI pública (mismo que devolvía vehicles.service.js). */
-function mapear(v) {
+ *  usa la UI pública (mismo que devolvía vehicles.service.js). `usdRate`
+ *  (ARS por USD) se usa solo para calcular `price_usd` — un equivalente en
+ *  USD para poder comparar/ordenar vehículos en distinta moneda; lo que se
+ *  MUESTRA sigue siendo `price_amount` en su propia `currency`, sin tocar. */
+function mapear(v, usdRate = null) {
   const fotos = [...(v.vehiculo_fotos ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
   const portada = fotos.find((f) => f.es_portada) ?? fotos[0]
+  const precioUsd =
+    v.precio_contado == null
+      ? null
+      : v.moneda === 'USD'
+        ? v.precio_contado
+        : usdRate
+          ? v.precio_contado / usdRate
+          : null
   return {
     id: v.id,
     brand: v.marca,
@@ -29,7 +43,7 @@ function mapear(v) {
     year: v.anio,
     currency: v.moneda,
     price_amount: v.precio_contado,
-    price_usd: v.precio_usd,
+    price_usd: precioUsd,
     km: v.km,
     fuel_type: v.combustible,
     transmission: v.transmision,
@@ -68,36 +82,48 @@ export async function listarPublicos({
   search = '',
   filters = null,
 } = {}) {
+  const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
+
   let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('estado', 'disponible').eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
   query = aplicarFiltros(query, { search, filters })
-  const [col, asc] = SORT_MAP[sort] || SORT_MAP['price-desc']
-  query = query.order(col, { ascending: asc })
+  if (!ordenaPorPrecio) {
+    const [col, asc] = SORT_MAP[sort] || SORT_MAP['year-desc']
+    query = query.order(col, { ascending: asc })
+  }
 
-  const { data, error } = await query
+  const [{ data, error }, usdRate] = await Promise.all([query, obtenerCotizacionUsd()])
   if (error) throw error
-  return (data ?? []).map(mapear)
+  const vehiculos = (data ?? []).map((v) => mapear(v, usdRate))
+
+  if (ordenaPorPrecio) {
+    const asc = sort === 'price-asc'
+    vehiculos.sort((a, b) => {
+      if (a.price_usd == null && b.price_usd == null) return 0
+      if (a.price_usd == null) return 1
+      if (b.price_usd == null) return -1
+      return asc ? a.price_usd - b.price_usd : b.price_usd - a.price_usd
+    })
+  }
+  return vehiculos
 }
 
 /** Todos los vehículos (cualquier estado, publicados o no) para las
  *  estadísticas del panel — requiere sesión, no se usa desde la web pública. */
 export async function listarTodos() {
-  const { data, error } = await db()
-    .from('vehiculos')
-    .select(COLUMNAS_PUBLICAS)
-    .order('creado_en', { ascending: false })
+  const [{ data, error }, usdRate] = await Promise.all([
+    db().from('vehiculos').select(COLUMNAS_PUBLICAS).order('creado_en', { ascending: false }),
+    obtenerCotizacionUsd(),
+  ])
   if (error) throw error
-  return (data ?? []).map(mapear)
+  return (data ?? []).map((v) => mapear(v, usdRate))
 }
 
 export async function obtenerPublicoPorId(id) {
-  const { data, error } = await db()
-    .from('vehiculos')
-    .select(COLUMNAS_PUBLICAS)
-    .eq('id', id)
-    .eq('estado', 'disponible')
-    .eq('publicado', true)
-    .maybeSingle()
+  const [{ data, error }, usdRate] = await Promise.all([
+    db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).eq('estado', 'disponible').eq('publicado', true).maybeSingle(),
+    obtenerCotizacionUsd(),
+  ])
   if (error) throw error
-  return data ? mapear(data) : null
+  return data ? mapear(data, usdRate) : null
 }

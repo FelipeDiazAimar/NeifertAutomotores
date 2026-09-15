@@ -174,8 +174,6 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
             <Select label="Combustible" options={opt(COMBUSTIBLES)} value={field.value ?? ''} onChange={field.onChange} />
           )}
         />
-        <Input label="Precio en USD (referencia web)" type="number" {...register('precio_usd')} error={errors.precio_usd?.message} />
-        <span />
         <div className="sm:col-span-2">
           <Input as="textarea" label="Descripción (para la web)" {...register('descripcion')} />
         </div>

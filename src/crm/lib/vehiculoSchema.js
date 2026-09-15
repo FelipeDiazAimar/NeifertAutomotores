@@ -44,6 +44,5 @@ export const vehiculoSchema = z.object({
   descripcion: textoOpc,
   es_nuevo: z.boolean().optional(),
   combustible: textoOpc,
-  precio_usd: numOpc(0),
   publicado: z.boolean().optional(),
 })

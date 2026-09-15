@@ -22,7 +22,7 @@ const CAMPOS_FORM = [
   'moneda', 'precio_contado', 'precio_canje', 'duenio_nombre', 'duenio_apellido',
   'duenio_contacto', 'itv', 'itv_venc', 'consignacion', 'tipo_consignacion', 'origen',
   'carpeta_completa', 'carpeta_con_oficio', 'carpeta_entregada', 'tiene_iva', 'nota',
-  'categoria', 'descripcion', 'combustible', 'precio_usd',
+  'categoria', 'descripcion', 'combustible',
 ]
 
 const ESTADOS = ['disponible', 'reservado', 'vendido', 'baja']

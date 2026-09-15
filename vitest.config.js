@@ -18,6 +18,7 @@ export default defineConfig({
       'src/routes/__tests__/**/*.test.{js,jsx}',
       'src/components/**/__tests__/**/*.test.{js,jsx}',
       'src/hooks/__tests__/**/*.test.{js,jsx}',
+      'src/lib/__tests__/**/*.test.{js,jsx}',
     ],
     setupFiles: ['./vitest.setup.js'],
   },
