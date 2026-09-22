@@ -7,7 +7,7 @@
 //   { "usuario": "Bruno",    "nombre": "Bruno",    "rol": "vendedor", "password": "…" }
 // ]
 import { readFileSync } from 'node:fs'
-import { handleSeedUsuarios } from '../api/crm/seed-usuarios.js'
+import { handleSeedUsuarios } from '../src/server/seedUsuarios.js'
 
 const usuarios = JSON.parse(readFileSync(new URL('./crm-usuarios.local.json', import.meta.url), 'utf8'))
 const secret = process.env.SEED_SECRET || process.env.CRON_SECRET

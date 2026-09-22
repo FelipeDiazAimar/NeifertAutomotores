@@ -26,9 +26,9 @@ describe('usePushNotifications', () => {
     const { usePushNotifications } = await import('../hooks/usePushNotifications.js')
     const { result } = renderHook(() => usePushNotifications())
     await act(async () => { await result.current.activar() })
-    expect(global.fetch).toHaveBeenCalledWith('/api/crm/push-subscribe', expect.objectContaining({ method: 'POST' }))
+    expect(global.fetch).toHaveBeenCalledWith('/api/crm/usuarios', expect.objectContaining({ method: 'POST' }))
     const body = JSON.parse(global.fetch.mock.calls[0][1].body)
-    expect(body).toEqual({ endpoint: 'https://x/1', p256dh: 'p', auth: 'a' })
+    expect(body).toEqual({ accion: 'push_subscribe', endpoint: 'https://x/1', p256dh: 'p', auth: 'a' })
   })
 
   it('si el usuario no da permiso, no llama al backend', async () => {

@@ -127,4 +127,40 @@ describe('handleUsuarios', () => {
     )
     expect(res.statusCode).toBe(400)
   })
+
+  describe('push_subscribe', () => {
+    // Cualquier usuario logueado se suscribe a sí mismo — no pasa por el
+    // gate de admin/dueno (por eso no usa fakeAdmin(), que solo sirve para
+    // las acciones de gestión de usuarios).
+    function fakeAdminPush(upsertResult = { error: null }) {
+      const upsert = vi.fn().mockResolvedValue(upsertResult)
+      return { _upsert: upsert, schema: () => ({ from: () => ({ upsert }) }) }
+    }
+
+    it('400 si faltan datos de la suscripción', async () => {
+      const res = mockRes()
+      await handleUsuarios(
+        { method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'push_subscribe' } },
+        res, { env, deps: deps(fakeAnon({ id: 'u1' }), fakeAdminPush()) },
+      )
+      expect(res.statusCode).toBe(400)
+    })
+
+    it('guarda la suscripción del usuario autenticado, sin requerir rol admin/dueno', async () => {
+      const res = mockRes()
+      const admin = fakeAdminPush()
+      await handleUsuarios(
+        {
+          method: 'POST', headers: { authorization: 'Bearer x' },
+          body: { accion: 'push_subscribe', endpoint: 'https://x/1', p256dh: 'p', auth: 'a' },
+        },
+        res, { env, deps: deps(fakeAnon({ id: 'u1' }), admin) },
+      )
+      expect(res.statusCode).toBe(200)
+      expect(admin._upsert).toHaveBeenCalledWith(
+        expect.objectContaining({ usuario_id: 'u1', endpoint: 'https://x/1' }),
+        expect.objectContaining({ onConflict: 'endpoint' }),
+      )
+    })
+  })
 })

@@ -1,14 +1,17 @@
 import { createClient } from '@supabase/supabase-js'
 import { emailDeUsuario } from '../../src/crm/lib/authEmail.js'
 
-/** Serverless — alta de usuario y reset de contraseña del CRM nuevo, disparado
- *  desde la UI (/crm/usuarios). Autoriza validando que el llamador sea un
- *  usuario activo con rol admin o dueno.
+/** Serverless — alta de usuario, reset de contraseña y suscripción a push del
+ *  CRM nuevo. `push_subscribe` la puede usar cualquier usuario logueado
+ *  (cada uno se suscribe a sí mismo); `crear`/`reset_password` requieren rol
+ *  admin o dueno. Todo en un mismo archivo porque el plan Hobby de Vercel
+ *  tope a 12 funciones serverless — separarlas nos hizo pasarnos por 1.
  *
  *  POST /api/crm/usuarios
  *  Authorization: Bearer <access token del usuario logueado>
  *  body: { accion: 'crear',          usuario, nombre, rol, password }
  *      | { accion: 'reset_password', id, password }
+ *      | { accion: 'push_subscribe', endpoint, p256dh, auth }
  */
 export async function handleUsuarios(req, res, { env = process.env, deps = {} } = {}) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -33,14 +36,25 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
   if (authErr || !uid) return res.status(401).json({ ok: false, error: 'Sesión inválida' })
 
   const admin = makeAdmin()
+  const body = req.body || {}
+
+  // push_subscribe: cualquier usuario logueado se suscribe a sí mismo, no
+  // requiere ser admin/dueno.
+  if (body.accion === 'push_subscribe') {
+    const { endpoint, p256dh, auth: authKey } = body
+    if (!endpoint || !p256dh || !authKey) return res.status(400).json({ ok: false, error: 'Faltan datos de la suscripción.' })
+    const { error } = await admin.schema('crm').from('push_subscriptions')
+      .upsert({ usuario_id: uid, endpoint, p256dh, auth: authKey }, { onConflict: 'endpoint' })
+    if (error) return res.status(500).json({ ok: false, error: error.message })
+    return res.status(200).json({ ok: true })
+  }
+
   const { data: caller, error: callerErr } = await admin
     .schema('crm').from('usuarios').select('rol, activo').eq('id', uid).maybeSingle()
   if (callerErr) return res.status(500).json({ ok: false, error: callerErr.message })
   if (!caller || !caller.activo || !['admin', 'dueno'].includes(caller.rol)) {
     return res.status(403).json({ ok: false, error: 'No tenés permiso para gestionar usuarios' })
   }
-
-  const body = req.body || {}
 
   try {
     if (body.accion === 'crear') {

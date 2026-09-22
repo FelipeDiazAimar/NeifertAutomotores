@@ -1,12 +1,16 @@
 import { createClient } from '@supabase/supabase-js'
-import { emailDeUsuario } from '../../src/crm/lib/authEmail.js'
+import { emailDeUsuario } from '../crm/lib/authEmail.js'
 
-/** Serverless — crea/actualiza los usuarios del CRM nuevo: cuenta en Supabase
- *  Auth (email sintético) + fila en crm.usuarios (con id_legacy matcheado
- *  contra crm_legacy.usuarios por usuario). Idempotente por `usuario`.
+/** Crea/actualiza los usuarios del CRM nuevo: cuenta en Supabase Auth (email
+ *  sintético) + fila en crm.usuarios (con id_legacy matcheado contra
+ *  crm_legacy.usuarios por usuario). Idempotente por `usuario`.
  *
- *  POST /api/crm/seed-usuarios  { usuarios: [{ usuario, nombre, rol, password }] }
- *  Auth: Authorization: Bearer <SEED_SECRET | CRON_SECRET>
+ *  No es una función serverless (no vive en api/) — solo se invoca
+ *  directamente desde scripts/seed-crm-usuarios.mjs y desde el proxy de
+ *  `vite dev`, nunca por HTTP en producción; vivir fuera de api/ evita
+ *  sumar una función más al tope de 12 del plan Hobby de Vercel.
+ *
+ *  Auth (aplicada por el caller vía Authorization: Bearer <SEED_SECRET | CRON_SECRET>)
  */
 export async function handleSeedUsuarios(req, res, { env = process.env, deps = {} } = {}) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -67,8 +71,4 @@ export async function handleSeedUsuarios(req, res, { env = process.env, deps = {
 
   const ok = resultados.every((r) => !r.error)
   return res.status(ok ? 200 : 207).json({ ok, resultados })
-}
-
-export default function handler(req, res) {
-  return handleSeedUsuarios(req, res)
 }

@@ -27,10 +27,13 @@ export function usePushNotifications() {
       })
       const json = sub.toJSON()
       const token = await tokenActual()
-      const res = await fetch('/api/crm/push-subscribe', {
+      const res = await fetch('/api/crm/usuarios', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth }),
+        body: JSON.stringify({
+          accion: 'push_subscribe',
+          endpoint: json.endpoint, p256dh: json.keys.p256dh, auth: json.keys.auth,
+        }),
       })
       if (!res.ok) throw new Error('No se pudo guardar la suscripción en el servidor.')
       toast.success('Notificaciones de escritorio activadas.')
