@@ -29,6 +29,7 @@ const ClientesListPage = lazy(() => import('@/crm/pages/ClientesListPage'))
 const ClienteDetallePage = lazy(() => import('@/crm/pages/ClienteDetallePage'))
 const ClienteEditarPage = lazy(() => import('@/crm/pages/ClienteEditarPage'))
 const TareasListPage = lazy(() => import('@/crm/pages/TareasListPage'))
+const AlertasListPage = lazy(() => import('@/crm/pages/AlertasListPage'))
 const PeritajesListPage = lazy(() => import('@/crm/pages/PeritajesListPage'))
 const GestoriaListPage = lazy(() => import('@/crm/pages/GestoriaListPage'))
 const DashboardPage = lazy(() => import('@/crm/pages/DashboardPage'))
@@ -68,6 +69,7 @@ export default function AppRouter() {
             <Route path="/crm/clientes/:id" element={<ClienteDetallePage />} />
             <Route path="/crm/clientes/:id/editar" element={<ClienteEditarPage />} />
             <Route path="/crm/tareas" element={<TareasListPage />} />
+            <Route path="/crm/alertas" element={<AlertasListPage />} />
             <Route path="/crm/peritaje" element={<PeritajesListPage />} />
             <Route path="/crm/gestoria" element={<GestoriaListPage />} />
             <Route path="/crm/vehiculos" element={<VehiculosListPage />} />

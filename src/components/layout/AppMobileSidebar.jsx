@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
-  X, Car, LayoutDashboard, LayoutTemplate, BarChart3, Home, UserCog, LogOut, Users, ListTodo,
+  X, Car, Bell, LayoutDashboard, LayoutTemplate, BarChart3, Home, UserCog, LogOut, Users, ListTodo,
   ClipboardCheck, FileStack,
 } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
@@ -19,6 +19,7 @@ const NAV = [
   { to: '/crm/vehiculos', label: 'Catálogo', icon: Car, vista: 'vehiculos' },
   { to: '/crm/clientes', label: 'Clientes', icon: Users, vista: 'clientes' },
   { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas', vista: 'tareas' },
+  { to: '/crm/alertas', label: 'Alertas', icon: Bell, vista: 'alertas' },
   { to: '/crm/peritaje', label: 'Peritaje', icon: ClipboardCheck, vista: 'peritaje' },
   { to: '/crm/gestoria', label: 'Gestoría', icon: FileStack, vista: 'gestoria' },
   { to: '/admin/estadisticas', label: 'Estadísticas', icon: BarChart3, vista: 'estadisticas' },
