@@ -1,3 +1,4 @@
+import { useId, useState } from 'react'
 import { ChevronDown, RotateCcw, KeyRound } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import Button from '@/components/common/Button'
@@ -7,6 +8,27 @@ import { ROL_LABEL, vistasEfectivas } from '@/crm/lib/vistas'
 import VistasChecklist from './VistasChecklist'
 
 const ROL_OPCIONES = Object.entries(ROL_LABEL).map(([id, label]) => ({ id, label }))
+
+/** Email real del usuario (para las alertas) — se guarda al perder el foco,
+ *  no en cada tecla, para no disparar un update por letra tipeada. */
+function CampoEmail({ valorInicial, onGuardar }) {
+  const [valor, setValor] = useState(valorInicial ?? '')
+  const inputId = useId()
+  return (
+    <div className="w-56">
+      <label htmlFor={inputId} className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">Email</label>
+      <input
+        id={inputId}
+        type="email"
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={() => { if (valor !== (valorInicial ?? '')) onGuardar(valor || null) }}
+        placeholder="empleado@neifertautomotores.com"
+        className="glass field-glass h-9 w-full rounded-xl px-3 text-sm text-ink outline-none"
+      />
+    </div>
+  )
+}
 
 /** Acordeón de un usuario del CRM. `onCambiar(id, parche)` guarda al toque;
  *  `onResetPassword(usuario)` abre el modal de contraseña. */
@@ -37,6 +59,7 @@ export default function UsuarioRow({ usuario: u, rolesMap, onCambiar, onResetPas
               onChange={(rol) => onCambiar(u.id, { rol })}
             />
           </div>
+          <CampoEmail valorInicial={u.email} onGuardar={(email) => onCambiar(u.id, { email })} />
           <button
             type="button"
             role="switch"

@@ -50,4 +50,20 @@ describe('UsuarioRow', () => {
     await userEvent.click(screen.getByRole('button', { name: /resetear contraseña/i }))
     expect(onResetPassword).toHaveBeenCalledWith(base)
   })
+
+  it('tipear un email y perder el foco llama onCambiar con { email }', async () => {
+    const { onCambiar } = setup()
+    const input = screen.getByLabelText('Email')
+    await userEvent.type(input, 'bruno@neifertautomotores.com')
+    await userEvent.tab()
+    expect(onCambiar).toHaveBeenCalledWith('u1', { email: 'bruno@neifertautomotores.com' })
+  })
+
+  it('perder el foco sin cambiar el email no llama a onCambiar', async () => {
+    const { onCambiar } = setup({ ...base, email: 'ya@x.com' })
+    const input = screen.getByLabelText('Email')
+    await userEvent.click(input)
+    await userEvent.tab()
+    expect(onCambiar).not.toHaveBeenCalled()
+  })
 })

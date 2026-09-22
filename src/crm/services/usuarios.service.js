@@ -6,7 +6,7 @@ const db = () => supabase.schema('crm')
 export async function listar() {
   const { data, error } = await db()
     .from('usuarios')
-    .select('id, usuario, nombre, rol, activo, vistas_override, creado_en')
+    .select('id, usuario, nombre, rol, activo, vistas_override, email, creado_en')
     .order('nombre', { ascending: true })
   if (error) throw error
   return data ?? []
