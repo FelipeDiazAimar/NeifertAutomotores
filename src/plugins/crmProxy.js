@@ -115,6 +115,24 @@ export function crmProxyPlugin({
         await handleUsuarios({ ...req, body }, shim)
       })
 
+      server.middlewares.use('/api/crm/push-subscribe', async (req, res) => {
+        const { handlePushSubscribe } = await import('../../api/crm/push-subscribe.js')
+        const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
+        const shim = {
+          setHeader: (k, v) => res.setHeader(k, v),
+          status: (c) => {
+            res.statusCode = c
+            return shim
+          },
+          json: (b) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(b))
+          },
+          end: (b) => res.end(b),
+        }
+        await handlePushSubscribe({ ...req, body }, shim)
+      })
+
       server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
         if (!crmExtApiToken) {
           return sendJson(res, 501, {
