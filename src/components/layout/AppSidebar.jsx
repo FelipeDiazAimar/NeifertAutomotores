@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/services/supabaseClient'
 import Logo from '@/components/common/Logo'
 import ThemeToggle from '@/components/common/ThemeToggle'
+import ActivarNotificaciones from '@/crm/components/ActivarNotificaciones'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useMisVistas } from '@/crm/hooks/useMisVistas'
 import { useTareasPendientesHoy } from '@/crm/hooks/useTareas'
@@ -73,6 +74,7 @@ export default function AppSidebar() {
       <div className="flex shrink-0 flex-col gap-3">
         <div className="flex items-center gap-2">
           <ThemeToggle />
+          <ActivarNotificaciones />
           <NavLink
             to="/crm/cambiar-password"
             aria-label="Cambiar contraseña"
