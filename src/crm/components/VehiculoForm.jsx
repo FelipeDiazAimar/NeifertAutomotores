@@ -2,6 +2,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
+import MilesInput from '@/components/common/MilesInput'
 import Select from '@/components/common/Select'
 import Combobox from '@/crm/components/Combobox'
 import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
@@ -99,7 +100,7 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
         <CampoCombo control={control} name="version" label="Versión" options={opciones.version ?? []} />
         <CampoCombo control={control} name="tipo" label="Tipo" options={opcionesTipo} />
         <Input label="Año" type="number" {...register('anio')} error={errors.anio?.message} />
-        <Input label="Km" type="number" {...register('km')} error={errors.km?.message} />
+        <MilesInput control={control} name="km" label="Km" />
         <Controller
           control={control} name="transmision"
           render={({ field }) => (
@@ -122,8 +123,8 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
           )}
         />
         <span />
-        <Input label="Precio contado" type="number" {...register('precio_contado')} error={errors.precio_contado?.message} />
-        <Input label="Precio en canje" type="number" {...register('precio_canje')} error={errors.precio_canje?.message} />
+        <MilesInput control={control} name="precio_contado" label="Precio contado" />
+        <MilesInput control={control} name="precio_canje" label="Precio en canje" />
       </Seccion>
 
       <Seccion titulo="Dueño">

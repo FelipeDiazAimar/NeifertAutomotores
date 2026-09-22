@@ -2,6 +2,7 @@ import { Filter, X } from 'lucide-react'
 import Button from '@/components/common/Button'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import { cn } from '@/lib/cn'
+import { formatMiles, parseMiles } from '@/lib/numberMask'
 
 const ESTADOS = [
   { id: 'disponible', label: 'Disponible' },
@@ -94,18 +95,18 @@ export default function VehiculoFilters() {
         <label className="text-xs text-ink-3">
           Precio desde
           <input
-            type="number"
-            value={filtros.precioMin}
-            onChange={(e) => setFiltro('precioMin', e.target.value)}
+            inputMode="numeric"
+            value={formatMiles(filtros.precioMin)}
+            onChange={(e) => setFiltro('precioMin', parseMiles(e.target.value))}
             className="glass field-glass mt-1 h-10 w-full rounded-2xl px-3 text-sm text-ink outline-none"
           />
         </label>
         <label className="text-xs text-ink-3">
           Precio hasta
           <input
-            type="number"
-            value={filtros.precioMax}
-            onChange={(e) => setFiltro('precioMax', e.target.value)}
+            inputMode="numeric"
+            value={formatMiles(filtros.precioMax)}
+            onChange={(e) => setFiltro('precioMax', parseMiles(e.target.value))}
             className="glass field-glass mt-1 h-10 w-full rounded-2xl px-3 text-sm text-ink outline-none"
           />
         </label>
