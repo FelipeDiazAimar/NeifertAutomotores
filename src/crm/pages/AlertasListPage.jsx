@@ -11,6 +11,7 @@ import { agrupar } from '@/crm/lib/agruparTareas'
 import AlertaFilters from '@/crm/components/AlertaFilters'
 import AlertaRow from '@/crm/components/AlertaRow'
 import AlertaFormModal from '@/crm/components/AlertaFormModal'
+import DispararAlertas from '@/crm/components/DispararAlertas'
 import { cn } from '@/lib/cn'
 
 const GRUPOS = [
@@ -21,7 +22,7 @@ const GRUPOS = [
 ]
 
 export default function AlertasListPage() {
-  const { id: miId, esAdmin } = useCrmPerfil()
+  const { id: miId, esAdmin, rol } = useCrmPerfil()
   const { filtros } = useAlertasFiltros()
   const filtrosActivos = useAlertasFiltros((s) => s.contarFiltrosActivos())
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -55,6 +56,7 @@ export default function AlertasListPage() {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-bold text-ink">Alertas</h1>
         <div className="flex items-center gap-2">
+          {(esAdmin || rol === 'dueno') && <DispararAlertas />}
           <button
             type="button"
             onClick={() => setMostrarFiltros((v) => !v)}

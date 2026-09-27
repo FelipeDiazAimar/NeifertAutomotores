@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabaseClient'
+import { tokenActual } from '@/crm/services/usuarios.service'
 
 const db = () => supabase.schema('crm')
 
@@ -45,4 +46,23 @@ export async function toggleHecha(id, hecha) {
 export async function eliminar(id) {
   const { error } = await db().from('alertas').delete().eq('id', id)
   if (error) throw error
+}
+
+/** Dispara la revisión de alertas a mano (solo admin/dueno — lo valida el
+ *  servidor). Devuelve { ok, enviadas, errores }. */
+export async function dispararAlertas() {
+  const token = await tokenActual()
+  const res = await fetch('/api/crm/usuarios', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify({ accion: 'disparar_alertas' }),
+  })
+  const json = await res.json().catch(() => ({}))
+  if (!res.ok || json.ok === false) {
+    throw new Error(json.error || json.errores?.join(' | ') || `Error ${res.status}`)
+  }
+  return json
 }

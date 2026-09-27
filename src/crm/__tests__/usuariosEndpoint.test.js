@@ -206,4 +206,30 @@ describe('handleUsuarios', () => {
       expect(admin._eq).toHaveBeenCalledWith('id', 'u1')
     })
   })
+
+  describe('disparar_alertas', () => {
+    it('403 si el llamador es vendedor', async () => {
+      const res = mockRes()
+      await handleUsuarios(
+        { method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'disparar_alertas' } },
+        res, { env, deps: deps(fakeAnon(), fakeAdmin({ callerRow: { rol: 'vendedor', activo: true } })) },
+      )
+      expect(res.statusCode).toBe(403)
+    })
+
+    it('como admin corre la revisión y devuelve su resultado', async () => {
+      const res = mockRes()
+      const ejecutarChequeo = vi.fn().mockImplementation(async (rq, rs) => {
+        expect(rq.headers.authorization).toBe('Bearer s3cr3t')
+        rs.status(200).json({ ok: true, enviadas: 2, errores: [] })
+      })
+      await handleUsuarios(
+        { method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'disparar_alertas' } },
+        res, { env: { ...env, CRON_SECRET: 's3cr3t' }, deps: { ...deps(fakeAnon(), fakeAdmin()), ejecutarChequeo } },
+      )
+      expect(ejecutarChequeo).toHaveBeenCalled()
+      expect(res.statusCode).toBe(200)
+      expect(res.body).toEqual({ ok: true, enviadas: 2, errores: [] })
+    })
+  })
 })
