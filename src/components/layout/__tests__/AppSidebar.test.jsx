@@ -13,6 +13,7 @@ vi.mock('@/crm/hooks/useTareas', () => ({ useTareasPendientesHoy: () => ({ data:
 vi.mock('@/crm/hooks/useCrmPerfil', () => ({
   useCrmPerfil: () => ({ nombre: 'Test', usuario: 'test', rol: 'admin' }),
 }))
+vi.mock('@/hooks/useAuth', () => ({ useAuth: () => ({ session: null, isDemo: true }) }))
 
 describe('AppSidebar', () => {
   it('muestra solo los ítems de las vistas permitidas', () => {

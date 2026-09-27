@@ -57,6 +57,11 @@ async function llamarEndpoint(body) {
   return json
 }
 
+/** Guarda el email propio del usuario logueado (para las alertas). */
+export function guardarMiEmail(email) {
+  return llamarEndpoint({ accion: 'guardar_mi_email', email })
+}
+
 /** Alta de usuario (crea el auth user + fila en crm.usuarios). */
 export function crearUsuario({ usuario, nombre, rol, password }) {
   return llamarEndpoint({ accion: 'crear', usuario, nombre, rol, password })

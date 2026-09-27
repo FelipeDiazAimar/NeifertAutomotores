@@ -5,7 +5,7 @@ export async function obtenerMiPerfil(userId) {
   const { data, error } = await supabase
     .schema('crm')
     .from('usuarios')
-    .select('id, usuario, nombre, rol, activo')
+    .select('id, usuario, nombre, rol, activo, email')
     .eq('id', userId)
     .maybeSingle()
   if (error) throw error

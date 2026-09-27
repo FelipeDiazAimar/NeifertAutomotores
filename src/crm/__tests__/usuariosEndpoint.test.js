@@ -163,4 +163,47 @@ describe('handleUsuarios', () => {
       )
     })
   })
+
+  describe('guardar_mi_email', () => {
+    // Cualquier usuario logueado guarda SU propio email — no pasa por el
+    // gate de admin/dueno (igual que push_subscribe).
+    function fakeAdminEmail(updateResult = { error: null }) {
+      const eq = vi.fn().mockResolvedValue(updateResult)
+      const update = vi.fn().mockReturnValue({ eq })
+      return { _update: update, _eq: eq, schema: () => ({ from: () => ({ update }) }) }
+    }
+
+    it('400 si falta el email', async () => {
+      const res = mockRes()
+      await handleUsuarios(
+        { method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'guardar_mi_email' } },
+        res, { env, deps: deps(fakeAnon({ id: 'u1' }), fakeAdminEmail()) },
+      )
+      expect(res.statusCode).toBe(400)
+    })
+
+    it('400 si el email es inválido', async () => {
+      const res = mockRes()
+      await handleUsuarios(
+        { method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'guardar_mi_email', email: 'no-es-email' } },
+        res, { env, deps: deps(fakeAnon({ id: 'u1' }), fakeAdminEmail()) },
+      )
+      expect(res.statusCode).toBe(400)
+    })
+
+    it('actualiza solo la fila del usuario autenticado, sin requerir rol admin/dueno', async () => {
+      const res = mockRes()
+      const admin = fakeAdminEmail()
+      await handleUsuarios(
+        {
+          method: 'POST', headers: { authorization: 'Bearer x' },
+          body: { accion: 'guardar_mi_email', email: 'bruno@neifert.com' },
+        },
+        res, { env, deps: deps(fakeAnon({ id: 'u1' }), admin) },
+      )
+      expect(res.statusCode).toBe(200)
+      expect(admin._update).toHaveBeenCalledWith({ email: 'bruno@neifert.com' })
+      expect(admin._eq).toHaveBeenCalledWith('id', 'u1')
+    })
+  })
 })
