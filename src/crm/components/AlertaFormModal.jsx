@@ -79,18 +79,28 @@ export default function AlertaFormModal({ open, onClose, alerta, clienteFijo, on
   ]
 
   function submit(data) {
+    // Los flags de aviso nunca salen del formulario: solo se resetean acá
+    // cuando corresponde (vienen en `data` por el ...alerta de defaultValues).
+    const { notificado_push: _np, notificado_email: _ne, ...form } = data
     const limpio = {
-      ...data,
-      cliente_id: data.cliente_id || null,
-      vehiculo_id: data.vehiculo_id || null,
-      descripcion: data.descripcion || null,
+      ...form,
+      cliente_id: form.cliente_id || null,
+      vehiculo_id: form.vehiculo_id || null,
+      descripcion: form.descripcion || null,
     }
     const done = () => {
       onClose()
       onGuardado?.()
     }
-    if (alerta?.id) actualizar.mutate({ id: alerta.id, data: limpio }, { onSuccess: done })
-    else crear.mutate(limpio, { onSuccess: done })
+    if (alerta?.id) {
+      // Si se reprograma (fecha/hora) o cambia de destinatario, el aviso
+      // vuelve a estar pendiente para que salga a la nueva hora/persona.
+      if (form.fecha !== alerta.fecha || form.hora !== alerta.hora || form.asignado_a !== alerta.asignado_a) {
+        limpio.notificado_push = false
+        limpio.notificado_email = false
+      }
+      actualizar.mutate({ id: alerta.id, data: limpio }, { onSuccess: done })
+    } else crear.mutate(limpio, { onSuccess: done })
   }
 
   const guardando = crear.isPending || actualizar.isPending
