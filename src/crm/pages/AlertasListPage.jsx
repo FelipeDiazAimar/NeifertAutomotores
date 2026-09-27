@@ -107,7 +107,7 @@ export default function AlertasListPage() {
             <section>
               <button onClick={() => setVerHechas((v) => !v)} className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-3">
                 <ChevronDown size={14} className={cn('transition-transform', verHechas && 'rotate-180')} />
-                Hechas · {g.hechas.length}
+                Leídas · {g.hechas.length}
               </button>
               {verHechas && (
                 <div className="space-y-2">

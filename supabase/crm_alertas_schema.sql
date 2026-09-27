@@ -14,7 +14,8 @@ create table if not exists crm.alertas (
   asignado_a      uuid not null references crm.usuarios(id),
   cliente_id      uuid references crm.clientes(id) on delete set null,
   vehiculo_id     uuid references crm.vehiculos(id) on delete set null,
-  notificado      boolean not null default false,
+  notificado_push   boolean not null default false,
+  notificado_email  boolean not null default false,
   creado_por      uuid references crm.usuarios(id),
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
@@ -23,8 +24,11 @@ create table if not exists crm.alertas (
 create index if not exists idx_crm_alertas_asignado on crm.alertas(asignado_a, hecha);
 create index if not exists idx_crm_alertas_pendientes on crm.alertas(fecha, hora) where not hecha;
 
--- Migración desde el esquema anterior (avisos 24hs/3hs antes): flag único.
-alter table crm.alertas add column if not exists notificado boolean not null default false;
+-- Migración desde los esquemas anteriores (flags 24hs/3hs y luego flag único):
+-- un flag por canal. Defensiva: funciona la hayas corrido antes o no.
+alter table crm.alertas add column if not exists notificado_push boolean not null default false;
+alter table crm.alertas add column if not exists notificado_email boolean not null default false;
+alter table crm.alertas drop column if exists notificado;
 alter table crm.alertas drop column if exists notificado_24h;
 alter table crm.alertas drop column if exists notificado_3h;
 

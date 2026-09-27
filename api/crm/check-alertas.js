@@ -13,9 +13,13 @@ function tocaAvisar(fecha, hora, ahora) {
 }
 
 /** Serverless — revisa las alertas pendientes y dispara push+email a la
- *  fecha+hora que eligió el empleado. Se dispara desde un cron externo
- *  (cron-job.org) cada 15-30 min — el cron nativo de Vercel (Hobby) solo
- *  corre 1 vez/día, no sirve para esta precisión.
+ *  fecha+hora que eligió el empleado. Cada canal se marca por separado
+ *  (`notificado_push` / `notificado_email`): si un canal no tiene a dónde
+ *  enviar (sin suscripción push o sin email) se marca igual para no
+ *  reintentarlo; si el envío falla, queda pendiente y se reintenta en la
+ *  próxima corrida. Se dispara desde un cron externo (cron-job.org) cada
+ *  15-30 min — el cron nativo de Vercel (Hobby) solo corre 1 vez/día,
+ *  no sirve para esta precisión.
  *
  *  GET|POST /api/crm/check-alertas
  *  Authorization: Bearer <CRON_SECRET>
@@ -45,7 +49,7 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
     const { data, error } = await db().from('alertas')
       .select('*, asignado:usuarios!alertas_asignado_a_fkey(email)')
       .eq('hecha', false)
-      .eq('notificado', false)
+      .or('notificado_push.eq.false,notificado_email.eq.false')
     if (error) throw error
     return data ?? []
   })
@@ -70,30 +74,50 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
   const errores = []
 
   for (const a of alertas) {
-    if (a.notificado) continue
+    if (a.notificado_push && a.notificado_email) continue
     if (!tocaAvisar(a.fecha, a.hora, ahora)) continue
-    try {
-      const subs = await cargarSuscripciones(a.asignado_a)
-      const payload = {
-        title: `Alerta: ${a.titulo}`,
-        body: a.descripcion || 'Es ahora.',
-        url: '/crm/alertas',
+
+    let pushOk = Boolean(a.notificado_push)
+    let emailOk = Boolean(a.notificado_email)
+
+    if (!pushOk) {
+      try {
+        const subs = await cargarSuscripciones(a.asignado_a)
+        if (subs.length) {
+          const { vencidas } = await enviarPush({
+            subscriptions: subs,
+            payload: {
+              title: `Alerta: ${a.titulo}`,
+              body: a.descripcion || 'Es ahora.',
+              url: '/crm/alertas',
+            },
+          })
+          await borrarSuscripcionesVencidas(vencidas)
+        }
+        pushOk = true
+      } catch (e) {
+        errores.push(`alerta ${a.id} (web): ${e.message}`)
       }
-      if (subs.length) {
-        const { vencidas } = await enviarPush({ subscriptions: subs, payload })
-        await borrarSuscripcionesVencidas(vencidas)
+    }
+
+    if (!emailOk) {
+      try {
+        if (a.asignado?.email) {
+          await enviarEmail({
+            to: a.asignado.email,
+            subject: `Alerta: ${a.titulo}`,
+            html: `<p><strong>${a.titulo}</strong></p><p>${a.descripcion ?? ''}</p>`,
+          })
+        }
+        emailOk = true
+      } catch (e) {
+        errores.push(`alerta ${a.id} (email): ${e.message}`)
       }
-      if (a.asignado?.email) {
-        await enviarEmail({
-          to: a.asignado.email,
-          subject: payload.title,
-          html: `<p><strong>${a.titulo}</strong></p><p>${a.descripcion ?? ''}</p>`,
-        })
-      }
-      await marcarNotificada(a.id, { notificado: true })
+    }
+
+    if (pushOk !== Boolean(a.notificado_push) || emailOk !== Boolean(a.notificado_email)) {
+      await marcarNotificada(a.id, { notificado_push: pushOk, notificado_email: emailOk })
       enviadas++
-    } catch (e) {
-      errores.push(`alerta ${a.id}: ${e.message}`)
     }
   }
 
