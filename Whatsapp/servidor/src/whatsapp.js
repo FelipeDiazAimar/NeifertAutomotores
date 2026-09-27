@@ -2,7 +2,8 @@
  * Conexión con WhatsApp (Baileys v7). Basado en components/bot/whatsapp.js del
  * bot de Electron: misma sesión en archivos, markOnlineOnConnect en false y
  * borrado de la sesión cuando WhatsApp la cierra. Lo nuevo:
- *  - solo chats 1 a 1 (grupos, estados y canales se ignoran)
+ *  - chats 1 a 1 y grupos (estados, canales y Meta AI se ignoran)
+ *  - en los grupos se guarda quién escribió cada mensaje y el nombre del grupo
  *  - guarda todos los mensajes y la multimedia en disco (almacen.js)
  *  - anti-borrado: "Eliminar para todos" marca el mensaje, nunca lo borra
  *  - ediciones: se guarda la versión anterior
@@ -51,17 +52,24 @@ import {
   registrarLid,
   rutaMedia,
   setContacto,
+  setGrupoNombre,
   sumarNoLeido,
   telefonoDe,
   upsertChat,
   vistaMensaje,
   contarMarcas,
   estaArchivado,
+  buscarChat,
+  esGrupo,
+  fijadoDe,
+  infoFoto,
   meta,
   setArchivado,
   setFijado,
   setMeta,
   setSilenciado,
+  silenciadoDe,
+  vistaChat,
 } from './almacen.js'
 
 const logger = pino({ level: BAILEYS_LOG })
@@ -81,6 +89,9 @@ const pushNames = new Map()
 let sincronizando = false
 let authActual = null
 
+// Cuántas veces se intenta un archivo antes de darlo por perdido. Sin tope, la cola
+// reintenta para siempre y le pega a WhatsApp sin conseguir nada.
+const MAX_FALLOS_MEDIA = 2
 const ESTADOS = { 0: 'error', 1: 'pendiente', 2: 'enviado', 3: 'entregado', 4: 'leido', 5: 'reproducido' }
 const ORDEN = ['pendiente', 'enviado', 'entregado', 'leido', 'reproducido']
 const ahora = () => Math.floor(Date.now() / 1000)
@@ -166,12 +177,17 @@ export async function iniciar() {
   s.ev.on('messages.delete', seguro('borrados locales', () => {
     if (!sincronizando) log('info', 'WhatsApp pidió borrar mensajes de este dispositivo', 'Se ignoró: el respaldo los conserva')
   }))
-  s.ev.on('chats.upsert', seguro('chats', procesarChats))
-  s.ev.on('chats.update', seguro('chats', procesarChats))
+  // upsert: chats nuevos para la sesión; un grupo ahí listado entra a la bandeja.
+  s.ev.on('chats.upsert', seguro('chats', (cs) => procesarChats(cs, { crearGrupos: true })))
+  s.ev.on('chats.update', seguro('chats', (cs) => procesarChats(cs)))
   s.ev.on('presence.update', seguro('presencia', procesarPresencia))
   s.ev.on('contacts.upsert', seguro('contactos', (cs) => cs.forEach(guardarContacto)))
   s.ev.on('contacts.update', seguro('contactos', (cs) => cs.forEach(guardarContacto)))
   s.ev.on('lid-mapping.update', seguro('identificadores', registrarMapeo))
+  // upsert: grupos que WhatsApp informa como nuevos → entran a la bandeja en el acto.
+  s.ev.on('groups.upsert', seguro('grupos', (gs) => procesarGrupos(gs, { crear: true })))
+  // update: cambios sueltos (asunto, descripción) sobre grupos que ya están.
+  s.ev.on('groups.update', seguro('grupos', (gs) => procesarGrupos(gs)))
 }
 
 async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
@@ -196,7 +212,10 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
         sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
       }, 8000)
     }
-    // Fotos de perfil en segundo plano, cuando ya se calmó la sincronización inicial.
+    // Los grupos se traen enseguida: son chats como cualquier otro y tienen que estar en
+    // la bandeja desde el arranque, sin esperar a que alguien escriba.
+    traerGrupos(s, 3000)
+    // Las fotos van después, cuando ya se calmó la sincronización inicial.
     setTimeout(() => {
       if (s === sock && conexion === 'conectado') pedirFotosDeTodos()
     }, 20000)
@@ -270,26 +289,37 @@ export function detener() {
 
 /* ---------------- Identificación de chats ---------------- */
 
-// Grupos, estados, canales, Meta AI y la cuenta de avisos del sistema no son conversaciones con clientes.
+// Estados, canales, Meta AI y la cuenta de avisos del sistema no son conversaciones.
+// Los grupos sí entran: son parte del día a día de la concesionaria.
 function ignorar(jid) {
-  return !jid || jid === '0@s.whatsapp.net' || isJidGroup(jid) || isJidBroadcast(jid) || isJidNewsletter(jid) || isJidMetaAI(jid)
+  return !jid || jid === '0@s.whatsapp.net' || isJidBroadcast(jid) || isJidNewsletter(jid) || isJidMetaAI(jid)
 }
 
-/** Devuelve el JID con teléfono cuando se conoce; si no, el LID. */
+/**
+ * Registra el par LID↔teléfono que ya viene en la clave del mensaje. Es gratis (no
+ * consulta nada) y sirve incluso para mensajes que después se descartan.
+ */
+function registrarLidDeKey(key) {
+  // En un grupo el par viaja en el participante, no en el chat.
+  const principal = isJidGroup(key?.remoteJid) ? key?.participant : key?.remoteJid
+  const alterno = isJidGroup(key?.remoteJid) ? key?.participantAlt : key?.remoteJidAlt
+  if (!principal || !alterno) return
+  if (isPnUser(principal) && isLidUser(alterno)) registrarLid(jidNormalizedUser(alterno), jidNormalizedUser(principal))
+  else if (isLidUser(principal) && isPnUser(alterno)) registrarLid(jidNormalizedUser(principal), jidNormalizedUser(alterno))
+}
+
+/** Devuelve el JID con teléfono cuando se conoce; si no, el LID. En un grupo, el grupo. */
 async function jidDelChat(key) {
   const principal = key.remoteJid
   const alterno = key.remoteJidAlt
+  if (isJidGroup(principal)) return jidNormalizedUser(principal)
+  registrarLidDeKey(key)
   if (isPnUser(principal)) {
-    if (alterno && isLidUser(alterno)) registrarLid(jidNormalizedUser(alterno), jidNormalizedUser(principal))
     return jidNormalizedUser(principal)
   }
   if (isLidUser(principal)) {
     const lid = jidNormalizedUser(principal)
-    if (alterno && isPnUser(alterno)) {
-      const pn = jidNormalizedUser(alterno)
-      registrarLid(lid, pn)
-      return pn
-    }
+    if (alterno && isPnUser(alterno)) return jidNormalizedUser(alterno)
     let pn = pnDeLid(lid)
     if (!pn) {
       try {
@@ -327,6 +357,34 @@ function guardarContacto(c) {
   const jid = pn || lid
   if (!jid) return
   setContacto(jid, { nombre: c.name, notify: c.notify || c.verifiedName })
+}
+
+/**
+ * Resuelve quién escribió dentro de un grupo. WhatsApp lo manda en `participant`, a
+ * veces con LID; si se conoce el teléfono se usa ese, para que sea el mismo contacto
+ * que en su chat individual.
+ */
+async function autorDelMensaje(m) {
+  const crudo = m.key?.participant || m.participant
+  if (!crudo) return null
+  const alterno = m.key?.participantAlt
+  if (alterno && isPnUser(alterno)) return jidNormalizedUser(alterno)
+  const jid = jidNormalizedUser(crudo)
+  if (isPnUser(jid)) return jid
+  if (isLidUser(jid)) {
+    let pn = pnDeLid(jid)
+    if (!pn) {
+      try {
+        const r = await sock?.signalRepository?.lidMapping?.getPNForLID(crudo)
+        if (r) {
+          pn = jidNormalizedUser(r)
+          registrarLid(jid, pn)
+        }
+      } catch {}
+    }
+    return pn || jid
+  }
+  return jid
 }
 
 function actualizarPushName(chatId, nombre) {
@@ -402,11 +460,26 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
 
   const chatId = await jidDelChat(key)
   const deMi = !!key.fromMe
+  const grupo = esGrupo(chatId)
   const ts = toNumber(m.messageTimestamp) || ahora()
-  if (!deMi) actualizarPushName(chatId, m.pushName)
+  // En un grupo el pushName es del autor: no puede pasar a ser el nombre del chat.
+  if (!deMi && !grupo) actualizarPushName(chatId, m.pushName)
 
   const mensaje = { id: key.id, deMi, ts, ...datos, origen }
   if (deMi) mensaje.estado = ESTADOS[m.status] || 'enviado'
+
+  // En un grupo hace falta saber quién habló, para dibujarlo arriba de cada burbuja y
+  // porque WhatsApp exige el participante al archivar o marcar como leído.
+  if (grupo && !deMi) {
+    const autor = await autorDelMensaje(m)
+    if (autor) {
+      mensaje.autor = autor
+      if (m.pushName) setContacto(autor, { notify: m.pushName })
+      mensaje.autorNombre = nombreDe(autor)
+    } else if (m.pushName) {
+      mensaje.autorNombre = m.pushName
+    }
+  }
 
   if (datos.media) {
     // Se guarda el mensaje crudo para poder descargar el archivo más tarde.
@@ -422,6 +495,7 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
 
   const { nuevo, mensaje: guardado } = agregarMensaje(chatId, mensaje)
   if (!nuevo) return
+  if (grupo) pedirNombreGrupo(chatId)
   if (tipoUpsert === 'notify') pedirFotos([chatId])
   if (tipoUpsert === 'notify' && !deMi) {
     sumarNoLeido(chatId)
@@ -430,9 +504,11 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
     if (estaArchivado(chatId) && creds?.accountSettings?.unarchiveChats) setArchivado(chatId, false)
   }
 
-  const reciente = ahora() - ts < MEDIA_RECIENTE_SEG
-  if (guardado.media && guardado.media.estado !== 'ok' && config().descargarMedia && reciente) {
-    await descargarMedia(chatId, guardado)
+  if (guardado.media && guardado.media.estado !== 'ok' && config().descargarMedia) {
+    // Lo que acaba de llegar se baja en el momento; lo del historial va a la cola, para
+    // no pedirle cientos de archivos a WhatsApp de golpe.
+    if (ahora() - ts < MEDIA_RECIENTE_SEG) await descargarMedia(chatId, guardado)
+    else encolarMedia(chatId, guardado.id)
   }
 }
 
@@ -504,13 +580,99 @@ async function alHistorial({ chats = [], contacts = [], messages = [], lidPnMapp
     individuales++
     await procesarEntrante(m, 'append', 'historial')
   }
+  // WhatsApp manda la lista de chats además de los mensajes, y no siempre trae mensajes
+  // de todos. Un grupo listado entra igual a la bandeja: si no, quedaría invisible hasta
+  // que alguien escriba, y WhatsApp no vuelve a mandar el historial.
+  let grupos = 0
   for (const ch of chats) {
-    if (ignorar(ch.id) || !ch.unreadCount) continue
+    if (ignorar(ch.id)) continue
     const id = ch.pnJid ? jidNormalizedUser(ch.pnJid) : await jidDelChat({ remoteJid: ch.id })
-    if (existeChat(id)) upsertChat(id, { noLeidos: ch.unreadCount })
+    if (ignorar(id)) continue
+    if (!existeChat(id) && isJidGroup(id)) {
+      upsertChat(id, { ultimoTs: toNumber(ch.conversationTimestamp) || 0 })
+      grupos++
+    }
+    if (ch.name) setGrupoNombre(id, ch.name)
+    if (ch.unreadCount && existeChat(id)) upsertChat(id, { noLeidos: ch.unreadCount })
   }
   await procesarChats(chats)
-  if (individuales) log('info', 'Historial recibido de WhatsApp', `${individuales} mensajes de chats individuales`)
+  if (individuales || grupos) {
+    const detalle = [`${individuales} mensajes`, grupos ? `${grupos} grupos nuevos` : null].filter(Boolean).join(' · ')
+    log('info', 'Historial recibido de WhatsApp', detalle)
+  }
+}
+
+/* ---------------- Grupos ---------------- */
+
+const nombresPedidos = new Set()
+
+/**
+ * Guarda el asunto de un grupo (WhatsApp lo llama `subject`). Con `crear`, el grupo
+ * entra a la bandeja aunque todavía no tenga mensajes guardados: es lo que hace que los
+ * grupos aparezcan sin esperar a que alguien escriba. Se ordena por su fecha de creación,
+ * así queda abajo de las conversaciones con actividad real.
+ */
+function guardarGrupo(g, { crear = false } = {}) {
+  const jid = g?.id
+  if (!jid || !isJidGroup(jid) || !g.subject) return false
+  if (!existeChat(jid)) {
+    if (!crear) return false
+    upsertChat(jid, { ultimoTs: toNumber(g.creation) || 0 })
+    setGrupoNombre(jid, g.subject)
+    return true
+  }
+  return setGrupoNombre(jid, g.subject)
+}
+
+const procesarGrupos = (grupos, opts) => [].concat(grupos || []).forEach((g) => guardarGrupo(g, opts))
+
+/** Nombre de un grupo puntual, la primera vez que llega un mensaje suyo. */
+async function pedirNombreGrupo(jid) {
+  if (!sock || conexion !== 'conectado' || nombresPedidos.has(jid)) return
+  nombresPedidos.add(jid)
+  try {
+    guardarGrupo(await sock.groupMetadata(jid))
+  } catch {
+    // Grupo del que ya no se forma parte: se queda sin asunto y se muestra como "Grupo".
+  }
+}
+
+/**
+ * Trae todos los grupos en los que está la línea y los mete en la bandeja. Es la forma
+ * de verlos sin esperar a que llegue un mensaje: WhatsApp no reenvía el historial viejo
+ * una vez que la sesión ya sincronizó.
+ */
+export async function sincronizarGrupos() {
+  asegurarConectado()
+  const todos = await sock.groupFetchAllParticipating()
+  const lista = Object.values(todos || {})
+  let nuevos = 0
+  for (const g of lista) {
+    const habia = existeChat(g?.id)
+    if (guardarGrupo(g, { crear: true }) && !habia) nuevos++
+  }
+  log('ok', 'Grupos sincronizados', `${lista.length} grupos · ${nuevos} nuevos en la bandeja`)
+  pedirFotos(lista.map((g) => g.id).filter(Boolean))
+  // Archivado, fijado y silenciado viven en el app-state, que se baja aparte. Si entraron
+  // grupos nuevos, sus marcas nunca se guardaron: hay que volver a pedirlas.
+  if (nuevos) {
+    setMeta({ chatsSincronizados: null })
+    sincronizarChats().catch((err) => log('aviso', 'No se pudieron traer las marcas de los grupos', err.message))
+  }
+  return { grupos: lista.length, nuevos }
+}
+
+/** Pide los grupos con un reintento: al conectar, la consulta puede llegar demasiado temprano. */
+function traerGrupos(s, espera, intento = 1) {
+  setTimeout(async () => {
+    if (s !== sock || conexion !== 'conectado') return
+    try {
+      await sincronizarGrupos()
+    } catch (err) {
+      if (intento < 3) return traerGrupos(s, 15000, intento + 1)
+      log('aviso', 'No se pudieron traer los grupos', err.message)
+    }
+  }, espera).unref()
 }
 
 /* ---------------- Presencia ("en línea", "escribiendo…") ---------------- */
@@ -536,17 +698,24 @@ export async function suscribirPresencia(chatId) {
 
 /* ---------------- Archivados y fijados ---------------- */
 
-async function procesarChats(chats) {
+async function procesarChats(chats, { crearGrupos = false } = {}) {
   for (const ch of chats || []) {
     if (!ch?.id) continue
     const cambiaArchivo = typeof ch.archived === 'boolean'
     const cambiaFijado = 'pinned' in ch
     const cambiaSilencio = 'muteEndTime' in ch
-    if (!cambiaArchivo && !cambiaFijado && !cambiaSilencio) continue
+    const cambiaNombre = !!ch.name
+    const grupoNuevo = crearGrupos && isJidGroup(ch.id) && !existeChat(ch.id)
+    if (!cambiaArchivo && !cambiaFijado && !cambiaSilencio && !cambiaNombre && !grupoNuevo) continue
     if (ch.pnJid && ch.lidJid) registrarLid(jidNormalizedUser(ch.lidJid), jidNormalizedUser(ch.pnJid))
     if (ignorar(ch.id)) continue
     const id = ch.pnJid ? jidNormalizedUser(ch.pnJid) : await jidDelChat({ remoteJid: ch.id })
     if (ignorar(id)) continue
+    // Un grupo que WhatsApp lista como nuevo entra a la bandeja sin esperar un mensaje.
+    if (crearGrupos && isJidGroup(id) && !existeChat(id)) {
+      upsertChat(id, { ultimoTs: toNumber(ch.conversationTimestamp) || 0 })
+    }
+    if (cambiaNombre) setGrupoNombre(id, ch.name)
     if (cambiaArchivo) setArchivado(id, ch.archived)
     if (cambiaFijado) setFijado(id, ch.pinned ? toNumber(ch.pinned) : null)
     if (cambiaSilencio) setSilenciado(id, ch.muteEndTime ? toNumber(ch.muteEndTime) : null)
@@ -581,12 +750,248 @@ export async function sincronizarChats() {
   }
 }
 
+/* ---------------- Ficha del chat ---------------- */
+
+// Cuántas fotos de integrantes se piden por vez al abrir la ficha de un grupo.
+const MAX_FOTOS_INTEGRANTES = 60
+
+// Lo que WhatsApp muestra en "Archivos, enlaces y documentos".
+const GRUPOS_MEDIA = {
+  fotos: ['imagen'],
+  videos: ['video', 'gif'],
+  audios: ['audio', 'nota_voz'],
+  documentos: ['documento'],
+}
+const RE_ENLACE = /https?:\/\/[^\s]+|www\.[^\s]+/gi
+
+/** Resuelve el nombre de un participante, que puede venir identificado con LID. */
+function fichaParticipante(p, yoJid) {
+  const crudo = p?.id || p?.jid
+  if (!crudo) return null
+  const alterno = p.phoneNumber || p.pn
+  let jid = jidNormalizedUser(crudo)
+  if (isLidUser(jid)) jid = (alterno && jidNormalizedUser(alterno)) || pnDeLid(jid) || jid
+  return {
+    id: jid,
+    nombre: jid === yoJid ? 'Vos' : nombreDe(jid),
+    telefono: telefonoDe(jid),
+    admin: p.admin === 'superadmin' ? 'creador' : p.admin ? 'admin' : null,
+    foto: infoFoto(jid)?.tiene ? infoFoto(jid).ts : null,
+  }
+}
+
+/**
+ * Ficha del chat: lo mismo que muestra WhatsApp al tocar el encabezado. Los archivos
+ * salen de lo ya guardado; los integrantes se le piden a WhatsApp en el momento, porque
+ * cambian y no se guardan en disco.
+ */
+export async function fichaChat(chatId) {
+  const chat = buscarChat(chatId)
+  const mensajes = chat ? listarMensajes(chatId) : []
+
+  const media = { fotos: [], videos: [], audios: [], documentos: [] }
+  const enlaces = []
+  for (const m of mensajes) {
+    if (m.eliminado) continue
+    const cat = m.media && Object.keys(GRUPOS_MEDIA).find((k) => GRUPOS_MEDIA[k].includes(m.tipo))
+    if (cat) {
+      media[cat].push({
+        id: m.id,
+        tipo: m.tipo,
+        ts: m.ts,
+        nombre: m.media.nombre || null,
+        tamano: m.media.tamano || null,
+        segundos: m.media.segundos || null,
+        descargado: m.media.estado === 'ok',
+        // Para dibujar el archivo como se ve en el chat: quién lo mandó y qué escribió.
+        deMi: !!m.deMi,
+        autorNombre: m.autorNombre || null,
+        autorTelefono: m.autor ? telefonoDe(m.autor) : null,
+        texto: m.texto || null,
+        perdido: (m.media.fallos || 0) >= MAX_FALLOS_MEDIA,
+      })
+    }
+    for (const url of String(m.texto || '').match(RE_ENLACE) || []) {
+      enlaces.push({
+        id: m.id,
+        ts: m.ts,
+        url,
+        texto: m.texto || null,
+        deMi: !!m.deMi,
+        autorNombre: m.autorNombre || null,
+        autorTelefono: m.autor ? telefonoDe(m.autor) : null,
+      })
+    }
+  }
+  // Lo más nuevo primero, como en WhatsApp.
+  for (const k of Object.keys(media)) media[k].reverse()
+  enlaces.reverse()
+
+  const ficha = {
+    id: chatId,
+    ...vistaChat(chat || { id: chatId, noLeidos: 0, ultimoTs: 0, ultimo: null }),
+    sinChat: !chat,
+    mensajes: mensajes.length,
+    media,
+    enlaces: enlaces.slice(0, 100),
+    totales: {
+      fotos: media.fotos.length,
+      videos: media.videos.length,
+      audios: media.audios.length,
+      documentos: media.documentos.length,
+      enlaces: enlaces.length,
+    },
+  }
+
+  if (!esGrupo(chatId)) return ficha
+
+  try {
+    asegurarConectado()
+    const g = await sock.groupMetadata(chatId)
+    const yoJid = yo?.id
+    const participantes = (g.participants || []).map((p) => fichaParticipante(p, yoJid)).filter(Boolean)
+    ficha.grupo = {
+      descripcion: g.desc || null,
+      creacion: toNumber(g.creation) || null,
+      participantes,
+    }
+    // Las fotos de los integrantes se piden en segundo plano, de a una y con pausa (fotos.js).
+    // En un grupo de mil personas pedirlas todas haría que WhatsApp corte, así que se
+    // encaran las primeras y el resto se completa cada vez que se abre la ficha.
+    pedirFotos(participantes.slice(0, MAX_FOTOS_INTEGRANTES).map((p) => p.id))
+  } catch (err) {
+    // Grupo del que ya no se forma parte, o sin conexión: se muestra lo guardado igual.
+    ficha.grupo = { error: err.message, participantes: [] }
+  }
+  return ficha
+}
+
+/**
+ * Reenvía mensajes a otros chats, como el "Reenviar" de WhatsApp. Necesita el mensaje
+ * original completo: para los que tienen archivo está en `raw`, y para el texto se
+ * reconstruye con lo guardado.
+ */
+export async function reenviarMensajes(origen, ids, destinos) {
+  asegurarConectado()
+  const lista = [].concat(ids || []).filter(Boolean)
+  const aDonde = [].concat(destinos || []).filter(Boolean)
+  if (!lista.length) throw new Error('No elegiste ningún mensaje')
+  if (!aDonde.length) throw new Error('No elegiste a dónde reenviarlo')
+  if (lista.length > 30) throw new Error('Se pueden reenviar hasta 30 mensajes por vez')
+
+  let enviados = 0
+  const fallados = []
+  for (const destino of aDonde) {
+    // En orden, para que lleguen como se ven en la conversación.
+    for (const id of lista) {
+      const m = buscarMensaje(origen, id)
+      if (!m || m.eliminado) {
+        fallados.push(id)
+        continue
+      }
+      const wa = m.raw
+        ? JSON.parse(m.raw, BufferJSON.reviver)
+        : { key: claveMensaje(origen, m), message: { conversation: m.texto || '' } }
+      try {
+        await sock.sendMessage(destino, { forward: wa })
+        enviados++
+      } catch (err) {
+        fallados.push(id)
+        log('aviso', 'No se pudo reenviar un mensaje', `${nombreDe(destino)} · ${err.message}`)
+      }
+    }
+  }
+  if (!enviados) throw new Error('No se pudo reenviar ningún mensaje')
+  return { enviados, chats: aDonde.length, fallados: fallados.length }
+}
+
+/** Sale de un grupo. El chat y su historial quedan guardados acá. */
+export async function salirDelGrupo(chatId) {
+  asegurarConectado()
+  if (!esGrupo(chatId)) throw new Error('Eso no es un grupo')
+  await sock.groupLeave(chatId)
+  log('aviso', 'Se salió de un grupo', `${nombreDe(chatId)} · la conversación queda guardada`)
+  return { ok: true }
+}
+
+/* ---------------- Marcas del chat (archivar, fijar, silenciar) ---------------- */
+
+// Silenciar por un rato o para siempre, como ofrece WhatsApp.
+export const DURACIONES_SILENCIO = { '8h': 8 * 3600e3, '1s': 7 * 24 * 3600e3, siempre: null }
+
+/** WhatsApp pide el último mensaje del chat para saber a qué altura aplicar el cambio. */
+function ultimosMensajes(chatId) {
+  const m = listarMensajes(chatId).at(-1)
+  return m ? [{ key: claveMensaje(chatId, m), messageTimestamp: m.ts }] : []
+}
+
+/**
+ * Cambia una marca del chat y la propaga al celular con chatModify, que es lo que hace
+ * que archivar acá también archive allá.
+ *
+ * La marca local se aplica en el acto (el panel responde al toque) y se vuelve atrás si
+ * WhatsApp rechaza el pedido. El evento chats.update que llega después confirma lo mismo.
+ */
+export async function cambiarMarca(chatId, accion, valor) {
+  asegurarConectado()
+  if (!existeChat(chatId)) throw Object.assign(new Error('El chat no existe'), { status: 404 })
+
+  const previo = { archivado: estaArchivado(chatId), fijado: fijadoDe(chatId), silenciado: silenciadoDe(chatId) }
+  let mod
+  let volverAtras
+
+  if (accion === 'archivar') {
+    mod = { archive: !!valor, lastMessages: ultimosMensajes(chatId) }
+    setArchivado(chatId, !!valor)
+    volverAtras = () => setArchivado(chatId, previo.archivado)
+  } else if (accion === 'fijar') {
+    mod = { pin: !!valor }
+    setFijado(chatId, valor ? ahora() : null)
+    volverAtras = () => setFijado(chatId, previo.fijado)
+  } else if (accion === 'silenciar') {
+    // `valor` es una clave de DURACIONES_SILENCIO, o null para reactivar los avisos.
+    if (valor !== null && !(valor in DURACIONES_SILENCIO)) throw new Error('Duración de silencio desconocida')
+    const dur = valor === null ? null : DURACIONES_SILENCIO[valor]
+    // "Siempre" es un vencimiento tan lejano que no llega nunca: WhatsApp no tiene un valor propio.
+    const hasta = valor === null ? null : dur === null ? Date.now() + 100 * 365 * 24 * 3600e3 : Date.now() + dur
+    mod = { mute: hasta }
+    setSilenciado(chatId, hasta)
+    volverAtras = () => setSilenciado(chatId, previo.silenciado)
+  } else if (accion === 'no-leido') {
+    mod = { markRead: false, lastMessages: ultimosMensajes(chatId) }
+    sumarNoLeido(chatId)
+    volverAtras = () => marcarLeido(chatId)
+  } else {
+    throw new Error('Acción desconocida')
+  }
+
+  try {
+    await sock.chatModify(mod, chatId)
+  } catch (err) {
+    volverAtras()
+    throw new Error(`WhatsApp no aceptó el cambio: ${err.message}`, { cause: err })
+  }
+  return vistaChat(buscarChat(chatId))
+}
+
 /* ---------------- Multimedia ---------------- */
 
 // Enlace vencido o archivo borrado de los servidores de WhatsApp: hay que pedirle al celular que lo reenvíe.
 // (Baileys rc14 no lo hace solo: busca error.status, pero su propio error trae output.statusCode.)
 const REQUIERE_REENVIO = [403, 404, 410]
 const REENVIO_TIMEOUT_MS = 30000
+
+/**
+ * ¿Vale la pena pedirle al celular que reenvíe el archivo? Pasa con los enlaces vencidos
+ * (403/404/410) y también cuando el archivo baja pero no se puede descifrar: la clave
+ * guardada quedó vieja y el celular puede dar uno nuevo.
+ */
+function sePuedePedirReenvio(err) {
+  const codigo = err?.output?.statusCode ?? err?.status
+  if (REQUIERE_REENVIO.includes(codigo)) return true
+  const texto = err?.message || String(err)
+  return /unable to authenticate|unsupported state|bad decrypt|Failed to fetch stream/i.test(texto)
+}
 
 function conTimeout(promesa, ms, mensaje) {
   let timer
@@ -622,9 +1027,10 @@ async function descargarMedia(chatId, m) {
     try {
       buffer = await downloadMediaMessage(wa, 'buffer', {})
     } catch (err) {
-      const codigo = err?.output?.statusCode ?? err?.status
-      if (!REQUIERE_REENVIO.includes(codigo)) throw err
-      if (!sock || conexion !== 'conectado') throw new Error('El enlace venció y WhatsApp no está conectado para pedir el reenvío.')
+      if (!sePuedePedirReenvio(err)) throw err
+      if (!sock || conexion !== 'conectado') {
+        throw new Error('El enlace venció y WhatsApp no está conectado para pedir el reenvío.', { cause: err })
+      }
       huboReenvio = true
       wa = await conTimeout(
         sock.updateMediaMessage(wa),
@@ -639,7 +1045,7 @@ async function descargarMedia(chatId, m) {
     }
     const archivo = `${m.id}.${extensionDe(m.media.mime, m.media.nombre)}`
     guardarMedia(chatId, archivo, buffer)
-    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null } })
+    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0 } })
   } catch (err) {
     const error = mensajeDeError(err, huboReenvio)
     const actual = buscarMensaje(chatId, m.id)
@@ -647,11 +1053,83 @@ async function descargarMedia(chatId, m) {
       emitir('mensaje', { chatId, mensaje: vistaMensaje(actual) })
       return actual
     }
-    log('aviso', 'No se pudo descargar un archivo', `${nombreDe(chatId)} · ${error}`)
-    return actualizarMensaje(chatId, m.id, { media: { ...m.media, estado: 'error', error } })
+    const fallos = (actual?.media?.fallos || m.media?.fallos || 0) + 1
+    if (fallos === 1 || fallos >= MAX_FALLOS_MEDIA) {
+      log('aviso', 'No se pudo descargar un archivo', `${nombreDe(chatId)} · ${error}`)
+    }
+    return actualizarMensaje(chatId, m.id, { media: { ...m.media, estado: 'error', error, fallos } })
   } finally {
     descargando.delete(m.id)
   }
+}
+
+/* ---------------- Cola de descargas ---------------- */
+
+const colaMedia = []
+const enColaMedia = new Set()
+let bajando = false
+// Una descarga por vez y con pausa: WhatsApp corta si se le piden muchos archivos seguidos.
+const PAUSA_MEDIA_MS = 700
+
+/** Un archivo que ya falló varias veces no vuelve a la cola: no se recupera insistiendo. */
+const seDaPorPerdido = (m) => (m?.media?.fallos || 0) >= MAX_FALLOS_MEDIA
+
+/** Agenda la descarga de un archivo sin bloquear a quien lo pide. */
+export function encolarMedia(chatId, id, { forzar = false } = {}) {
+  const llave = `${chatId}|${id}`
+  if (enColaMedia.has(llave)) return false
+  if (!forzar && seDaPorPerdido(buscarMensaje(chatId, id))) return false
+  enColaMedia.add(llave)
+  colaMedia.push({ chatId, id })
+  arrancarCola()
+  return true
+}
+
+async function arrancarCola() {
+  if (bajando) return
+  bajando = true
+  try {
+    while (colaMedia.length) {
+      if (!sock || conexion !== 'conectado' || !config().descargarMedia) break
+      const { chatId, id } = colaMedia.shift()
+      enColaMedia.delete(`${chatId}|${id}`)
+      const m = buscarMensaje(chatId, id)
+      if (m?.media && m.media.estado !== 'ok' && m.raw) {
+        try {
+          await descargarMedia(chatId, m)
+        } catch {
+          // descargarMedia ya deja el error anotado en el mensaje.
+        }
+      }
+      await new Promise((r) => setTimeout(r, PAUSA_MEDIA_MS))
+    }
+  } finally {
+    bajando = false
+  }
+}
+
+export const pendientesDeDescarga = () => colaMedia.length
+
+/** Encola todo lo que falta de un chat. Lo usa el botón "Descargar todo". */
+/**
+ * Encola todo lo que falta de un chat. Los que ya fallaron el máximo de veces se saltean,
+ * salvo que se pida `reintentar`: es el botón de "probar de nuevo" del usuario.
+ */
+export function descargarTodo(chatId, { reintentar = false } = {}) {
+  asegurarConectado()
+  let n = 0
+  let perdidos = 0
+  for (const m of listarMensajes(chatId)) {
+    if (!m.media || m.media.estado === 'ok' || !m.raw) continue
+    if (!reintentar && seDaPorPerdido(m)) {
+      perdidos++
+      continue
+    }
+    if (reintentar) actualizarMensaje(chatId, m.id, { media: { ...m.media, fallos: 0 } })
+    if (encolarMedia(chatId, m.id, { forzar: reintentar })) n++
+  }
+  if (n) log('info', 'Descargando archivos del chat', `${nombreDe(chatId)} · ${n} archivos en cola`)
+  return { encolados: n, enCola: colaMedia.length, perdidos }
 }
 
 /** Ruta del archivo ya descargado. No descarga nada: eso lo pide el usuario con descargarAhora. */
@@ -697,12 +1175,19 @@ async function enviar(chatId, contenido, buffer, quoted) {
   }
 }
 
+/** Clave de un mensaje guardado. En un grupo lleva además quién lo escribió. */
+function claveMensaje(chatId, m) {
+  const key = { remoteJid: chatId, id: m.id, fromMe: !!m.deMi }
+  if (esGrupo(chatId) && m.autor) key.participant = m.autor
+  return key
+}
+
 /** Mensaje a citar, armado con lo guardado: Baileys necesita la clave y el contenido original. */
 function mensajeCitado(chatId, id) {
   const m = id ? buscarMensaje(chatId, id) : null
   if (!m) return undefined
   const message = m.raw ? JSON.parse(m.raw, BufferJSON.reviver).message : { conversation: m.texto || '' }
-  return { key: { remoteJid: chatId, id: m.id, fromMe: !!m.deMi }, message }
+  return { key: claveMensaje(chatId, m), message }
 }
 
 export function enviarTexto(chatId, texto, citadoId) {
@@ -711,13 +1196,38 @@ export function enviarTexto(chatId, texto, citadoId) {
   return enviar(chatId, { text: limpio }, undefined, mensajeCitado(chatId, citadoId))
 }
 
+/**
+ * Elimina un mensaje para todos, como el "Eliminar para todos" del celular. El respaldo
+ * conserva el original igual: WhatsApp avisa por messages.update y ahí se marca, no se borra.
+ */
+export async function eliminarMensaje(chatId, id) {
+  asegurarConectado()
+  const m = buscarMensaje(chatId, id)
+  if (!m) throw Object.assign(new Error('El mensaje no existe'), { status: 404 })
+  if (!m.deMi) throw new Error('Solo se pueden eliminar para todos los mensajes propios')
+  if (m.eliminado) throw new Error('Ese mensaje ya estaba eliminado')
+  await sock.sendMessage(chatId, { delete: claveMensaje(chatId, m) })
+  // El aviso de WhatsApp puede tardar: se marca ya para que la pantalla responda.
+  marcarEliminado(chatId, id, { fromMe: true })
+  return vistaMensaje(buscarMensaje(chatId, id))
+}
+
+/** Destaca un mensaje (la estrella de WhatsApp). Se sincroniza con el celular. */
+export async function destacarMensaje(chatId, id, destacar) {
+  asegurarConectado()
+  const m = buscarMensaje(chatId, id)
+  if (!m) throw Object.assign(new Error('El mensaje no existe'), { status: 404 })
+  await sock.chatModify({ star: { messages: [{ id: m.id, fromMe: !!m.deMi }], star: !!destacar } }, chatId)
+  return vistaMensaje(actualizarMensaje(chatId, id, { destacado: !!destacar }))
+}
+
 /** Reacciona a un mensaje. Un emoji vacío quita la reacción. */
 export async function enviarReaccion(chatId, id, emoji) {
   asegurarConectado()
   const m = buscarMensaje(chatId, id)
   if (!m) throw Object.assign(new Error('El mensaje no existe'), { status: 404 })
   const texto = emoji || ''
-  await sock.sendMessage(chatId, { react: { text: texto, key: { remoteJid: chatId, id: m.id, fromMe: !!m.deMi } } })
+  await sock.sendMessage(chatId, { react: { text: texto, key: claveMensaje(chatId, m) } })
   return vistaMensaje(actualizarMensaje(chatId, id, { reacciones: { ...m.reacciones, yo: texto || null } }))
 }
 
@@ -757,5 +1267,5 @@ export async function confirmarLectura(chatId) {
   marcarLeido(chatId)
   if (!config().confirmarLectura || !sock || conexion !== 'conectado') return
   const recibidos = listarMensajes(chatId).filter((m) => !m.deMi && m.tipo !== 'desconocido').slice(-20)
-  if (recibidos.length) await sock.readMessages(recibidos.map((m) => ({ remoteJid: chatId, id: m.id, fromMe: false })))
+  if (recibidos.length) await sock.readMessages(recibidos.map((m) => claveMensaje(chatId, m)))
 }

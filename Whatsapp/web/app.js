@@ -66,7 +66,7 @@ const state = {
   visibles: PAGINA, pegadoAbajo: true, nuevosAbajo: 0, sinLeerDesde: null, sinLeerCantidad: 0,
   presencias: new Map(), respondiendo: null, menuBoton: null, velocidades: new Map(),
   conn: { conexion: 'iniciando', qr: null, yo: null }, config: {}, logs: [],
-  grabacion: null, codigo: null, composerOff: null,
+  grabacion: null, codigo: null, composerOff: null, revelados: new Set(),
 }
 const borradores = new Map(Object.entries(leerLocal('wa-borradores', {})))
 const conectado = () => state.conn.conexion === 'conectado'
@@ -105,6 +105,9 @@ function formatear(texto) {
     .replace(/(^|[\s(>])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,!?:;)<])/g, '$1<strong>$2</strong>')
     .replace(/(^|[\s(>])_(?=\S)([^_\n]*?\S)_(?=$|[\s.,!?:;)<])/g, '$1<em>$2</em>')
     .replace(/(^|[\s(>])~(?=\S)([^~\n]*?\S)~(?=$|[\s.,!?:;)<])/g, '$1<s>$2</s>')
+  // El \u0000 es un centinela propio: marca dónde estaban los links mientras se escapa el
+  // resto del texto. No puede aparecer en un mensaje de WhatsApp.
+  // eslint-disable-next-line no-control-regex
   return html.replace(/\u0000(\d+)\u0000/g, (_, i) => {
     const url = links[i]
     const href = url.startsWith('www.') ? `https://${url}` : url
@@ -117,6 +120,9 @@ const segmentador = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('e
 function soloEmojis(texto) {
   const t = (texto || '').trim()
   if (!t || /[0-9#*a-z]/i.test(t) || !/\p{Extended_Pictographic}/u.test(t)) return false
+  // El ZWJ (U+200D) y el selector de variación (U+FE0F) van a propósito: son las piezas
+  // con las que WhatsApp arma los emojis compuestos (familias, banderas, tonos de piel).
+  // eslint-disable-next-line no-misleading-character-class
   if (!/^[\p{Extended_Pictographic}\p{Emoji_Component}‍️\s]+$/u.test(t)) return false
   const cantidad = segmentador ? [...segmentador.segment(t.replace(/\s/g, ''))].length : t.length
   return cantidad <= 3
@@ -141,7 +147,7 @@ function iniciales(c) {
 }
 function avatarHtml(c) {
   const foto = c?.foto ? `<img src="/api/chats/${enc(c.id)}/foto?v=${c.foto}" alt="" loading="lazy">` : ''
-  return `<span class="avatar">${iniciales(c)}${foto}</span>`
+  return `<span class="avatar" data-jid="${esc(c?.id || '')}">${iniciales(c)}${foto}</span>`
 }
 
 function tickHtml(estado) {
@@ -175,10 +181,12 @@ function previaHtml(c) {
   if (borrador) return `<span class="row-prev"><span class="borrador">Borrador:</span> ${esc(borrador)}</span>`
   const u = c.ultimo
   if (!u) return '<span class="row-prev"></span>'
-  if (u.eliminado) return `<span class="row-prev deleted">${ic('history')}Mensaje eliminado (guardado)</span>`
+  if (u.eliminado) return `<span class="row-prev deleted">${ic('history')}Se eliminó este mensaje</span>`
   const p = PREVIA[u.tipo]
   const texto = u.texto ? esc(sinFormato(u.texto)) : p ? p[1] : ''
-  return `<span class="row-prev">${u.deMi ? tickHtml(u.estado) : ''}${p ? ic(p[0]) : ''}${texto}</span>`
+  // En un grupo importa quién habló, igual que en WhatsApp: "Seba: buenas".
+  const quien = c.esGrupo && !u.deMi && u.autorNombre ? `<b class="prev-autor">${esc(u.autorNombre)}:</b> ` : ''
+  return `<span class="row-prev">${u.deMi ? tickHtml(u.estado) : ''}${quien}${p ? ic(p[0]) : ''}${texto}</span>`
 }
 
 /** Como WhatsApp: primero los fijados (el último fijado arriba), después por actividad. */
@@ -197,8 +205,26 @@ function pedirLista() {
   requestAnimationFrame(() => { listaPendiente = false; renderList() })
 }
 
+/**
+ * Título y subtítulo de un chat. A un contacto que no está en la agenda se lo identifica
+ * por su número, y debajo va el nombre que esa persona se puso en WhatsApp.
+ */
+function rotuloChat(c) {
+  if (c.esGrupo) return { titulo: c.nombre, sub: '' }
+  if (c.guardadoEnAgenda) {
+    return { titulo: c.nombre, sub: c.telefono && c.nombre !== c.telefono ? c.telefono : '' }
+  }
+  const apodo = c.pushName || c.notify || ''
+  return {
+    titulo: c.telefono || c.nombre,
+    sub: apodo && apodo !== c.telefono ? apodo : '',
+    subEsNombre: true,
+  }
+}
+
 function filaChat(c) {
-  const sub = c.telefono && c.nombre !== c.telefono ? `<span class="row-sub tnum">${esc(c.telefono)}</span>` : ''
+  const r = rotuloChat(c)
+  const sub = r.sub ? `<span class="row-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</span>` : ''
   const iconos = [
     c.silenciado ? ic('mute') : '',
     c.fijado && !c.archivado ? ic('fijado') : '',
@@ -208,7 +234,7 @@ function filaChat(c) {
   return `<button class="${clases}" data-chat="${esc(c.id)}">
     ${avatarHtml(c)}
     <span class="row-main">
-      <span class="row-top"><span class="row-name">${esc(c.nombre)}</span></span>${sub}
+      <span class="row-top"><span class="row-name ${r.subEsNombre ? 'tnum' : ''}">${esc(r.titulo)}</span></span>${sub}
       ${previaHtml(c)}
     </span>
     <span class="row-side"><span class="tnum">${horaLista(c.ultimoTs)}</span><span class="row-icons">${iconos}</span></span>
@@ -248,7 +274,10 @@ function renderList() {
     else if (state.filter === 'no-leidos') vacio = 'No hay chats sin leer.'
     else vacio = 'Todavía no hay chats. Cuando la línea reciba o envíe un mensaje, aparece acá.'
   }
-  $('#chatList').innerHTML = filaArchivados + (filas.length ? filas.map(filaChat).join('') : `<div class="empty">${vacio}</div>`)
+  const res = resultadosHtml()
+  // Con búsqueda activa, "sin chats" no es un vacío: los mensajes pueden coincidir igual.
+  const cuerpo = filas.length ? filas.map(filaChat).join('') : q && res ? '' : `<div class="empty">${vacio}</div>`
+  $('#chatList').innerHTML = filaArchivados + cuerpo + res
 
   const total = todos.filter((c) => !c.archivado && !c.silenciado).reduce((s, c) => s + (c.noLeidos || 0), 0)
   document.title = `${total ? `(${total}) ` : ''}WhatsApp Neifert · Prueba local`
@@ -260,6 +289,9 @@ async function abrirChat(id) {
   const chat = state.chats.get(id)
   state.activo = id
   state.mensajes = new Map()
+  state.revelados.clear()
+  cerrarInfo()
+  if (seleccion.activa) salirSeleccion()
   state.visibles = PAGINA
   state.pegadoAbajo = true
   state.nuevosAbajo = 0
@@ -314,24 +346,33 @@ function marcarLeidoDiferido(id) {
   leidoTimer = setTimeout(() => marcarLeido(id), 800)
 }
 
+function tituloChat(c) {
+  return rotuloChat(c).titulo
+}
+
 function subtituloChat(c) {
   const actividad = actividadDe(c.id)
   if (actividad) return `<span class="estado-escribiendo">${actividad}</span>`
   const p = state.presencias.get(c.id)
   if (p && ['available', 'composing', 'recording', 'paused'].includes(p.estado)) return '<span class="estado-en-linea">en línea</span>'
   if (p?.visto) return `<span class="tnum">últ. vez ${diaDe(p.visto).toLowerCase()} a las ${hora(p.visto)}</span>`
+  if (c.esGrupo) return `<span class="tnum">${esc(c.grupoNombre ? 'Grupo' : 'Grupo · WhatsApp todavía no mandó el nombre')}</span>`
+  const r = rotuloChat(c)
   const partes = []
-  if (c.telefono && c.nombre !== c.telefono) partes.push(c.telefono)
+  if (r.sub) partes.push(r.sub)
   if (c.id.endsWith('@lid')) partes.push('WhatsApp no compartió el número')
-  return `<span class="tnum">${esc(partes.join(' · ') || 'toca para ver el número')}</span>`
+  return `<span class="${r.subEsNombre ? '' : 'tnum'}">${esc(partes.join(' · ') || 'toca para ver la información')}</span>`
 }
 
 function renderHead() {
   const c = state.chats.get(state.activo) || { id: state.activo, nombre: state.activo }
   $('#convHead').innerHTML = `
     <button class="icon-btn back-btn" data-act="volver" aria-label="Volver a la lista">${ic('back')}</button>
-    ${avatarHtml(c)}
-    <div class="who"><b>${esc(c.nombre)}</b>${subtituloChat(c)}</div>
+    <button class="who-btn" data-act="info-chat" aria-label="Ver información del chat">
+      ${avatarHtml(c)}
+      <div class="who"><b>${esc(tituloChat(c))}</b>${subtituloChat(c)}</div>
+    </button>
+    <button class="icon-btn" data-act="buscar-chat" aria-label="Buscar en este chat" title="Buscar en este chat">${ic('search')}</button>
     ${c.silenciado ? `<span class="tag">${ic('mute')} Silenciado</span>` : ''}
     ${c.archivado ? `<span class="tag">${ic('archive')} Archivado</span>` : ''}`
 }
@@ -343,6 +384,17 @@ const diaHtml = (d) => `<div class="day" data-dia="${esc(d)}">${esc(d)}</div>`
 const sinLeerHtml = (n) => `<div class="sin-leer">${n === 1 ? '1 mensaje no leído' : `${n} mensajes no leídos`}</div>`
 
 /** Dibuja los últimos `state.visibles` mensajes. Con mantenerPosicion no mueve lo que se está leyendo. */
+/**
+ * Un grupo recién traído no tiene mensajes viejos: WhatsApp solo manda el historial al
+ * vincular y no lo reenvía después. Conviene decirlo en vez de dejar el chat en blanco.
+ */
+function vacioHtml() {
+  if (esGrupoActivo()) {
+    return 'Todavía no hay mensajes guardados de este grupo. WhatsApp manda el historial solo al vincular la línea, así que los anteriores no están: los nuevos van a ir apareciendo acá.'
+  }
+  return 'Todavía no hay mensajes en este chat. Escribí el primero.'
+}
+
 function renderMensajes({ mantenerPosicion = false } = {}) {
   const box = $('#messages')
   const lista = $('#msgList')
@@ -366,11 +418,11 @@ function renderMensajes({ mantenerPosicion = false } = {}) {
       partes.push(sinLeerHtml(state.sinLeerCantidad))
       lado = null
     }
-    const ladoActual = m.deMi ? 'out' : 'in'
+    const ladoActual = m.deMi ? 'out' : `in:${m.autorNombre || ''}`
     partes.push(msgHtml(m, ladoActual !== lado))
     lado = ladoActual
   }
-  lista.innerHTML = partes.length ? partes.join('') : '<div class="sys" data-vacio>Todavía no hay mensajes en este chat. Escribí el primero.</div>'
+  lista.innerHTML = partes.length ? partes.join('') : `<div class="sys" data-vacio>${vacioHtml()}</div>`
   visibles.filter(esAudio).forEach((m) => actualizarVoz(m.id))
 
   const separador = lista.querySelector('.sin-leer')
@@ -456,7 +508,9 @@ function onMensaje({ chatId, mensaje }) {
   const dias = lista.querySelectorAll('.day')
   if (dias[dias.length - 1]?.dataset.dia !== d) lista.insertAdjacentHTML('beforeend', diaHtml(d))
   const ultimo = lista.lastElementChild
-  const cola = !(ultimo?.classList.contains('msg') && ultimo.classList.contains(mensaje.deMi ? 'out' : 'in'))
+  const mismoLado = ultimo?.classList.contains('msg') && ultimo.classList.contains(mensaje.deMi ? 'out' : 'in')
+  const mismoAutor = (ultimo?.dataset.autor || '') === (mensaje.autorNombre || '')
+  const cola = !(mismoLado && mismoAutor)
   lista.insertAdjacentHTML('beforeend', msgHtml(mensaje, cola))
   if (esAudio(mensaje)) actualizarVoz(mensaje.id)
 
@@ -522,8 +576,18 @@ function mediaHtml(m) {
   }
 }
 
+const esGrupoActivo = () => !!state.chats.get(state.activo)?.esGrupo
+
 function autorDe(m) {
-  return m.deMi ? 'Vos' : state.chats.get(state.activo)?.nombre || 'Contacto'
+  if (m.deMi) return 'Vos'
+  return m.autorNombre || state.chats.get(state.activo)?.nombre || 'Contacto'
+}
+
+/** Color estable por autor, como WhatsApp: el mismo nombre siempre del mismo color. */
+function colorAutor(nombre) {
+  let h = 0
+  for (let i = 0; i < nombre.length; i++) h = (h * 31 + nombre.charCodeAt(i)) % 360
+  return h
 }
 
 /** Bloque de mensaje citado. En la burbuja es un botón que lleva al original. */
@@ -536,8 +600,12 @@ function citaHtml(q, { boton = true } = {}) {
 
 function msgHtml(m, cola) {
   const md = m.media
-  const visual = md?.estado === 'ok' && ['imagen', 'video', 'gif'].includes(m.tipo)
-  const sticker = md?.estado === 'ok' && m.tipo === 'sticker'
+  // Un mensaje eliminado arranca tapado: ni el texto ni el archivo se dibujan, igual que
+  // en WhatsApp. El original sigue guardado y se destapa con un clic en el aviso.
+  const revelado = !!m.eliminado && state.revelados.has(m.id)
+  const tapado = !!m.eliminado && !revelado
+  const visual = !tapado && md?.estado === 'ok' && ['imagen', 'video', 'gif'].includes(m.tipo)
+  const sticker = !tapado && md?.estado === 'ok' && m.tipo === 'sticker'
   let texto = ''
   let cuerpo = ''
 
@@ -559,9 +627,17 @@ function msgHtml(m, cola) {
     }
   }
 
+  // Un mensaje eliminado se muestra como en WhatsApp. El contenido sigue guardado, así
+  // que se puede destapar con un clic para saber qué decía y quién lo borró.
   const eliminado = m.eliminado
-    ? `<div class="del-note">${ic('history')}<span>${m.eliminado.por === 'yo' ? 'Eliminado desde la línea' : 'El contacto lo eliminó'} a las ${hora(m.eliminado.ts)}. Se conserva el original.</span></div>`
+    ? `<button class="del-note" data-revelar="${esc(m.id)}" aria-expanded="${!!revelado}">${ic('history')}<span class="del-txt">${
+        m.eliminado.por === 'yo' ? 'Eliminaste este mensaje' : 'Se eliminó este mensaje'
+      }</span><span class="del-cta">${revelado ? 'Ocultar' : 'Ver qué decía'}</span></button>`
     : ''
+  if (tapado) {
+    cuerpo = ''
+    texto = ''
+  }
   const ediciones = m.ediciones?.length
     ? `<details class="ediciones"><summary>${m.ediciones.length === 1 ? 'Ver versión anterior' : `Ver ${m.ediciones.length} versiones anteriores`}</summary><ul>${m.ediciones
         .map((e) => `<li>${esc(e.texto) || '<i>(vacío)</i>'} <span class="tnum">· cambiado a las ${hora(e.ts)}</span></li>`)
@@ -569,8 +645,12 @@ function msgHtml(m, cola) {
     : ''
   const reacciones = m.reacciones ? Object.values(m.reacciones).filter(Boolean) : []
   const reacts = reacciones.length ? `<div class="reacts" aria-label="Reacciones">${reacciones.map(esc).join('')}</div>` : ''
-  const meta = `<div class="meta">${m.ediciones?.length ? '<span class="edited">editado</span>' : ''}<span class="tnum">${hora(m.ts)}</span>${m.deMi ? iconoEstado(m.estado) : ''}</div>`
+  const meta = `<div class="meta">${m.destacado ? `<span class="star" title="Destacado">${ic('fijado')}</span>` : ''}${m.ediciones?.length ? '<span class="edited">editado</span>' : ''}<span class="tnum">${hora(m.ts)}</span>${m.deMi ? iconoEstado(m.estado) : ''}</div>`
   const opciones = m.tipo === 'desconocido' ? '' : `<button class="opciones" data-opciones="${esc(m.id)}" aria-label="Opciones del mensaje" aria-haspopup="menu" aria-expanded="false">${ic('down')}</button>`
+  // En un grupo, quién habló va arriba de la burbuja y solo cuando cambia de persona.
+  const nombreAutor = !m.deMi && cola && esGrupoActivo() && m.autorNombre
+    ? `<div class="autor" style="--autor:${colorAutor(m.autorNombre)}">${esc(m.autorNombre)}</div>`
+    : ''
 
   // Distribución de la hora dentro de la burbuja, igual que WhatsApp.
   let distribucion
@@ -582,11 +662,13 @@ function msgHtml(m, cola) {
     'msg', m.deMi ? 'out' : 'in', distribucion,
     cola && 'cola',
     m.ediciones?.length && 'editado',
-    m.eliminado && 'deleted',
+    tapado && 'deleted',
+    seleccion.activa && seleccion.ids.has(m.id) && 'elegido',
+    revelado && 'revelado',
     reacciones.length && 'has-reacts',
     m.tipo === 'desconocido' && 'desconocido',
   ].filter(Boolean).join(' ')
-  return `<div class="${clases}" id="${domId(m.id)}">${opciones}${eliminado}${cuerpo}${texto}${ediciones}${meta}${reacts}</div>`
+  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(m.autorNombre || '')}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${reacts}</div>`
 }
 
 /** Lleva al mensaje citado: si todavía no está dibujado, agranda la tanda hasta incluirlo. */
@@ -607,39 +689,694 @@ function irAMensaje(id) {
   el.classList.add('resaltado')
 }
 
+/* ---------------- Selección múltiple y reenvío ---------------- */
+
+const seleccion = { activa: false, ids: new Set(), destinos: new Set() }
+
+function entrarSeleccion(id) {
+  seleccion.activa = true
+  seleccion.ids.clear()
+  if (id) seleccion.ids.add(id)
+  cerrarMenu()
+  renderMensajes({ mantenerPosicion: true })
+  renderBarraSeleccion()
+}
+
+function salirSeleccion() {
+  seleccion.activa = false
+  seleccion.ids.clear()
+  renderBarraSeleccion()
+  renderMensajes({ mantenerPosicion: true })
+}
+
+function alternarSeleccion(id) {
+  if (seleccion.ids.has(id)) seleccion.ids.delete(id)
+  else seleccion.ids.add(id)
+  if (!seleccion.ids.size) return salirSeleccion()
+  document.getElementById(domId(id))?.classList.toggle('elegido', seleccion.ids.has(id))
+  renderBarraSeleccion()
+}
+
+/** Barra superior con la cuenta y las acciones, como WhatsApp al seleccionar. */
+function renderBarraSeleccion() {
+  const barra = $('#selBar')
+  if (!seleccion.activa) {
+    barra.hidden = true
+    $('#convPane').classList.remove('seleccionando')
+    return
+  }
+  const n = seleccion.ids.size
+  const propios = [...seleccion.ids].every((id) => state.mensajes.get(id)?.deMi)
+  barra.hidden = false
+  $('#convPane').classList.add('seleccionando')
+  barra.innerHTML = `
+    <button class="icon-btn" data-act="sel-salir" aria-label="Cancelar selección">${ic('x')}</button>
+    <b>${n === 1 ? '1 mensaje' : `${fmtNum(n)} mensajes`}</b>
+    <span class="sel-acciones">
+      <button class="icon-btn" data-act="sel-reenviar" aria-label="Reenviar" title="Reenviar">${ic('reply')}</button>
+      <button class="icon-btn" data-act="sel-destacar" aria-label="Destacar" title="Destacar">${ic('fijado')}</button>
+      ${propios ? `<button class="icon-btn peligro" data-act="sel-eliminar" aria-label="Eliminar para todos" title="Eliminar para todos">${ic('x')}</button>` : ''}
+    </span>`
+}
+
+/** Diálogo para elegir a qué chats reenviar. */
+function abrirReenviar() {
+  if (!seleccion.ids.size) return
+  seleccion.destinos.clear()
+  $('#fwdDlg').showModal()
+  renderReenviar()
+}
+
+function renderReenviar(filtro = '') {
+  const q = filtro.trim().toLowerCase()
+  const chats = [...state.chats.values()]
+    .filter((c) => c.id !== state.activo)
+    .filter((c) => !q || `${c.nombre} ${c.telefono || ''}`.toLowerCase().includes(q))
+    .sort(ordenChats)
+    .slice(0, 80)
+  const n = seleccion.destinos.size
+  $('#fwdLista').innerHTML = chats.length
+    ? chats
+        .map((c) => {
+          const r = rotuloChat(c)
+          return `<li><button class="fwd-fila ${seleccion.destinos.has(c.id) ? 'on' : ''}" data-fwd="${esc(c.id)}">
+            ${avatarHtml(c)}
+            <span><b>${esc(r.titulo)}</b>${r.sub ? `<span class="tnum">${esc(r.sub)}</span>` : ''}</span>
+            <span class="fwd-check">${seleccion.destinos.has(c.id) ? ic('check') : ''}</span>
+          </button></li>`
+        })
+        .join('')
+    : '<li class="empty">Ningún chat coincide.</li>'
+  $('#fwdEnviar').disabled = !n
+  $('#fwdEnviar').textContent = n ? `Reenviar a ${n}` : 'Reenviar'
+}
+
+async function confirmarReenvio() {
+  const ids = [...seleccion.ids]
+  const destinos = [...seleccion.destinos]
+  if (!ids.length || !destinos.length) return
+  $('#fwdDlg').close()
+  try {
+    const r = await api(`/api/chats/${enc(state.activo)}/reenviar`, { method: 'POST', json: { ids, destinos } })
+    toast(
+      r.fallados
+        ? `Se reenviaron ${fmtNum(r.enviados)}, ${fmtNum(r.fallados)} no salieron.`
+        : `Listo: ${fmtNum(r.enviados)} ${r.enviados === 1 ? 'mensaje reenviado' : 'mensajes reenviados'} a ${fmtNum(r.chats)} ${r.chats === 1 ? 'chat' : 'chats'}.`,
+    )
+    salirSeleccion()
+  } catch (err) {
+    toast(err.message)
+  }
+}
+
+/** Destacar o eliminar todo lo seleccionado, de a uno. */
+async function accionEnLote(accion) {
+  const ids = [...seleccion.ids]
+  if (accion === 'eliminar' && !confirm(`¿Eliminar ${ids.length === 1 ? 'este mensaje' : `estos ${ids.length} mensajes`} para todos? Acá queda guardado el original.`)) return
+  let ok = 0
+  for (const id of ids) {
+    try {
+      const ruta = accion === 'eliminar' ? 'eliminar' : 'destacar'
+      const cuerpo = accion === 'eliminar' ? { id } : { id, destacar: true }
+      const act = await api(`/api/chats/${enc(state.activo)}/${ruta}`, { method: 'POST', json: cuerpo })
+      onMensaje({ chatId: state.activo, mensaje: act })
+      ok++
+    } catch {
+      // Se sigue con el resto: el resumen final dice cuántos salieron.
+    }
+  }
+  toast(ok === ids.length ? 'Listo.' : `Se pudo con ${fmtNum(ok)} de ${fmtNum(ids.length)}.`)
+  salirSeleccion()
+}
+
+/* ---------------- Búsqueda de mensajes ---------------- */
+
+const busqueda = { q: '', enChat: null, resultados: [], total: 0, cargando: false, pedido: 0 }
+
+/** Resalta lo buscado dentro de un texto ya escapado. */
+function resaltar(texto, q) {
+  const limpio = esc(sinFormato(texto))
+  if (!q) return limpio
+  const sinAcentos = (t) => t.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+  const base = sinAcentos(limpio)
+  const aguja = sinAcentos(q)
+  const i = base.indexOf(aguja)
+  if (i < 0) return limpio
+  // Se recorta alrededor de la coincidencia para que se vea en una línea.
+  const desde = Math.max(0, i - 30)
+  const recorte = (desde ? '…' : '') + limpio.slice(desde, i) + '<mark>' + limpio.slice(i, i + q.length) + '</mark>' + limpio.slice(i + q.length, i + q.length + 60)
+  return recorte
+}
+
+/** Pide los mensajes que coinciden. Se descartan las respuestas viejas que llegan tarde. */
+async function buscarEnMensajes() {
+  const q = busqueda.q.trim()
+  if (q.length < 2) {
+    busqueda.resultados = []
+    busqueda.total = 0
+    return renderList()
+  }
+  const mio = ++busqueda.pedido
+  busqueda.cargando = true
+  renderList()
+  try {
+    const params = new URLSearchParams({ q })
+    if (busqueda.enChat) params.set('chat', busqueda.enChat)
+    const r = await api(`/api/buscar?${params}`)
+    if (mio !== busqueda.pedido) return
+    busqueda.resultados = r.resultados
+    busqueda.total = r.total
+  } catch {
+    if (mio === busqueda.pedido) busqueda.resultados = []
+  } finally {
+    if (mio === busqueda.pedido) {
+      busqueda.cargando = false
+      renderList()
+    }
+  }
+}
+
+let buscarTimer
+function alBuscar(valor) {
+  state.q = valor
+  busqueda.q = valor
+  clearTimeout(buscarTimer)
+  // Se espera a que deje de tipear: cada búsqueda recorre todos los chats.
+  buscarTimer = setTimeout(buscarEnMensajes, 220)
+  renderList()
+}
+
+/** Bloque de resultados que va debajo de los chats que coinciden por nombre. */
+function resultadosHtml() {
+  const q = busqueda.q.trim()
+  if (q.length < 2) return ''
+  if (busqueda.cargando && !busqueda.resultados.length) {
+    return '<div class="res-titulo">Mensajes</div><div class="empty">Buscando…</div>'
+  }
+  if (!busqueda.resultados.length) return '<div class="res-titulo">Mensajes</div><div class="empty">Ningún mensaje coincide.</div>'
+
+  const enChat = busqueda.enChat ? state.chats.get(busqueda.enChat)?.nombre : null
+  const titulo = enChat ? `Mensajes en ${esc(enChat)}` : 'Mensajes'
+  const filas = busqueda.resultados
+    .map((m) => {
+      const c = state.chats.get(m.chatId)
+      const quien = m.deMi ? 'Vos' : m.autorNombre || (c ? rotuloChat(c).titulo : '')
+      return `<button class="res-fila" data-res="${esc(m.chatId)}" data-res-msg="${esc(m.id)}">
+        ${avatarHtml(c || { id: m.chatId, nombre: '?' })}
+        <span class="res-main">
+          <span class="res-top"><b>${esc(c ? rotuloChat(c).titulo : m.chatId)}</b><span class="tnum">${horaLista(m.ts)}</span></span>
+          <span class="res-txt">${quien ? `<i>${esc(quien)}: </i>` : ''}${resaltar(m.texto, q)}</span>
+        </span>
+      </button>`
+    })
+    .join('')
+  const mas = busqueda.total > busqueda.resultados.length
+    ? `<div class="empty">Se muestran ${fmtNum(busqueda.resultados.length)} de ${fmtNum(busqueda.total)} coincidencias. Afiná la búsqueda para ver el resto.</div>`
+    : ''
+  return `<div class="res-titulo">${titulo} <span class="tnum">${fmtNum(busqueda.total)}</span></div>${filas}${mas}`
+}
+
+/** Limita la búsqueda al chat abierto (la lupa del encabezado). */
+function buscarEnChat() {
+  busqueda.enChat = state.activo
+  const input = $('#search')
+  if (input) {
+    input.value = ''
+    input.focus()
+    input.placeholder = `Buscar en ${state.chats.get(state.activo)?.nombre || 'este chat'}`
+  }
+  alBuscar('')
+}
+
+function salirDeBusqueda() {
+  busqueda.enChat = null
+  busqueda.resultados = []
+  busqueda.total = 0
+  const input = $('#search')
+  if (input) {
+    input.value = ''
+    input.placeholder = 'Buscar un chat o iniciar uno nuevo'
+  }
+  state.q = ''
+  busqueda.q = ''
+  renderList()
+}
+
+/** Abre el chat del resultado y salta al mensaje. */
+async function irAResultado(chatId, msgId) {
+  if (state.activo !== chatId) await abrirChat(chatId)
+  irAMensaje(msgId)
+}
+
+/* ---------------- Ficha del chat ---------------- */
+
+const fechaLarga = (ms) => new Date(ms).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+
+const SECCIONES_MEDIA = [
+  ['fotos', 'image', 'Fotos'],
+  ['videos', 'video', 'Videos'],
+  ['audios', 'mic', 'Audios'],
+  ['documentos', 'file', 'Documentos'],
+  ['enlaces', 'chat', 'Enlaces'],
+]
+
+/** El panel tiene dos vistas: la ficha y la galería de archivos, como WhatsApp Web. */
+const info = { ficha: null, vista: 'ficha', tab: 'fotos' }
+
+function alternarInfo() {
+  if ($('#infoPane').hidden) cargarInfo()
+  else cerrarInfo()
+}
+
+function cerrarInfo() {
+  $('#infoPane').hidden = true
+  info.vista = 'ficha'
+}
+
+/** `jid` permite abrir la ficha de alguien con quien todavía no hay chat (un integrante). */
+async function cargarInfo(jid) {
+  const pane = $('#infoPane')
+  const id = jid || state.activo
+  if (!id) return
+  const yaAbierto = !pane.hidden
+  pane.hidden = false
+  info.vista = 'ficha'
+  if (!yaAbierto || jid) pane.innerHTML = `${cabeceraFija('Información')}<div class="sys">Cargando…</div>`
+  try {
+    const f = await api(`/api/chats/${enc(id)}/info`)
+    if (pane.hidden) return
+    info.ficha = f
+    renderInfo()
+  } catch (err) {
+    pane.innerHTML = `${cabeceraFija('Información')}<div class="sys">${esc(err.message)}</div>`
+  }
+}
+
+const cabeceraInfo = (titulo, atras = false) =>
+  `<div class="info-head"><button class="icon-btn" data-act="${atras ? 'info-volver' : 'cerrar-info'}" aria-label="${atras ? 'Volver' : 'Cerrar'}">${ic(atras ? 'back' : 'x')}</button><b>${esc(titulo)}</b></div>`
+
+/** La cabecera sola, pegada arriba (en la galería va junto con las pestañas). */
+const cabeceraFija = (titulo, atras = false) => `<div class="info-fijo">${cabeceraInfo(titulo, atras)}</div>`
+
+function renderInfo() {
+  const f = info.ficha
+  if (!f) return
+  $('#infoPane').innerHTML = info.vista === 'media' ? vistaArchivos(f) : vistaFicha(f)
+  $('#infoPane').scrollTop = 0
+}
+
+function vistaFicha(f) {
+  const g = f.grupo
+  const r = rotuloChat(f)
+  const totalArchivos = SECCIONES_MEDIA.reduce((n, [k]) => n + (f.totales[k] || 0), 0)
+  const ps = g?.participantes || []
+  const partes = [cabeceraFija(f.esGrupo ? 'Info. del grupo' : 'Info. del contacto')]
+
+  partes.push(`<div class="info-top">
+    ${avatarHtml(f)}
+    <h3>${esc(r.titulo)}</h3>
+    ${r.sub ? `<p class="info-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</p>` : ''}
+    ${f.esGrupo ? `<p class="info-meta">Grupo${ps.length ? ` · <b>${fmtNum(ps.length)} integrantes</b>` : ''}</p>` : ''}
+    ${f.esGrupo && g?.creacion ? `<p class="info-sub">Creado el ${fechaLarga(g.creacion * 1000)}</p>` : ''}
+    ${f.sinChat ? '<p class="info-sub">Todavía no hay conversación con este contacto.</p>' : ''}
+  </div>`)
+
+  if (g?.descripcion) {
+    partes.push(`<div class="info-bloque"><h4>Descripción</h4><p class="info-desc">${formatear(g.descripcion)}</p></div>`)
+  }
+
+  // Fila que lleva a la galería, con el total a la derecha (igual que WhatsApp).
+  partes.push(`<div class="info-bloque info-filas">
+    <button class="info-fila" data-act="info-archivos"${totalArchivos ? '' : ' disabled'}>
+      ${ic('image')}<span>Archivos, enlaces y documentos</span>
+      <b class="tnum">${fmtNum(totalArchivos)}</b>${totalArchivos ? `<i class="chev">${ic('down')}</i>` : ''}
+    </button>
+    ${miniaturasHtml(f)}
+  </div>`)
+
+  partes.push(`<div class="info-bloque info-filas">
+    <button class="info-fila" data-chat-act="archivar">${ic('archive')}<span>${f.archivado ? 'Desarchivar' : 'Archivar'}</span></button>
+    <button class="info-fila" data-chat-act="fijar">${ic('pin')}<span>${f.fijado ? 'Dejar de fijar' : 'Fijar arriba'}</span></button>
+    ${
+      f.silenciado
+        ? `<button class="info-fila" data-chat-act="activar-sonido">${ic('mute')}<span>Reactivar avisos</span></button>`
+        : `<button class="info-fila" data-chat-act="silenciar" data-valor="siempre">${ic('mute')}<span>Silenciar notificaciones</span></button>`
+    }
+  </div>`)
+
+  if (f.esGrupo) {
+    partes.push(`<div class="info-bloque">
+      <h4>${ps.length ? `${fmtNum(ps.length)} integrantes` : 'Integrantes'}</h4>
+      ${
+        ps.length
+          ? `<ul class="info-gente">${ps.map(filaIntegrante).join('')}</ul>`
+          : `<p class="info-vacio">${esc(g?.error ? `No se pudieron traer los integrantes: ${g.error}` : 'Sin datos de integrantes.')}</p>`
+      }
+    </div>`)
+    partes.push(`<div class="info-bloque info-filas">
+      <button class="info-fila peligro" data-act="salir-grupo">${ic('unlink')}<span>Salir del grupo</span></button>
+    </div>`)
+  }
+
+  partes.push(`<p class="path info-pie">${fmtNum(f.mensajes)} mensajes guardados en el respaldo.</p>`)
+  return partes.join('')
+}
+
+/** Una persona del grupo. Tocarla abre su ficha, como en WhatsApp. */
+function filaIntegrante(p) {
+  const esVos = p.nombre === 'Vos'
+  return `<li><button class="gente-btn" ${esVos ? 'disabled' : `data-persona="${esc(p.id)}"`}>
+    ${avatarHtml({ id: p.id, nombre: p.nombre, foto: p.foto })}
+    <div><b>${esc(p.nombre)}</b>${p.telefono ? `<span class="tnum">${esc(p.telefono)}</span>` : ''}</div>
+    ${p.admin ? `<span class="tag verde">${p.admin === 'creador' ? 'Creador' : 'Admin. del grupo'}</span>` : ''}
+  </button></li>`
+}
+
+/** Las últimas miniaturas, como adelanto de la galería. */
+function miniaturasHtml(f) {
+  const visuales = [...f.media.fotos, ...f.media.videos]
+    .filter((m) => m.descargado)
+    .sort((a, b) => b.ts - a.ts)
+    .slice(0, 6)
+  if (!visuales.length) return ''
+  return `<div class="info-galeria chica">${visuales.map((m) => celdaMedia(f, m)).join('')}</div>`
+}
+
+function celdaMedia(f, m) {
+  const url = `/api/chats/${enc(f.id)}/media/${enc(m.id)}`
+  if (m.tipo === 'imagen') return `<button data-ver="${url}" aria-label="Ampliar foto"><img src="${url}" alt="" loading="lazy"></button>`
+  return `<a href="${url}" target="_blank" rel="noopener" aria-label="Ver video"><video src="${url}" muted preload="metadata"></video><span class="play">${ic('play')}</span></a>`
+}
+
+/** Baja un archivo desde la ficha y refresca la lista cuando termina. */
+async function bajarUno(id, boton) {
+  const f = info.ficha
+  if (!f) return
+  boton.disabled = true
+  boton.innerHTML = '<span class="spinner" aria-hidden="true"></span>Bajando…'
+  try {
+    await api(`/api/chats/${enc(f.id)}/media/${enc(id)}/descargar`, { method: 'POST' })
+    await cargarInfo(f.sinChat ? f.id : undefined)
+  } catch (err) {
+    toast(err.message)
+    boton.disabled = false
+    boton.innerHTML = `${ic('download')}Descargar`
+  }
+}
+
+/** Encabezado de una burbuja de archivo: quién lo mandó y su número, como WhatsApp Web. */
+function autorArchivoHtml(f, m) {
+  const quien = m.deMi ? 'Vos' : m.autorNombre || (f.esGrupo ? null : f.nombre)
+  if (!quien) return ''
+  const tel = !m.deMi && m.autorTelefono && m.autorTelefono !== quien ? `<span class="tnum">${esc(m.autorTelefono)}</span>` : ''
+  return `<div class="arch-cab"><span class="arch-autor" style="--autor:${colorAutor(quien)}">${esc(quien)}</span>${tel}</div>`
+}
+
+const NOMBRE_ARCHIVO = { imagen: 'Foto', video: 'Video', gif: 'GIF', nota_voz: 'Nota de voz', audio: 'Audio', documento: 'Documento' }
+
+/** Lo que se muestra a la derecha: descargar, bajar ahora, o el motivo de que no esté. */
+function accionArchivoHtml(f, m) {
+  if (m.descargado) {
+    return `<a class="icon-btn" href="/api/chats/${enc(f.id)}/media/${enc(m.id)}?descargar=1" aria-label="Descargar" title="Descargar">${ic('download')}</a>`
+  }
+  if (m.perdido) return `<span class="tag" title="WhatsApp ya no tiene este archivo">No disponible</span>`
+  return `<button class="btn ghost chico" data-bajar="${esc(m.id)}">${ic('download')}Descargar</button>`
+}
+
+/**
+ * Un archivo como se ve en el chat: quién lo mandó arriba, la tarjeta o la miniatura, el
+ * epígrafe y la hora. Sirve igual para fotos, videos, audios y documentos.
+ */
+function burbujaArchivo(f, m) {
+  const visual = (m.tipo === 'imagen' || m.tipo === 'video' || m.tipo === 'gif') && m.descargado
+  const url = `/api/chats/${enc(f.id)}/media/${enc(m.id)}`
+  const titulo = m.nombre || NOMBRE_ARCHIVO[m.tipo] || 'Archivo'
+  const ext = (m.nombre?.split('.').pop() || '').toUpperCase().slice(0, 4)
+  const detalle = [ext && ext !== titulo.toUpperCase() ? ext : null, m.tamano ? fmtBytes(m.tamano) : null, m.segundos ? fmtDur(m.segundos) : null]
+    .filter(Boolean)
+    .join(' · ')
+
+  let cuerpo
+  if (visual) {
+    // Ya descargado: se ve la foto, y se amplía o se abre con un clic.
+    cuerpo =
+      m.tipo === 'imagen'
+        ? `<button class="arch-img" data-ver="${url}" aria-label="Ampliar foto"><img src="${url}" alt="" loading="lazy"></button>`
+        : `<a class="arch-img" href="${url}" target="_blank" rel="noopener" aria-label="Ver video"><video src="${url}" muted preload="metadata"></video><span class="play">${ic('play')}</span></a>`
+  } else {
+    cuerpo = `<div class="arch-fila">
+      <span class="arch-ico ${m.tipo}">${ic(ICONO_MEDIA[m.tipo] || 'file')}</span>
+      <span class="arch-datos"><b>${esc(titulo)}</b>${detalle ? `<span class="tnum">${esc(detalle)}</span>` : ''}</span>
+      ${accionArchivoHtml(f, m)}
+    </div>`
+  }
+
+  return `<li class="arch-item">
+    ${autorArchivoHtml(f, m)}
+    <div class="arch-burbuja ${m.deMi ? 'out' : 'in'}">
+      ${cuerpo}
+      ${visual ? `<div class="arch-sobre">${accionArchivoHtml(f, m)}</div>` : ''}
+      ${m.texto ? `<div class="arch-txt">${formatear(m.texto)}</div>` : ''}
+      <div class="arch-pie tnum">${diaDe(m.ts)} · ${hora(m.ts)}</div>
+    </div>
+  </li>`
+}
+
+/** Un enlace, con la misma forma de burbuja que los archivos. */
+function burbujaEnlace(f, l) {
+  const href = l.url.startsWith('www.') ? `https://${l.url}` : l.url
+  let dominio = l.url
+  try {
+    dominio = new URL(href).hostname.replace(/^www\./, '')
+  } catch {
+    // URL rara: se muestra tal cual vino.
+  }
+  return `<li class="arch-item">
+    ${autorArchivoHtml(f, l)}
+    <div class="arch-burbuja ${l.deMi ? 'out' : 'in'}">
+      <a class="arch-fila enlace" href="${esc(href)}" target="_blank" rel="noopener noreferrer">
+        <span class="arch-ico enlace">${ic('chat')}</span>
+        <span class="arch-datos"><b>${esc(l.url)}</b><span class="tnum">${esc(dominio)}</span></span>
+      </a>
+      ${l.texto && sinFormato(l.texto).trim() !== l.url ? `<div class="arch-txt">${formatear(l.texto)}</div>` : ''}
+      <div class="arch-pie tnum">${diaDe(l.ts)} · ${hora(l.ts)}</div>
+    </div>
+  </li>`
+}
+
+/** Galería completa, con una pestaña por tipo de archivo. */
+function vistaArchivos(f) {
+  const disponibles = SECCIONES_MEDIA.filter(([k]) => f.totales[k])
+  if (!disponibles.some(([k]) => k === info.tab)) info.tab = disponibles[0]?.[0] || 'fotos'
+  const tabs = disponibles
+    .map(([k, , titulo]) => `<button class="info-tab ${k === info.tab ? 'on' : ''}" data-info-tab="${k}">${titulo} <span class="tnum">${fmtNum(f.totales[k])}</span></button>`)
+    .join('')
+
+  // Todo se ve igual que en el chat: la foto sin descargar también aparece, con su botón.
+  const cuerpo =
+    info.tab === 'enlaces'
+      ? `<ul class="info-archivos">${f.enlaces.map((l) => burbujaEnlace(f, l)).join('')}</ul>`
+      : `<ul class="info-archivos">${f.media[info.tab].map((m) => burbujaArchivo(f, m)).join('')}</ul>`
+
+  const pendientes = ['fotos', 'videos', 'audios', 'documentos'].reduce(
+    (n, k) => n + f.media[k].filter((m) => !m.descargado).length,
+    0,
+  )
+  // Los que ya se dieron por perdidos se ofrecen aparte: insistir solo, sin que el
+  // usuario lo pida, gasta conexión con WhatsApp sin conseguir nada.
+  const perdidos = ['fotos', 'videos', 'audios', 'documentos'].reduce(
+    (n, k) => n + f.media[k].filter((m) => m.perdido).length,
+    0,
+  )
+  const bajarTodo = !pendientes
+    ? ''
+    : pendientes > perdidos
+      ? `<button class="btn ghost bajar-todo" data-act="bajar-todo">${ic('download')}Descargar los ${fmtNum(pendientes - perdidos)} que faltan</button>`
+      : `<button class="btn ghost bajar-todo" data-act="bajar-todo" data-reintentar="1">${ic('refresh')}Reintentar los ${fmtNum(perdidos)} que fallaron</button>`
+  return `<div class="info-fijo">
+      ${cabeceraInfo('Archivos, enlaces y documentos', true)}
+      <div class="info-tabs">${tabs}</div>
+    </div>
+    <div class="info-bloque">${bajarTodo}${cuerpo}</div>`
+}
+
+/* ---------------- Emojis ---------------- */
+
+// Los de uso diario, agrupados como en WhatsApp. Alcanza para escribir: no hace falta
+// cargar una librería entera ni pedirle nada a un CDN.
+const EMOJIS = {
+  'Caritas': '😀 😃 😄 😁 😆 😅 🤣 😂 🙂 🙃 😉 😊 😇 🥰 😍 🤩 😘 😗 😚 😙 😋 😛 😜 🤪 😝 🤗 🤭 🤔 🤐 😐 😑 😶 😏 😒 🙄 😬 😮 😯 😪 😴 😌 😔 😕 🙁 ☹️ 😣 😖 😫 😩 🥺 😢 😭 😤 😠 😡 🤬 🤯 😳 😱 😨 😰 😥 😓 🤗 🫡 🥳 😎 🤓 🧐',
+  'Gestos': '👍 👎 👌 🤌 ✌️ 🤞 🤟 🤘 🤙 👈 👉 👆 👇 ☝️ ✋ 🤚 🖐️ 🖖 👋 🤝 🙏 💪 🙌 👏 🫶 ✍️ 💅 👀',
+  'Corazones': '❤️ 🧡 💛 💚 💙 💜 🖤 🤍 🤎 💔 ❣️ 💕 💞 💓 💗 💖 💘 💝 ✨ 🔥 💯 ⭐ 🎉 🎊 🥂 🎁',
+  'Autos': '🚗 🚙 🛻 🚐 🚚 🚛 🏎️ 🏍️ 🛵 🚜 🚨 ⛽ 🔧 🔩 🛞 🔑 🗝️ 📍 🛣️ 🅿️ 🚦 💰 💵 💸 💳 🧾 📄 📆 ✅ ❌ ⚠️ ℹ️ 📞 📲 💬 ⏰ 👉 🔝',
+}
+
+function abrirEmojis(boton) {
+  const panel = $('#emojiPanel')
+  if (!panel.hidden) return cerrarEmojis()
+  panel.innerHTML = Object.entries(EMOJIS)
+    .map(([titulo, lista]) => `<div class="emo-grupo"><h4>${titulo}</h4><div class="emo-grid">${lista
+      .split(' ')
+      .map((e) => `<button type="button" data-emoji="${e}" aria-label="${e}">${e}</button>`)
+      .join('')}</div></div>`)
+    .join('')
+  panel.hidden = false
+  const r = boton.getBoundingClientRect()
+  panel.style.left = `${Math.max(8, Math.min(r.left, innerWidth - panel.offsetWidth - 8))}px`
+  panel.style.top = `${Math.max(8, r.top - panel.offsetHeight - 8)}px`
+  boton.setAttribute('aria-expanded', 'true')
+}
+
+function cerrarEmojis() {
+  const panel = $('#emojiPanel')
+  if (panel.hidden) return
+  panel.hidden = true
+  $('#emojiBtn')?.setAttribute('aria-expanded', 'false')
+}
+
+/** Mete el emoji donde está el cursor, sin perder lo que ya estaba escrito. */
+function ponerEmoji(emoji) {
+  const ta = $('#msgInput')
+  if (!ta) return
+  const ini = ta.selectionStart ?? ta.value.length
+  const fin = ta.selectionEnd ?? ta.value.length
+  ta.value = ta.value.slice(0, ini) + emoji + ta.value.slice(fin)
+  const pos = ini + emoji.length
+  ta.setSelectionRange(pos, pos)
+  ta.focus()
+  autoAlto(ta)
+  guardarBorrador(state.activo, ta.value)
+  syncSendBtn()
+}
+
 /* ---------------- Menú del mensaje ---------------- */
 
-function abrirMenu(id, boton) {
+/**
+ * Deja el menú flotante dentro de la pantalla. `ancla` es un DOMRect: el del botón que
+ * lo abrió, o un punto del cursor con click derecho.
+ */
+function ubicarMenu(menu, ancla, alinearDerecha = false) {
+  const ancho = menu.offsetWidth
+  const alto = menu.offsetHeight
+  const izquierda = Math.max(8, Math.min(alinearDerecha ? ancla.right - ancho : ancla.left, innerWidth - ancho - 8))
+  let arriba = ancla.bottom + 4
+  if (arriba + alto > innerHeight - 8) arriba = ancla.top - alto - 4
+  menu.style.left = `${izquierda}px`
+  menu.style.top = `${Math.max(8, arriba)}px`
+}
+
+/** Un click derecho se comporta como un botón de cero por cero en la punta del cursor. */
+const puntoDe = (e) => ({ left: e.clientX, right: e.clientX, top: e.clientY, bottom: e.clientY })
+
+function abrirMenu(id, ancla, boton = null) {
   const m = state.mensajes.get(id)
   if (!m) return
   cerrarMenu()
   const menu = $('#menuMsg')
   const mia = m.reacciones?.yo
+  const puedeEliminar = m.deMi && !m.eliminado
   menu.innerHTML = `
     <div class="reac-bar">${REACCIONES.map((e) => `<button data-reaccionar="${e}" aria-pressed="${mia === e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
     <button class="item" role="menuitem" data-act="responder">${ic('reply')}Responder</button>
+    <button class="item" role="menuitem" data-act="reenviar">${ic('send')}Reenviar</button>
+    <button class="item" role="menuitem" data-act="seleccionar">${ic('check')}Seleccionar mensajes</button>
     ${m.texto ? `<button class="item" role="menuitem" data-act="copiar">${ic('copy')}Copiar texto</button>` : ''}
-    ${m.media?.estado === 'ok' ? `<a class="item" role="menuitem" style="color:inherit;text-decoration:none" href="${urlMedia(m)}&descargar=1" target="_blank" rel="noopener">${ic('download')}Descargar</a>` : ''}`
+    ${m.media?.estado === 'ok' ? `<a class="item" role="menuitem" style="color:inherit;text-decoration:none" href="${urlMedia(m)}&descargar=1" target="_blank" rel="noopener">${ic('download')}Descargar</a>` : ''}
+    ${m.citado ? `<button class="item" role="menuitem" data-act="ir-citado">${ic('reply')}Ir al mensaje citado</button>` : ''}
+    <button class="item" role="menuitem" data-act="destacar">${ic('fijado')}${m.destacado ? 'Quitar destacado' : 'Destacar'}</button>
+    ${m.eliminado ? `<button class="item" role="menuitem" data-act="ver-eliminado">${ic('history')}${state.revelados.has(m.id) ? 'Ocultar el original' : 'Ver qué decía'}</button>` : ''}
+    <button class="item" role="menuitem" data-act="info-msg">${ic('circle-check')}Información</button>
+    ${puedeEliminar ? `<button class="item peligro" role="menuitem" data-act="eliminar-msg">${ic('x')}Eliminar para todos</button>` : ''}`
   menu.dataset.msg = id
   menu.hidden = false
-  const r = boton.getBoundingClientRect()
-  const ancho = menu.offsetWidth
-  const alto = menu.offsetHeight
-  const izquierda = Math.max(8, Math.min(m.deMi ? r.right - ancho : r.left, innerWidth - ancho - 8))
-  let arriba = r.bottom + 4
-  if (arriba + alto > innerHeight - 8) arriba = r.top - alto - 4
-  menu.style.left = `${izquierda}px`
-  menu.style.top = `${Math.max(8, arriba)}px`
-  boton.setAttribute('aria-expanded', 'true')
+  ubicarMenu(menu, ancla, m.deMi && !!boton)
+  boton?.setAttribute('aria-expanded', 'true')
   state.menuBoton = boton
 }
 
+/** Menú del chat: las mismas acciones que el menú largo de WhatsApp, y viajan al celular. */
+function abrirMenuChat(id, ancla) {
+  const c = state.chats.get(id)
+  if (!c) return
+  cerrarMenu()
+  const menu = $('#menuChat')
+  const sil = c.silenciado
+  menu.innerHTML = `
+    <div class="menu-titulo">${esc(c.nombre)}</div>
+    <button class="item" role="menuitem" data-chat-act="archivar">${ic('archive')}${c.archivado ? 'Desarchivar' : 'Archivar'}</button>
+    <button class="item" role="menuitem" data-chat-act="fijar">${ic('pin')}${c.fijado ? 'Dejar de fijar' : 'Fijar arriba'}</button>
+    ${sil
+      ? `<button class="item" role="menuitem" data-chat-act="activar-sonido">${ic('mute')}Reactivar avisos</button>`
+      : `<button class="item" role="menuitem" data-chat-act="silenciar" data-valor="8h">${ic('mute')}Silenciar 8 horas</button>
+         <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="1s">${ic('mute')}Silenciar 1 semana</button>
+         <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="siempre">${ic('mute')}Silenciar siempre</button>`}
+    ${c.noLeidos ? '' : `<button class="item" role="menuitem" data-chat-act="no-leido">${ic('chat')}Marcar como no leído</button>`}`
+  menu.dataset.chat = id
+  menu.hidden = false
+  ubicarMenu(menu, ancla)
+}
+
 function cerrarMenu() {
-  const menu = $('#menuMsg')
-  if (menu.hidden) return
-  menu.hidden = true
+  for (const sel of ['#menuMsg', '#menuChat']) {
+    const menu = $(sel)
+    if (menu && !menu.hidden) menu.hidden = true
+  }
   state.menuBoton?.setAttribute('aria-expanded', 'false')
   state.menuBoton = null
+}
+
+const AVISO_MARCA = {
+  archivar: (c) => (c.archivado ? 'Chat archivado, también en el celular.' : 'Chat desarchivado.'),
+  fijar: (c) => (c.fijado ? 'Chat fijado arriba.' : 'El chat ya no está fijado.'),
+  silenciar: () => 'Chat silenciado, también en el celular.',
+  'activar-sonido': () => 'Avisos reactivados.',
+  'no-leido': () => 'Marcado como no leído.',
+}
+
+/** Archiva, fija o silencia. El servidor lo manda al celular y devuelve el chat ya actualizado. */
+async function accionChat(id, accion, valor) {
+  cerrarMenu()
+  if (!id) return
+  const c = state.chats.get(id)
+  if (!c) return
+  const cuerpo = { accion, valor: valor ?? null }
+  if (accion === 'archivar') cuerpo.valor = !c.archivado
+  else if (accion === 'fijar') cuerpo.valor = !c.fijado
+  else if (accion === 'activar-sonido') {
+    cuerpo.accion = 'silenciar'
+    cuerpo.valor = null
+  }
+  try {
+    const actualizado = await api(`/api/chats/${enc(id)}/marca`, { method: 'POST', json: cuerpo })
+    state.chats.set(id, actualizado)
+    pedirLista()
+    if (id === state.activo) {
+      renderHead()
+      if (!$('#infoPane').hidden) cargarInfo()
+    }
+    toast(AVISO_MARCA[accion]?.(actualizado) || 'Listo, también se aplicó en el celular.')
+  } catch (err) {
+    toast(err.message)
+  }
+}
+
+
+/** Ficha del mensaje: hora, estado, autor y de dónde salió. */
+function infoMensaje(m) {
+  const partes = [
+    `Enviado ${diaDe(m.ts).toLowerCase()} a las ${hora(m.ts)}`,
+    m.deMi ? `Estado: ${ESTADO_TEXTO[m.estado] || 'sin confirmar'}` : `De: ${autorDe(m)}`,
+    m.destacado ? 'Destacado' : null,
+    m.eliminado ? `Eliminado a las ${hora(m.eliminado.ts)} por ${m.eliminado.por === 'yo' ? 'la línea' : 'el contacto'}` : null,
+    m.ediciones?.length ? `Editado ${m.ediciones.length} ${m.ediciones.length === 1 ? 'vez' : 'veces'}` : null,
+    m.media?.tamano ? `Archivo: ${fmtBytes(m.media.tamano)}` : null,
+    m.origen === 'historial' ? 'Llegó con el historial al vincular' : null,
+  ].filter(Boolean)
+  toast(partes.join(' · '), 7000)
+}
+
+const ESTADO_TEXTO = {
+  pendiente: 'enviando', enviado: 'enviado', entregado: 'entregado', leido: 'leído', reproducido: 'reproducido', error: 'no se pudo enviar',
 }
 
 async function reaccionar(id, emoji) {
@@ -753,6 +1490,7 @@ function renderComposer() {
     return
   }
   el.innerHTML = `
+    <button class="icon-btn" id="emojiBtn" data-act="emojis" aria-label="Emojis" title="Emojis" aria-haspopup="dialog" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('smile')}</button>
     <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar foto, video o documento" title="Adjuntar" ${off ? 'disabled' : ''}>${ic('clip')}</button>
     <div class="field"><textarea id="msgInput" rows="1" placeholder="${off ? 'WhatsApp no está conectado' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
     <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>`
@@ -971,6 +1709,16 @@ function renderLog() {
 }
 
 async function cargarUso() {
+  // Sin línea vinculada no hay nada que contar: al desvincular se borra la sesión y lo
+  // que quedó en disco es de una cuenta que este panel ya no maneja.
+  if (!hayLinea()) {
+    $('#usoCard').innerHTML = `
+      <div class="vacio-card">${ic('unlink')}
+        <div><b>No hay ninguna línea vinculada</b>
+        <span>Vinculá un teléfono desde el recuadro de arriba para ver los chats y el espacio que ocupan.</span></div>
+      </div>`
+    return
+  }
   try {
     const u = await api('/api/almacenamiento')
     const filas = [
@@ -999,15 +1747,46 @@ function renderPrefs() {
 
 function onEstado(nuevo) {
   const antes = state.conn
+  const habiaLinea = !!antes.yo
   state.conn = nuevo
   if (nuevo.conexion !== 'qr') state.codigo = null
   renderPill()
+
+  if (habiaLinea && !nuevo.yo) {
+    // Se desvinculó: lo que quedaba en pantalla es de una sesión que ya no existe.
+    olvidarBandeja()
+    setView('connect')
+    toast('Se desvinculó la línea. Escaneá el QR para volver a usar el panel.', 6000)
+    return
+  }
+  if (!habiaLinea && nuevo.yo) {
+    // Recién vinculada: se entra a la bandeja, que es a lo que se vino.
+    sincronizar()
+    setView('inbox')
+    return
+  }
+
   if (state.view === 'connect') {
     const img = $('.qr-img')
     if (antes.conexion === 'qr' && nuevo.conexion === 'qr' && img && nuevo.qr) img.src = nuevo.qr
     else renderConexion()
   }
+  $('#tabInbox').disabled = !hayLinea()
   actualizarComposer()
+}
+
+/** Deja la bandeja en blanco: se usa al desvincular. */
+function olvidarBandeja() {
+  state.chats = new Map()
+  state.mensajes = new Map()
+  state.activo = null
+  state.revelados.clear()
+  state.presencias.clear()
+  cerrarMenu()
+  $('#viewInbox').classList.remove('open')
+  $('#convEmpty').hidden = false
+  for (const sel of ['#convHead', '#messages', '#composer']) $(sel).hidden = true
+  renderList()
 }
 
 function onPresencia({ chatId, estado, visto }) {
@@ -1018,12 +1797,22 @@ function onPresencia({ chatId, estado, visto }) {
 
 /* ---------------- Vistas, tema y eventos en vivo ---------------- */
 
+/**
+ * Sin línea vinculada no hay bandeja que mostrar: los chats guardados son de una sesión
+ * que ya no existe. Hasta vincular, el panel queda en Conexión.
+ */
+const hayLinea = () => !!state.conn.yo
+
 function setView(view) {
+  if (view === 'inbox' && !hayLinea()) view = 'connect'
   state.view = view
   $('#viewInbox').hidden = view !== 'inbox'
   $('#viewConnect').hidden = view !== 'connect'
   $('#tabInbox').setAttribute('aria-selected', String(view === 'inbox'))
   $('#tabConnect').setAttribute('aria-selected', String(view === 'connect'))
+  const sinLinea = !hayLinea()
+  $('#tabInbox').disabled = sinLinea
+  $('#tabInbox').title = sinLinea ? 'Vinculá la línea para ver los chats' : ''
   cerrarMenu()
   if (view === 'connect') {
     renderConexion()
@@ -1077,6 +1866,14 @@ function conectarEventos() {
     pedirLista()
     if (state.activo === de) abrirChat(a)
   })
+  es.addEventListener('foto', (e) => {
+    const { id, ts } = JSON.parse(e.data)
+    // Los avatares de los integrantes del grupo no son chats: se actualizan en el lugar.
+    for (const av of document.querySelectorAll(`.avatar[data-jid="${CSS.escape(id)}"]`)) {
+      if (av.querySelector('img')) continue
+      av.insertAdjacentHTML('beforeend', `<img src="/api/chats/${enc(id)}/foto?v=${ts}" alt="" loading="lazy">`)
+    }
+  })
   es.addEventListener('mensaje', (e) => onMensaje(JSON.parse(e.data)))
   es.addEventListener('presencia', (e) => onPresencia(JSON.parse(e.data)))
   es.addEventListener('log', (e) => {
@@ -1089,16 +1886,66 @@ function conectarEventos() {
   })
 }
 
+/* Click derecho: menú del mensaje sobre una burbuja, menú del chat sobre una fila. */
+document.addEventListener('contextmenu', (e) => {
+  const burbuja = e.target.closest('.msg')
+  const fila = e.target.closest('[data-chat]')
+  if (!burbuja && !fila) return // fuera de la app queda el menú del navegador
+  e.preventDefault()
+  if (burbuja) {
+    const id = burbuja.dataset.id
+    const m = state.mensajes.get(id)
+    if (m && m.tipo !== 'desconocido') abrirMenu(id, puntoDe(e))
+    return
+  }
+  abrirMenuChat(fila.dataset.chat, puntoDe(e))
+})
+
 document.addEventListener('click', async (e) => {
-  if (!$('#menuMsg').hidden && !e.target.closest('#menuMsg') && !e.target.closest('[data-opciones]')) cerrarMenu()
-  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad]')
+  if (seleccion.activa) {
+    const burbuja = e.target.closest('.msg')
+    if (burbuja && !e.target.closest('[data-act]')) return alternarSeleccion(burbuja.dataset.id)
+  }
+  const enMenu = e.target.closest('#menuMsg, #menuChat, [data-opciones]')
+  if (!enMenu) cerrarMenu()
+  if (!e.target.closest('#emojiPanel, #emojiBtn')) cerrarEmojis()
+  const emo = e.target.closest('[data-emoji]')
+  if (emo) return ponerEmoji(emo.dataset.emoji)
+  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar]')
   if (!t) {
     if (e.target.id === 'lightbox') $('#lightbox').hidden = true
     return
   }
   if (t.dataset.opciones) {
     if (state.menuBoton === t) return cerrarMenu()
-    return abrirMenu(t.dataset.opciones, t)
+    return abrirMenu(t.dataset.opciones, t.getBoundingClientRect(), t)
+  }
+  if (t.dataset.revelar) {
+    // Destapar o volver a tapar un mensaje eliminado.
+    const id = t.dataset.revelar
+    if (state.revelados.has(id)) state.revelados.delete(id)
+    else state.revelados.add(id)
+    const el = document.getElementById(domId(id))
+    const m = state.mensajes.get(id)
+    if (el && m) el.outerHTML = msgHtml(m, el.classList.contains('cola'))
+    return
+  }
+  if (t.dataset.fwd) {
+    if (seleccion.destinos.has(t.dataset.fwd)) seleccion.destinos.delete(t.dataset.fwd)
+    else seleccion.destinos.add(t.dataset.fwd)
+    return renderReenviar($('#fwdBuscar')?.value || '')
+  }
+  if (t.dataset.bajar) return bajarUno(t.dataset.bajar, t)
+  if (t.dataset.res) return irAResultado(t.dataset.res, t.dataset.resMsg)
+  if (t.dataset.persona) return cargarInfo(t.dataset.persona)
+  if (t.dataset.infoTab) {
+    info.tab = t.dataset.infoTab
+    return renderInfo()
+  }
+  if (t.dataset.chatAct) {
+    // El mismo botón sirve en el menú del click derecho y en la ficha del chat.
+    const id = t.closest('#menuChat') ? $('#menuChat').dataset.chat : state.activo
+    return accionChat(id, t.dataset.chatAct, t.dataset.valor)
   }
   if (t.dataset.reaccionar) {
     const id = $('#menuMsg').dataset.msg
@@ -1191,6 +2038,124 @@ document.addEventListener('click', async (e) => {
       }
       break
     }
+    case 'ir-citado': {
+      const m = state.mensajes.get($('#menuMsg').dataset.msg)
+      cerrarMenu()
+      if (m?.citado) irAMensaje(m.citado)
+      break
+    }
+    case 'ver-eliminado': {
+      const id = $('#menuMsg').dataset.msg
+      cerrarMenu()
+      if (state.revelados.has(id)) state.revelados.delete(id)
+      else state.revelados.add(id)
+      const el = document.getElementById(domId(id))
+      const m = state.mensajes.get(id)
+      if (el && m) el.outerHTML = msgHtml(m, el.classList.contains('cola'))
+      break
+    }
+    case 'destacar': {
+      const id = $('#menuMsg').dataset.msg
+      const m = state.mensajes.get(id)
+      cerrarMenu()
+      if (!m) break
+      try {
+        const act = await api(`/api/chats/${enc(state.activo)}/destacar`, { method: 'POST', json: { id, destacar: !m.destacado } })
+        onMensaje({ chatId: state.activo, mensaje: act })
+        toast(act.destacado ? 'Mensaje destacado, también en el celular.' : 'Se quitó el destacado.')
+      } catch (err) {
+        toast(err.message)
+      }
+      break
+    }
+    case 'info-msg': {
+      const m = state.mensajes.get($('#menuMsg').dataset.msg)
+      cerrarMenu()
+      if (m) infoMensaje(m)
+      break
+    }
+    case 'eliminar-msg': {
+      const id = $('#menuMsg').dataset.msg
+      cerrarMenu()
+      if (!confirm('¿Eliminar este mensaje para todos? Desaparece del chat del contacto; acá queda guardado el original.')) break
+      try {
+        const act = await api(`/api/chats/${enc(state.activo)}/eliminar`, { method: 'POST', json: { id } })
+        onMensaje({ chatId: state.activo, mensaje: act })
+        toast('Mensaje eliminado para todos. El original queda en el respaldo.')
+      } catch (err) {
+        toast(err.message)
+      }
+      break
+    }
+    case 'reenviar': {
+      const id = $('#menuMsg').dataset.msg
+      entrarSeleccion(id)
+      abrirReenviar()
+      break
+    }
+    case 'seleccionar':
+      entrarSeleccion($('#menuMsg').dataset.msg)
+      break
+    case 'sel-salir': salirSeleccion(); break
+    case 'sel-reenviar': abrirReenviar(); break
+    case 'sel-destacar': await accionEnLote('destacar'); break
+    case 'sel-eliminar': await accionEnLote('eliminar'); break
+    case 'fwd-cancelar': $('#fwdDlg').close(); break
+    case 'fwd-enviar': await confirmarReenvio(); break
+    case 'buscar-chat':
+      buscarEnChat()
+      break
+    case 'salir-busqueda':
+      salirDeBusqueda()
+      break
+    case 'info-chat':
+      alternarInfo()
+      break
+    case 'bajar-todo': {
+      const f = info.ficha
+      if (!f) break
+      try {
+        const r = await api(`/api/chats/${enc(f.id)}/descargar-todo`, { method: 'POST', json: { reintentar: !!t.dataset.reintentar } })
+        if (r.encolados) toast(`Bajando ${fmtNum(r.encolados)} archivos. Van apareciendo de a poco.`)
+        else if (r.perdidos) toast(`Los ${fmtNum(r.perdidos)} que faltan ya no están en WhatsApp. Podés probar de nuevo con "Reintentar".`, 6000)
+        else toast('No hay nada pendiente.')
+      } catch (err) {
+        toast(err.message)
+      }
+      break
+    }
+    case 'info-archivos':
+      info.vista = 'media'
+      renderInfo()
+      break
+    case 'info-volver':
+      // Desde la galería se vuelve a la ficha; desde la ficha de otra persona, al chat.
+      if (info.vista === 'media') {
+        info.vista = 'ficha'
+        renderInfo()
+      } else {
+        cargarInfo()
+      }
+      break
+    case 'salir-grupo': {
+      const f = info.ficha
+      if (!f?.esGrupo) break
+      if (!confirm(`¿Salir de "${f.nombre}"? Dejás de recibir sus mensajes. La conversación guardada queda acá.`)) break
+      try {
+        await api(`/api/chats/${enc(f.id)}/salir`, { method: 'POST' })
+        toast('Saliste del grupo. La conversación queda guardada.')
+        cargarInfo()
+      } catch (err) {
+        toast(err.message)
+      }
+      break
+    }
+    case 'cerrar-info':
+      cerrarInfo()
+      break
+    case 'emojis':
+      abrirEmojis(t)
+      break
     case 'cancelar-respuesta':
       state.respondiendo = null
       renderRespuesta()
@@ -1223,6 +2188,19 @@ document.addEventListener('click', async (e) => {
     case 'desvincular':
       if (confirm('¿Desvincular este WhatsApp? Los chats guardados no se borran. Para volver a usar la línea hay que escanear el QR de nuevo.')) {
         api('/api/desvincular', { method: 'POST' }).then(() => toast('Línea desvinculada.')).catch((err) => toast(err.message))
+      }
+      break
+    case 'sincronizar-grupos':
+      t.disabled = true
+      toast('Trayendo los grupos de WhatsApp…', 60000)
+      try {
+        const r = await api('/api/sincronizar-grupos', { method: 'POST' })
+        toast(r.nuevos ? `Listo: ${r.grupos} grupos, ${r.nuevos} nuevos en la bandeja.` : `Listo: ${r.grupos} grupos, ninguno nuevo.`)
+        sincronizar()
+      } catch (err) {
+        toast(err.message)
+      } finally {
+        t.disabled = false
       }
       break
     case 'sincronizar-chats':
@@ -1280,10 +2258,8 @@ document.addEventListener('submit', async (e) => {
 })
 
 document.addEventListener('input', (e) => {
-  if (e.target.id === 'search') {
-    state.q = e.target.value
-    renderList()
-  }
+  if (e.target.id === 'search') alBuscar(e.target.value)
+  if (e.target.id === 'fwdBuscar') renderReenviar(e.target.value)
   if (e.target.id === 'msgInput') {
     autoAlto(e.target)
     syncSendBtn()
@@ -1299,7 +2275,10 @@ document.addEventListener('keydown', (e) => {
   }
   if (e.key === 'Escape') {
     if (!$('#lightbox').hidden) $('#lightbox').hidden = true
-    else if (!$('#menuMsg').hidden) cerrarMenu()
+    else if (!$('#emojiPanel').hidden) cerrarEmojis()
+    else if (!$('#infoPane').hidden) cerrarInfo()
+    else if (seleccion.activa) salirSeleccion()
+    else if (!$('#menuMsg').hidden || !$('#menuChat').hidden) cerrarMenu()
     else if (state.respondiendo) {
       state.respondiendo = null
       renderRespuesta()

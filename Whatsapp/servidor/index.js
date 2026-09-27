@@ -2,7 +2,7 @@ import fs from 'node:fs'
 import express from 'express'
 import { HOST, PUERTO, WEB_DIR } from './src/config.js'
 import { emitir, log, suscribir, ultimosLogs } from './src/eventos.js'
-import { config, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { buscarMensajes, config, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import { rutaFoto } from './src/fotos.js'
 
@@ -23,7 +23,7 @@ const ruta = (fn) => async (req, res) => {
 
 function chatId(req) {
   const id = req.params.id
-  if (!/^[\w.+-]+@(s\.whatsapp\.net|lid)$/.test(id || '')) throw Object.assign(new Error('Chat inválido'), { status: 400 })
+  if (!/^[\w.+-]+@(s\.whatsapp\.net|lid|g\.us)$/.test(id || '')) throw Object.assign(new Error('Chat inválido'), { status: 400 })
   return id
 }
 
@@ -53,17 +53,27 @@ app.post('/api/reconectar', ruta(async () => {
   return { ok: true }
 }))
 app.post('/api/sincronizar-chats', ruta(() => wa.sincronizarChats()))
+app.post('/api/sincronizar-grupos', ruta(() => wa.sincronizarGrupos()))
 
 /* Chats y mensajes */
 app.get('/api/chats', ruta(() => listarChats()))
+// Búsqueda de texto. Sin `chat` busca en todas las conversaciones.
+app.get('/api/buscar', ruta((req) => buscarMensajes(req.query.q, { jid: req.query.chat || null })))
 app.post('/api/chats', ruta(async (req) => ({ id: await wa.abrirChat(req.body?.telefono) })))
 app.get('/api/chats/:id/mensajes', ruta((req) => listarMensajes(chatId(req)).map(vistaMensaje)))
+// Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
+app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
+app.post('/api/chats/:id/reenviar', ruta((req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos)))
+app.post('/api/chats/:id/salir', ruta((req) => wa.salirDelGrupo(chatId(req))))
+app.post('/api/chats/:id/marca', ruta((req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null)))
 app.post('/api/chats/:id/leido', ruta(async (req) => {
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
 app.post('/api/chats/:id/texto', ruta(async (req) => ({ id: await wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId) })))
 app.post('/api/chats/:id/reaccion', ruta((req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji)))
+app.post('/api/chats/:id/eliminar', ruta((req) => wa.eliminarMensaje(chatId(req), req.body?.id)))
+app.post('/api/chats/:id/destacar', ruta((req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar)))
 app.post('/api/chats/:id/presencia', ruta((req) => wa.suscribirPresencia(chatId(req))))
 app.get('/api/chats/:id/foto', ruta((req, res) => {
   const archivo = rutaFoto(chatId(req))
@@ -88,6 +98,7 @@ app.get('/api/chats/:id/media/:msgId', ruta((req, res) => {
   if (req.query.descargar && nombre) res.attachment(nombre)
   res.sendFile(archivo)
 }))
+app.post('/api/chats/:id/descargar-todo', ruta((req) => wa.descargarTodo(chatId(req), { reintentar: !!req.body?.reintentar })))
 app.post('/api/chats/:id/media/:msgId/descargar', ruta((req) => wa.descargarAhora(chatId(req), req.params.msgId)))
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta inexistente' }))

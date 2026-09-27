@@ -96,10 +96,12 @@
         <p>Elegí un chat de la izquierda. Los mensajes nuevos aparecen en vivo y con el botón + le escribís a un número nuevo.</p>
       </div>
       <div class="conv-head" id="convHead" hidden></div>
+      <div class="sel-bar" id="selBar" hidden></div>
       <div class="messages" id="messages" hidden><div class="msg-list" id="msgList" aria-live="polite"></div></div>
       <button class="bajar" id="bajar" data-act="bajar" aria-label="Ir a los últimos mensajes" hidden><svg class="i"><use href="#i-down"/></svg><span class="cnt tnum" hidden></span></button>
       <div class="respuesta" id="respuesta" hidden></div>
       <div class="composer" id="composer" hidden></div>
+      <aside class="info-pane" id="infoPane" aria-label="Información del chat" hidden></aside>
     </div>
   </section>
 
@@ -123,6 +125,7 @@
           <div class="toggle-row"><div>Descargar fotos, audios y documentos al llegar<span>Si el contacto los borra, siguen disponibles acá. Apagado: se descargan al abrirlos.</span></div><button class="switch" role="switch" aria-checked="true" data-pref="descargarMedia" aria-label="Descargar multimedia al llegar"></button></div>
           <div class="toggle-row"><div>Confirmar lectura al abrir un chat<span>Apagado: el contacto no ve el tilde azul por abrir el chat en este panel.</span></div><button class="switch" role="switch" aria-checked="false" data-pref="confirmarLectura" aria-label="Confirmar lectura al abrir un chat"></button></div>
           <div class="toggle-row"><div>Chats archivados, fijados y silenciados<span>Se copian del celular al vincular. Si en el celular cambiaste algo y acá no se ve igual, sincronizá de nuevo.</span></div><button class="btn ghost" data-act="sincronizar-chats"><svg class="i"><use href="#i-refresh"/></svg>Sincronizar</button></div>
+          <div class="toggle-row"><div>Grupos<span>Trae todos los grupos en los que está la línea y los muestra en la bandeja. WhatsApp no reenvía el historial viejo, así que los mensajes van apareciendo a medida que escriben.</span></div><button class="btn ghost" data-act="sincronizar-grupos"><svg class="i"><use href="#i-refresh"/></svg>Traer grupos</button></div>
         </div>
       </div>
       <div class="card glass shadow">
@@ -149,6 +152,17 @@
 </dialog>
 
 <div class="menu-msg" id="menuMsg" role="menu" hidden></div>
+<div class="menu-msg menu-chat" id="menuChat" role="menu" hidden></div>
+<div class="emoji-panel" id="emojiPanel" role="dialog" aria-label="Elegir emoji" hidden></div>
+<dialog class="dlg fwd-dlg" id="fwdDlg">
+  <h2>Reenviar a…</h2>
+  <input type="search" id="fwdBuscar" placeholder="Buscar un chat" aria-label="Buscar un chat">
+  <ul class="fwd-lista" id="fwdLista"></ul>
+  <div class="btn-row">
+    <button class="btn ghost" type="button" data-act="fwd-cancelar">Cancelar</button>
+    <button class="btn primary" type="button" id="fwdEnviar" data-act="fwd-enviar" disabled>Reenviar</button>
+  </div>
+</dialog>
 <div class="lightbox" id="lightbox" hidden>
   <button class="close" data-act="lb-close" aria-label="Cerrar"><svg class="i"><use href="#i-x"/></svg></button>
   <figure id="lbFig"></figure>

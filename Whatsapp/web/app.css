@@ -19,7 +19,24 @@ html, body { height: 100%; overflow: hidden; }
 
 .connect { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding-bottom: 4px; }
 
-.chat-list, .messages, .connect { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent; overscroll-behavior: contain; }
+/* Todo lo que scrollea usa la misma barra fina. Sin esto, Windows dibuja la suya:
+   ancha, gris y translúcida sobre el fondo oscuro. */
+.chat-list, .messages, .connect, .info-pane, .fwd-lista, .emoji-panel, .menu-msg {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
+  overscroll-behavior: contain;
+}
+.chat-list::-webkit-scrollbar, .messages::-webkit-scrollbar, .connect::-webkit-scrollbar,
+.info-pane::-webkit-scrollbar, .fwd-lista::-webkit-scrollbar, .emoji-panel::-webkit-scrollbar { width: 7px; }
+.chat-list::-webkit-scrollbar-track, .messages::-webkit-scrollbar-track, .connect::-webkit-scrollbar-track,
+.info-pane::-webkit-scrollbar-track, .fwd-lista::-webkit-scrollbar-track, .emoji-panel::-webkit-scrollbar-track { background: transparent; }
+.chat-list::-webkit-scrollbar-thumb, .messages::-webkit-scrollbar-thumb, .connect::-webkit-scrollbar-thumb,
+.info-pane::-webkit-scrollbar-thumb, .fwd-lista::-webkit-scrollbar-thumb, .emoji-panel::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 99px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
 
 /* ---------- Lista de chats ---------- */
 .list-head { flex: none; }
@@ -113,6 +130,12 @@ details.ediciones li { margin-top: 3px; }
 .uso-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }
 .uso-bar i { display: block; height: 100%; background: var(--red); border-radius: 99px; }
 .uso-row b { text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+/* Tarjeta de "todavía no hay nada" (sin línea vinculada). */
+.vacio-card { display: flex; gap: 12px; align-items: flex-start; padding: 14px 4px; }
+.vacio-card svg.i { width: 22px; height: 22px; flex: none; color: var(--ink-3); margin-top: 2px; }
+.vacio-card b { display: block; font-size: 13.5px; margin-bottom: 3px; }
+.vacio-card span { font-size: 12.5px; color: var(--ink-2); line-height: 1.5; }
+
 .path { font-size: 11.5px; color: var(--ink-3); overflow-wrap: anywhere; margin: 0; }
 .card-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
 .toggle-row .btn { flex: none; }

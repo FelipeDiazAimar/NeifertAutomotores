@@ -89,6 +89,9 @@ export const pnDeLid = (lid) => estado.lids[lid] || null
 /* ---------------- Archivados, fijados y marcas de sincronización ---------------- */
 
 export const estaArchivado = (jid) => !!estado.archivados[jid]
+export const fijadoDe = (jid) => estado.fijados[jid] || null
+export const silenciadoDe = (jid) => estado.silenciados[jid] || null
+export const buscarChat = (jid) => estado.chats[jid] || null
 export const meta = () => estado.meta
 
 export function setMeta(patch) {
@@ -119,9 +122,12 @@ export const infoFoto = (jid) => estado.fotos[jid] || null
 
 export function setFoto(jid, tiene) {
   const previo = estado.fotos[jid]
-  estado.fotos[jid] = { tiene: !!tiene, ts: Date.now() }
+  const ts = Date.now()
+  estado.fotos[jid] = { tiene: !!tiene, ts }
   guardarEstado()
   if (estado.chats[jid] && (tiene || previo?.tiene)) emitir('chat', vistaChat(estado.chats[jid]))
+  // También para quien no tiene chat propio: los integrantes de un grupo en la ficha.
+  if (tiene && !previo?.tiene) emitir('foto', { id: jid, ts })
 }
 
 /** WhatsApp manda el fin del silencio en segundos o milisegundos; -1 es "siempre". */
@@ -210,9 +216,21 @@ export function telefonoDe(jid) {
   return m ? `+${m[1]}` : null
 }
 
+/** Se mira el sufijo en vez de usar Baileys: este módulo no depende de la librería. */
+export const esGrupo = (jid) => !!jid && jid.endsWith('@g.us')
+
 export function nombreDe(jid) {
+  // Un grupo se llama por su asunto; el pushName de un mensaje es del autor, no del chat.
+  if (esGrupo(jid)) return estado.chats[jid]?.grupoNombre || 'Grupo'
   const c = estado.contactos[jid]
   return c?.nombre || estado.chats[jid]?.pushName || c?.notify || telefonoDe(jid) || jid.split('@')[0]
+}
+
+/** Guarda el asunto del grupo que informa WhatsApp. */
+export function setGrupoNombre(jid, nombre) {
+  if (!nombre || !estado.chats[jid] || estado.chats[jid].grupoNombre === nombre) return false
+  upsertChat(jid, { grupoNombre: nombre })
+  return true
 }
 
 export function vistaChat(c) {
@@ -220,7 +238,11 @@ export function vistaChat(c) {
     ...c,
     nombre: nombreDe(c.id),
     telefono: telefonoDe(c.id),
+    esGrupo: esGrupo(c.id),
     guardadoEnAgenda: !!estado.contactos[c.id]?.nombre,
+    // El nombre que la persona se puso en WhatsApp. Llega por la agenda (notify) o con
+    // sus mensajes (pushName); el panel lo muestra debajo del número si no está agendada.
+    notify: estado.contactos[c.id]?.notify || null,
     archivado: !!estado.archivados[c.id],
     fijado: estado.fijados[c.id] || null,
     silenciado: silenciadoActivo(estado.silenciados[c.id]),
@@ -262,8 +284,10 @@ export function marcarLeido(jid) {
 
 const cache = new Map() // clave de chat → Map(id → mensaje)
 
-function cargar(jid) {
-  const k = clave(jid)
+const cargar = (jid) => cargarClave(clave(jid))
+
+/** Resuelve un archivo .jsonl a Map(id → mensaje) aplicando las líneas en orden. */
+function cargarClave(k) {
   if (cache.has(k)) return cache.get(k)
   const porId = new Map()
   const file = path.join(MSG_DIR, `${k}.jsonl`)
@@ -298,6 +322,7 @@ const resumen = (m) => ({
   tipo: m.tipo,
   texto: (m.texto || '').slice(0, 140),
   deMi: m.deMi,
+  autorNombre: m.autorNombre || null,
   eliminado: !!m.eliminado,
   estado: m.estado || null,
 })
@@ -336,6 +361,44 @@ export function actualizarMensaje(jid, id, patch) {
   if (chat?.ultimo?.id === id) upsertChat(jid, { ultimo: resumen(m) })
   emitir('mensaje', { chatId: jid, mensaje: vistaMensaje(m) })
   return m
+}
+
+/* ---------------- Búsqueda ---------------- */
+
+/** Sin acentos y en minúsculas, para que "amarok" encuentre "Amárok". */
+const normalizar = (t) =>
+  String(t || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[̀-ͯ]/g, '')
+
+/**
+ * Busca texto en los mensajes. Sin `jid` busca en todos los chats.
+ *
+ * Leer todos los chats los dejaría cargados en memoria para siempre, así que el cache
+ * se devuelve como estaba: solo sobreviven los que ya estaban abiertos.
+ */
+export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
+  const q = normalizar(consulta)
+  if (q.length < 2) return { resultados: [], truncado: false }
+
+  const claves = jid ? [clave(jid)] : Object.keys(estado.chats).map(clave)
+  const porClave = new Map(Object.keys(estado.chats).map((j) => [clave(j), j]))
+  const cacheados = new Set(cache.keys())
+  const resultados = []
+
+  for (const k of claves) {
+    const chatJid = porClave.get(k)
+    if (!chatJid || OCULTOS.has(chatJid)) continue
+    for (const m of cargarClave(k).values()) {
+      if (!m.texto || !normalizar(m.texto).includes(q)) continue
+      resultados.push({ chatId: chatJid, ...vistaMensaje(m) })
+    }
+    if (!cacheados.has(k)) cache.delete(k)
+  }
+
+  resultados.sort((a, b) => b.ts - a.ts)
+  return { resultados: resultados.slice(0, limite), truncado: resultados.length > limite, total: resultados.length }
 }
 
 /* ---------------- Multimedia ---------------- */
