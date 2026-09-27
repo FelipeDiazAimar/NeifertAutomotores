@@ -1,11 +1,12 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const listar = vi.fn().mockResolvedValue([
   { id: 1, titulo: 'ITV Cronos', fecha: '2020-01-01', hora: '10:00', hecha: false, asignado: { nombre: 'Bruno' } },
+  { id: 2, titulo: 'Llamar a Juan', fecha: '2020-01-02', hora: '11:00', hecha: true, asignado: { nombre: 'Bruno' } },
 ])
 vi.mock('@/crm/services/alertas.service', () => ({
   listar: (...a) => listar(...a), toggleHecha: vi.fn(), eliminar: vi.fn(), crear: vi.fn(), actualizar: vi.fn(),
@@ -25,5 +26,18 @@ describe('AlertasListPage', () => {
     )
     expect(await screen.findByText('ITV Cronos')).toBeInTheDocument()
     expect(screen.getByText(/Vencidas/)).toBeInTheDocument()
+  })
+
+  it('siempre trae las leídas y las deja abajo en Historial (no se borran)', async () => {
+    const qc = new QueryClient()
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter><AlertasListPage /></MemoryRouter>
+      </QueryClientProvider>,
+    )
+    expect(await screen.findByText('ITV Cronos')).toBeInTheDocument()
+    expect(listar).toHaveBeenCalledWith(expect.objectContaining({ incluirHechas: true }))
+    fireEvent.click(screen.getByText(/Historial/))
+    expect(screen.getByText('Llamar a Juan')).toBeInTheDocument()
   })
 })

@@ -7,9 +7,7 @@ import { useCrmUsuarios } from '@/crm/hooks/useCrmUsuarios'
 export default function AlertaFilters() {
   const { data: usuarios = [] } = useCrmUsuarios()
   const filtros = useAlertasFiltros((s) => s.filtros)
-  const incluirHechas = useAlertasFiltros((s) => s.incluirHechas)
   const setFiltro = useAlertasFiltros((s) => s.setFiltro)
-  const setIncluirHechas = useAlertasFiltros((s) => s.setIncluirHechas)
   const resetFiltros = useAlertasFiltros((s) => s.resetFiltros)
   const activos = useAlertasFiltros((s) => s.contarFiltrosActivos())
 
@@ -39,10 +37,6 @@ export default function AlertaFilters() {
           value={filtros.asignadoA}
           onChange={(v) => setFiltro('asignadoA', v)}
         />
-        <label className="flex items-center gap-2 self-end pb-2.5 text-xs text-ink-2">
-          <input type="checkbox" checked={incluirHechas} onChange={(e) => setIncluirHechas(e.target.checked)} />
-          Incluir hechas
-        </label>
       </div>
     </div>
   )

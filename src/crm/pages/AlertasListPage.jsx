@@ -22,20 +22,22 @@ const GRUPOS = [
 
 export default function AlertasListPage() {
   const { id: miId, esAdmin } = useCrmPerfil()
-  const { filtros, incluirHechas } = useAlertasFiltros()
+  const { filtros } = useAlertasFiltros()
   const filtrosActivos = useAlertasFiltros((s) => s.contarFiltrosActivos())
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [modal, setModal] = useState({ open: false, alerta: null })
-  const [verHechas, setVerHechas] = useState(false)
+  const [verHistorial, setVerHistorial] = useState(false)
   const { toggleHecha, eliminar } = useAlertaMutations()
 
   useCrmRealtime('alertas', ['crm', 'alertas'])
 
+  // Las leídas siempre se traen: al confirmar lectura la alerta baja a la
+  // sección Historial en vez de desaparecer.
   const opts = useMemo(() => {
     const f = { ...filtros }
     if (f.asignadoA === 'mias') f.asignadoA = miId
-    return { filtros: f, incluirHechas }
-  }, [filtros, incluirHechas, miId])
+    return { filtros: f, incluirHechas: true }
+  }, [filtros, miId])
 
   const { data: alertas, isLoading } = useAlertas(opts)
   const g = useMemo(() => agrupar((alertas ?? []).map((a) => ({ ...a, done: a.hecha }))), [alertas])
@@ -105,11 +107,11 @@ export default function AlertasListPage() {
 
           {g.hechas.length > 0 && (
             <section>
-              <button onClick={() => setVerHechas((v) => !v)} className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-3">
-                <ChevronDown size={14} className={cn('transition-transform', verHechas && 'rotate-180')} />
-                Leídas · {g.hechas.length}
+              <button onClick={() => setVerHistorial((v) => !v)} className="mb-2 flex items-center gap-1 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                <ChevronDown size={14} className={cn('transition-transform', verHistorial && 'rotate-180')} />
+                Historial · {g.hechas.length}
               </button>
-              {verHechas && (
+              {verHistorial && (
                 <div className="space-y-2">
                   {g.hechas.map((a) => <AlertaRow key={a.id} alerta={a} {...filaProps} />)}
                 </div>

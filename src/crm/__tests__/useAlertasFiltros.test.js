@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { useAlertasFiltros, FILTROS_VACIOS } from '../store/useAlertasFiltros.js'
 
-beforeEach(() => useAlertasFiltros.setState({ filtros: { ...FILTROS_VACIOS }, incluirHechas: false }))
+beforeEach(() => useAlertasFiltros.setState({ filtros: { ...FILTROS_VACIOS } }))
 
 describe('useAlertasFiltros', () => {
   it('setFiltro cambia un filtro y contarFiltrosActivos lo refleja', () => {
@@ -11,7 +11,6 @@ describe('useAlertasFiltros', () => {
   })
   it('resetFiltros vuelve todo a blanco', () => {
     useAlertasFiltros.getState().setFiltro('asignadoA', 'u1')
-    useAlertasFiltros.getState().setIncluirHechas(true)
     useAlertasFiltros.getState().resetFiltros()
     expect(useAlertasFiltros.getState().contarFiltrosActivos()).toBe(0)
   })
