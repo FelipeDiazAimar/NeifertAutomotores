@@ -133,6 +133,9 @@ export default function AlertaFormModal({ open, onClose, alerta, clienteFijo, on
                   <Input label="Vence" type="date" {...register('fecha')} error={errors.fecha?.message} />
                   <Input label="Hora" type="time" {...register('hora')} error={errors.hora?.message} />
                 </div>
+                <p className="text-xs text-ink-3">
+                  Te avisamos por notificación y email justo a esta hora.
+                </p>
                 <Controller
                   control={control} name="asignado_a"
                   render={({ field }) => (

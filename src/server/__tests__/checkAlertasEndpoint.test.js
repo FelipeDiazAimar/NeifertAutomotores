@@ -20,14 +20,14 @@ describe('handleCheckAlertas', () => {
     expect(res.statusCode).toBe(401)
   })
 
-  it('a una alerta que entró en la ventana de 24hs le manda push+email y marca notificado_24h', async () => {
-    // La alerta es el 2026-10-02 10:05 (hora Argentina, -03:00 = 13:05 UTC).
-    // 24hs antes cae el 2026-10-01 13:05 UTC — "ahora" 10 min después, dentro
-    // del margen de tolerancia del cron (corre cada 15-30 min).
-    const ahora = new Date('2026-10-01T13:15:00Z')
+  it('a una alerta cuya hora ya llegó le manda push+email y marca notificado', async () => {
+    // La alerta es hoy 10:05 (hora Argentina, -03:00 = 13:05 UTC).
+    // "Ahora" 10 min después, dentro del margen de tolerancia del cron
+    // (corre cada 15-30 min).
+    const ahora = new Date('2026-10-02T13:15:00Z')
     const alerta = {
       id: 1, titulo: 'ITV Cronos', fecha: '2026-10-02', hora: '10:05',
-      notificado_24h: false, notificado_3h: false, asignado_a: 'u1',
+      notificado: false, asignado_a: 'u1',
       asignado: { email: 'bruno@x.com' },
     }
     const update = vi.fn().mockResolvedValue({ error: null })
@@ -49,12 +49,12 @@ describe('handleCheckAlertas', () => {
     expect(res.statusCode).toBe(200)
     expect(enviarPush).toHaveBeenCalled()
     expect(enviarEmail).toHaveBeenCalledWith(expect.objectContaining({ to: 'bruno@x.com' }))
-    expect(update).toHaveBeenCalledWith(1, { notificado_24h: true })
+    expect(update).toHaveBeenCalledWith(1, { notificado: true })
   })
 
-  it('no reenvía una alerta que ya tiene notificado_24h en true', async () => {
-    const ahora = new Date('2026-10-01T10:00:00Z')
-    const alerta = { id: 1, fecha: '2026-10-02', hora: '10:05', notificado_24h: true, notificado_3h: false, asignado_a: 'u1', asignado: {} }
+  it('no reenvía una alerta que ya tiene notificado en true', async () => {
+    const ahora = new Date('2026-10-02T13:15:00Z')
+    const alerta = { id: 1, fecha: '2026-10-02', hora: '10:05', notificado: true, asignado_a: 'u1', asignado: {} }
     const enviarPush = vi.fn()
     const deps = {
       now: () => ahora,
@@ -69,10 +69,10 @@ describe('handleCheckAlertas', () => {
     expect(enviarPush).not.toHaveBeenCalled()
   })
 
-  it('una alerta cuya ventana de 3hs todavía no llegó, no dispara nada', async () => {
+  it('una alerta cuya hora todavía no llegó, no dispara nada', async () => {
     const ahora = new Date('2026-10-01T10:00:00Z')
-    // vence el 2026-10-05 → falta mucho para 3hs/24hs antes
-    const alerta = { id: 2, fecha: '2026-10-05', hora: '10:05', notificado_24h: false, notificado_3h: false, asignado_a: 'u1', asignado: {} }
+    // es el 2026-10-05 → falta mucho
+    const alerta = { id: 2, fecha: '2026-10-05', hora: '10:05', notificado: false, asignado_a: 'u1', asignado: {} }
     const enviarPush = vi.fn()
     const deps = {
       now: () => ahora,

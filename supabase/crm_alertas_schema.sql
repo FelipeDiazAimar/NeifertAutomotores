@@ -1,6 +1,6 @@
 -- ============================================================================
---  CRM NUEVO — módulo Alertas (título/fecha/hora/asignado, con avisos por
---  push + email 24hs y 3hs antes). Ejecutar en SQL Editor o por pg.
+--  CRM NUEVO — módulo Alertas (título/fecha/hora/asignado, con aviso por
+--  push + email a la fecha+hora elegida). Ejecutar en SQL Editor o por pg.
 --  Idempotente. crm_legacy.alertas está vacía, no hace falta migración.
 -- ============================================================================
 
@@ -14,8 +14,7 @@ create table if not exists crm.alertas (
   asignado_a      uuid not null references crm.usuarios(id),
   cliente_id      uuid references crm.clientes(id) on delete set null,
   vehiculo_id     uuid references crm.vehiculos(id) on delete set null,
-  notificado_24h  boolean not null default false,
-  notificado_3h   boolean not null default false,
+  notificado      boolean not null default false,
   creado_por      uuid references crm.usuarios(id),
   creado_en       timestamptz not null default now(),
   actualizado_en  timestamptz not null default now(),
@@ -23,6 +22,11 @@ create table if not exists crm.alertas (
 );
 create index if not exists idx_crm_alertas_asignado on crm.alertas(asignado_a, hecha);
 create index if not exists idx_crm_alertas_pendientes on crm.alertas(fecha, hora) where not hecha;
+
+-- Migración desde el esquema anterior (avisos 24hs/3hs antes): flag único.
+alter table crm.alertas add column if not exists notificado boolean not null default false;
+alter table crm.alertas drop column if exists notificado_24h;
+alter table crm.alertas drop column if exists notificado_3h;
 
 create or replace function crm.alerta_actualizada() returns trigger
   language plpgsql as $$

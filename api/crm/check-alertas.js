@@ -7,16 +7,15 @@ const MARGEN_MS = 45 * 60 * 1000 // tolerancia: cron cada 15-30 min + margen
 // fecha/hora se cargan en hora de Argentina (UTC-3, sin horario de verano).
 // Sin fijar el offset acá, un server en UTC (Vercel) interpretaría "10:05"
 // como las 10:05 UTC — 3hs adelantado respecto a la hora real cargada.
-function yaPaso(fecha, hora, horasAntes, ahora) {
+function tocaAvisar(fecha, hora, ahora) {
   const objetivo = new Date(`${fecha}T${hora}:00-03:00`)
-  objetivo.setTime(objetivo.getTime() - horasAntes * 60 * 60 * 1000)
   return ahora >= objetivo && ahora - objetivo <= MARGEN_MS
 }
 
-/** Serverless — revisa las alertas pendientes y dispara push+email 24hs y 3hs
- *  antes de su fecha+hora. Se dispara desde un cron externo (cron-job.org)
- *  cada 15-30 min — el cron nativo de Vercel (Hobby) solo corre 1 vez/día,
- *  no sirve para esta precisión.
+/** Serverless — revisa las alertas pendientes y dispara push+email a la
+ *  fecha+hora que eligió el empleado. Se dispara desde un cron externo
+ *  (cron-job.org) cada 15-30 min — el cron nativo de Vercel (Hobby) solo
+ *  corre 1 vez/día, no sirve para esta precisión.
  *
  *  GET|POST /api/crm/check-alertas
  *  Authorization: Bearer <CRON_SECRET>
@@ -46,7 +45,7 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
     const { data, error } = await db().from('alertas')
       .select('*, asignado:usuarios!alertas_asignado_a_fkey(email)')
       .eq('hecha', false)
-      .or('notificado_24h.eq.false,notificado_3h.eq.false')
+      .eq('notificado', false)
     if (error) throw error
     return data ?? []
   })
@@ -67,44 +66,38 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
   const enviarEmail = deps.enviarEmail || enviarEmailReal
 
   const alertas = await cargarAlertasPendientes()
-  let enviadas24h = 0
-  let enviadas3h = 0
+  let enviadas = 0
   const errores = []
 
   for (const a of alertas) {
-    for (const [campo, horasAntes, contador] of [
-      ['notificado_24h', 24, () => enviadas24h++],
-      ['notificado_3h', 3, () => enviadas3h++],
-    ]) {
-      if (a[campo]) continue
-      if (!yaPaso(a.fecha, a.hora, horasAntes, ahora)) continue
-      try {
-        const subs = await cargarSuscripciones(a.asignado_a)
-        const payload = {
-          title: `Alerta: ${a.titulo}`,
-          body: horasAntes === 24 ? 'Vence mañana a esta hora.' : 'Vence en 3 horas.',
-          url: '/crm/alertas',
-        }
-        if (subs.length) {
-          const { vencidas } = await enviarPush({ subscriptions: subs, payload })
-          await borrarSuscripcionesVencidas(vencidas)
-        }
-        if (a.asignado?.email) {
-          await enviarEmail({
-            to: a.asignado.email,
-            subject: payload.title,
-            html: `<p>${payload.body}</p><p><strong>${a.titulo}</strong></p><p>${a.descripcion ?? ''}</p>`,
-          })
-        }
-        await marcarNotificada(a.id, { [campo]: true })
-        contador()
-      } catch (e) {
-        errores.push(`alerta ${a.id} (${campo}): ${e.message}`)
+    if (a.notificado) continue
+    if (!tocaAvisar(a.fecha, a.hora, ahora)) continue
+    try {
+      const subs = await cargarSuscripciones(a.asignado_a)
+      const payload = {
+        title: `Alerta: ${a.titulo}`,
+        body: a.descripcion || 'Es ahora.',
+        url: '/crm/alertas',
       }
+      if (subs.length) {
+        const { vencidas } = await enviarPush({ subscriptions: subs, payload })
+        await borrarSuscripcionesVencidas(vencidas)
+      }
+      if (a.asignado?.email) {
+        await enviarEmail({
+          to: a.asignado.email,
+          subject: payload.title,
+          html: `<p><strong>${a.titulo}</strong></p><p>${a.descripcion ?? ''}</p>`,
+        })
+      }
+      await marcarNotificada(a.id, { notificado: true })
+      enviadas++
+    } catch (e) {
+      errores.push(`alerta ${a.id}: ${e.message}`)
     }
   }
 
-  return res.status(200).json({ ok: errores.length === 0, enviadas24h, enviadas3h, errores })
+  return res.status(200).json({ ok: errores.length === 0, enviadas, errores })
 }
 
 export default function handler(req, res) {
