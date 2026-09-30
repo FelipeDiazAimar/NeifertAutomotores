@@ -176,7 +176,10 @@ export default function PeritajesListPage() {
                   </p>
                   <p className="text-xs text-ink-3">{v.patente || '—'}</p>
                 </div>
-                <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
+                <div className="flex flex-col items-end gap-1">
+                  <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
+                  {cantidad > 1 && <Badge variant="amber">Duplicado</Badge>}
+                </div>
               </div>
               {p && (
                 <div className="mt-3 border-t border-line pt-3">
@@ -235,7 +238,10 @@ export default function PeritajesListPage() {
                     </div>
                   </td>
                   <td className="px-4 py-3">
-                    <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
+                    <div className="flex flex-col items-start gap-1">
+                      <Badge variant={badgeVariant(ep)}>{PERITAJE_ESTADO_LABEL[ep]}</Badge>
+                      {cantidad > 1 && <Badge variant="amber">Duplicado</Badge>}
+                    </div>
                   </td>
                   <td className="hidden px-4 py-3 sm:table-cell">
                     {p ? (

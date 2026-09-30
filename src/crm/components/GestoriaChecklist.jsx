@@ -2,7 +2,7 @@ import { Check } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
-import FotoSlot from '@/crm/components/FotoSlot'
+import FotoMultiSlot from '@/crm/components/FotoMultiSlot'
 import { GESTORIA_ITEMS } from '@/crm/lib/gestoriaSchema'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useGestoria, useGestoriaMutations } from '@/crm/hooks/useGestoria'
@@ -112,19 +112,17 @@ export default function GestoriaChecklist({ vehiculoId, vehiculo }) {
 
       <GlassCard className="p-5">
         <h3 className="mb-4 font-display text-sm font-bold text-ink">Documentación</h3>
-        <div className="flex flex-wrap gap-4">
-          <FotoSlot
+        <div className="space-y-5">
+          <FotoMultiSlot
             label="Título — frente"
-            url={g?.foto_titulo_frente_url ?? null}
-            carpeta={`crm/gestoria/${vehiculoId}`}
-            onChange={(url) => guardarCampos.mutate({ foto_titulo_frente_url: url })}
+            slot="titulo_frente"
+            vehiculoId={vehiculoId}
             vehiculo={vehiculo}
           />
-          <FotoSlot
+          <FotoMultiSlot
             label="Título — dorso"
-            url={g?.foto_titulo_dorso_url ?? null}
-            carpeta={`crm/gestoria/${vehiculoId}`}
-            onChange={(url) => guardarCampos.mutate({ foto_titulo_dorso_url: url })}
+            slot="titulo_dorso"
+            vehiculoId={vehiculoId}
             vehiculo={vehiculo}
           />
         </div>

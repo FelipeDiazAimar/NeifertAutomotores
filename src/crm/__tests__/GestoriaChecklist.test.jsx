@@ -13,6 +13,11 @@ vi.mock('../hooks/useCrmPerfil.js', () => ({ useCrmPerfil: () => ({ id: 'u1' }) 
 vi.mock('@/crm/services/fotos.service', () => ({
   subirArchivoUnico: vi.fn().mockResolvedValue('https://r2/x.jpg'),
 }))
+const agregarFotos = { mutate: vi.fn() }
+vi.mock('../hooks/useGestoriaFotos.js', () => ({
+  useGestoriaFotos: () => ({ data: [], isLoading: false }),
+  useGestoriaFotosMutations: () => ({ agregar: agregarFotos, borrar: { mutate: vi.fn() } }),
+}))
 
 const { default: GestoriaChecklist } = await import('../components/GestoriaChecklist.jsx')
 
@@ -28,16 +33,18 @@ describe('GestoriaChecklist', () => {
     expect(parche.form08_por).toBe('u1')
   })
 
-  it('la sección Documentación (al final) tiene los 2 FotoSlot y persiste con guardarCampos', async () => {
+  it('la sección Documentación tiene los 2 slots multi-foto sin límite y sube varias a la vez', async () => {
     guardarCampos.mutate.mockReset()
-    gestoriaData = { estado: 'sin_iniciar', foto_titulo_frente_url: null }
+    agregarFotos.mutate.mockReset()
+    gestoriaData = { estado: 'sin_iniciar' }
     render(<GestoriaChecklist vehiculoId="v1" />)
     expect(screen.queryByText('Foto del seguro')).not.toBeInTheDocument()
     expect(screen.getByText('Título — frente')).toBeInTheDocument()
     expect(screen.getByText('Título — dorso')).toBeInTheDocument()
 
     const input = screen.getByLabelText('Título — frente')
-    fireEvent.change(input, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' })] } })
-    await waitFor(() => expect(guardarCampos.mutate).toHaveBeenCalledWith({ foto_titulo_frente_url: 'https://r2/x.jpg' }))
+    fireEvent.change(input, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' }), new File(['y'], 'b.jpg', { type: 'image/jpeg' })] } })
+    await waitFor(() => expect(agregarFotos.mutate).toHaveBeenCalledTimes(2))
+    expect(guardarCampos.mutate).not.toHaveBeenCalled()
   })
 })

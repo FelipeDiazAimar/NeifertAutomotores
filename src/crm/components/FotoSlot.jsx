@@ -2,6 +2,7 @@ import { useId, useState } from 'react'
 import { Loader2, ImagePlus, Trash2, Download } from 'lucide-react'
 import { toast } from 'sonner'
 import Modal from '@/components/common/Modal'
+import { descargarImagen } from '@/crm/lib/descargarImagen'
 import * as fotos from '@/crm/services/fotos.service'
 import { deleteMedia } from '@/services/media.service'
 import { cn } from '@/lib/cn'
@@ -16,26 +17,6 @@ function slugify(s) {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '_')
     .replace(/^_+|_+$/g, '')
-}
-
-/** Descarga una imagen (aunque sea de otro origen, como el CDN de R2) trayendo
- *  el blob primero — el atributo `download` de un <a> no alcanza con URLs
- *  cross-origin. */
-async function descargarImagen(url, nombre) {
-  try {
-    const res = await fetch(url)
-    const blob = await res.blob()
-    const objectUrl = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = objectUrl
-    a.download = nombre
-    document.body.appendChild(a)
-    a.click()
-    a.remove()
-    URL.revokeObjectURL(objectUrl)
-  } catch {
-    toast.error('No se pudo descargar la imagen.')
-  }
 }
 
 /** Slot de una sola foto en formato 4:3 (subir/reemplazar/borrar). Reutiliza
