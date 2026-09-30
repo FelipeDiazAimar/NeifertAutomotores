@@ -44,8 +44,10 @@ export default function AppRouter() {
       <Routes>
       <Route element={<PublicLayout />}>
         <Route path="/" element={<HomePage />} />
-        <Route path="/catalogo" element={<CatalogPage />} />
-        <Route path="/catalogo/:id" element={<VehicleDetailPage />} />
+        <Route path="/catalogo" element={<CatalogPage key="usados" variant="usados" />} />
+        <Route path="/catalogo/:id" element={<VehicleDetailPage variant="usados" />} />
+        <Route path="/catalogo-0km" element={<CatalogPage key="cero" variant="cero" />} />
+        <Route path="/catalogo-0km/:id" element={<VehicleDetailPage variant="cero" />} />
         <Route path="/instagram" element={<InstagramPage />} />
         <Route path="/sobre-nosotros" element={<SobreNosotrosPage />} />
         <Route path="/cita" element={<AppointmentPage />} />

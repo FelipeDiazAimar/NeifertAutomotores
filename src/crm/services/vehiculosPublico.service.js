@@ -6,7 +6,7 @@ const db = () => supabase.schema('crm')
 /** Solo columnas públicas: nunca las privadas de crm.vehiculos (dueño, ITV,
  *  patente, nota, consignación, carpetas, IVA). */
 const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, precio_contado,
-  km, combustible, transmision, categoria, es_nuevo, descripcion, estado,
+  km, combustible, transmision, categoria, es_nuevo, es_0km, descripcion, estado,
   creado_en, vehiculo_fotos ( url, es_portada, orden )`
 
 // year-desc/km-asc ordenan en el server. price-asc/price-desc se resuelven
@@ -53,6 +53,7 @@ function mapear(v, usdRate = null) {
     transmission: v.transmision,
     category: v.categoria,
     is_new: v.es_nuevo,
+    is_zero_km: v.es_0km ?? false,
     status: v.estado,
     description: v.descripcion,
     main_image_url: portada?.url ?? null,
@@ -62,7 +63,15 @@ function mapear(v, usdRate = null) {
   }
 }
 
-function aplicarFiltros(query, { search, filters }) {
+/** condition: 'todos' | 'usados' | 'cero'.
+ *  'cero' → solo es_0km=true. 'usados' → es_0km=false o NULL (filas
+ *  anteriores a la migración 2026-09-30). 'todos' → sin filtro. */
+function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
+  if (condition === 'cero') {
+    query = query.eq('es_0km', true)
+  } else if (condition === 'usados') {
+    query = query.or('es_0km.is.false,es_0km.is.null')
+  }
   if (search) {
     const numeric = /^\d{4}$/.test(search.trim())
     query = numeric
@@ -85,12 +94,13 @@ export async function listarPublicos({
   sort = 'price-desc',
   search = '',
   filters = null,
+  condition = 'todos',
 } = {}) {
   const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
 
   let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).in('estado', ESTADOS_PUBLICOS).eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
-  query = aplicarFiltros(query, { search, filters })
+  query = aplicarFiltros(query, { search, filters, condition })
   if (!ordenaPorPrecio) {
     const [col, asc] = SORT_MAP[sort] || SORT_MAP['year-desc']
     query = query.order(col, { ascending: asc })

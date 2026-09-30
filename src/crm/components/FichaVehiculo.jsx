@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, ChevronDown, Archive, Trash2, Sparkles, Globe } from 'lucide-react'
+import { Pencil, ChevronDown, Archive, Trash2, Sparkles, Globe, BadgeCheck } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
@@ -15,8 +15,9 @@ import VehiculoFotoCarousel from './VehiculoFotoCarousel'
 import VehiculoFotosGaleria from './VehiculoFotosGaleria'
 import VehiculoStats from './VehiculoStats'
 
-// Campos que el form maneja (sin id/auditoría/estado). es_nuevo/publicado
-// quedaron afuera: se manejan como acciones directas, no como campos del form.
+// Campos que el form maneja (sin id/auditoría/estado). es_nuevo/es_0km/
+// publicado quedaron afuera: se manejan como acciones directas,
+// no como campos del form.
 const CAMPOS_FORM = [
   'marca', 'modelo', 'version', 'patente', 'tipo', 'anio', 'km', 'transmision', 'color',
   'moneda', 'precio_contado', 'precio_canje', 'duenio_nombre', 'duenio_apellido',
@@ -85,6 +86,8 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
             </div>
 
             <div className="flex flex-wrap gap-2">
+              {v.es_0km && <Badge variant="neutral">0 km</Badge>}
+              {v.es_nuevo && <Badge variant="amber">Nuevo</Badge>}
               {v.itv === 'si' && <Badge variant="green">ITV al día</Badge>}
               {v.consignacion && <Badge variant="amber">Consignación</Badge>}
               {v.tiene_iva && <Badge variant="neutral">IVA</Badge>}
@@ -118,6 +121,16 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
               <Button variant="ghost" icon={Archive} onClick={onArchivar} className="w-full sm:w-auto">
                 Archivar
               </Button>
+              <button
+                type="button"
+                onClick={() => actualizar.mutate({ id: v.id, data: { es_0km: !v.es_0km } })}
+                className={cn(
+                  'glass inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors sm:w-auto',
+                  v.es_0km ? 'text-neifert' : 'text-ink-2 hover:text-ink',
+                )}
+              >
+                <BadgeCheck size={16} /> Es 0 km
+              </button>
               <button
                 type="button"
                 onClick={() => actualizar.mutate({ id: v.id, data: { es_nuevo: !v.es_nuevo } })}

@@ -1,11 +1,12 @@
 import { NavLink } from 'react-router-dom'
-import { Home, LayoutGrid } from 'lucide-react'
+import { Home, LayoutGrid, BadgeCheck } from 'lucide-react'
 import { InstagramIcon, WhatsAppIcon } from '@/components/common/SocialIcons'
 import { cn } from '@/lib/cn'
 
 const ITEMS = [
   { to: '/', label: 'Inicio', icon: Home, end: true },
-  { to: '/catalogo', label: 'Catálogo', icon: LayoutGrid },
+  { to: '/catalogo', label: 'Usados', icon: LayoutGrid },
+  { to: '/catalogo-0km', label: '0 km', icon: BadgeCheck },
   { to: '/instagram', label: 'Instagram', icon: InstagramIcon },
   { to: '/cita', label: 'WhatsApp', icon: WhatsAppIcon },
 ]

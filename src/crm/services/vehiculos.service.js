@@ -5,8 +5,9 @@ const db = () => supabase.schema('crm')
 
 const BUSQUEDA_CAMPOS = ['marca', 'modelo', 'version', 'patente', 'duenio_nombre', 'duenio_apellido']
 
-/** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, anioMin,
- *  anioMax, precioMin, precioMax }. `orden`: { campo, dir }. */
+/** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, condicion
+ *  ('cero' | 'usados' | ''), anioMin, anioMax, precioMin, precioMax }.
+ *  `orden`: { campo, dir }. */
 export async function listar({
   busqueda = '',
   filtros = {},
@@ -30,6 +31,8 @@ export async function listar({
   if (filtros.estado?.length) q = q.in('estado', filtros.estado)
   if (filtros.tipo?.length) q = q.in('tipo', filtros.tipo)
   if (filtros.moneda) q = q.eq('moneda', filtros.moneda)
+  if (filtros.condicion === 'cero') q = q.eq('es_0km', true)
+  else if (filtros.condicion === 'usados') q = q.or('es_0km.is.false,es_0km.is.null')
   if (filtros.anioMin != null && filtros.anioMin !== '') q = q.gte('anio', Number(filtros.anioMin))
   if (filtros.anioMax != null && filtros.anioMax !== '') q = q.lte('anio', Number(filtros.anioMax))
   if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))

@@ -43,6 +43,7 @@ export const vehiculoSchema = z.object({
   categoria: textoOpc,
   descripcion: textoOpc,
   es_nuevo: z.boolean().optional(),
+  es_0km: z.boolean().optional(),
   combustible: textoOpc,
   publicado: z.boolean().optional(),
 })

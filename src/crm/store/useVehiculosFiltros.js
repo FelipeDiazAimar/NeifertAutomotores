@@ -4,6 +4,7 @@ export const FILTROS_VACIOS = {
   estado: [],
   tipo: [],
   moneda: '',
+  condicion: '',
   anioMin: '',
   anioMax: '',
   precioMin: '',
@@ -33,6 +34,7 @@ export const useVehiculosFiltros = create((set) => ({
     if (f.estado.length) n++
     if (f.tipo.length) n++
     if (f.moneda) n++
+    if (f.condicion) n++
     if (f.anioMin || f.anioMax) n++
     if (f.precioMin || f.precioMax) n++
     if (f.incluirArchivados) n++

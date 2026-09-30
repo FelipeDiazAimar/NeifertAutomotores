@@ -3,13 +3,13 @@ import VehicleCard from './VehicleCard'
 import { useCatalogStore } from '@/store/useCatalogStore'
 import { cn } from '@/lib/cn'
 
-export default function VehicleGrid({ vehicles }) {
+export default function VehicleGrid({ vehicles, basePath = '/catalogo', emptyText }) {
   const view = useCatalogStore((s) => s.viewMode)
 
   if (vehicles.length === 0) {
     return (
       <div className="glass grid place-items-center rounded-[20px] py-20 text-center">
-        <p className="text-ink-2">No encontramos vehículos con esos filtros.</p>
+        <p className="text-ink-2">{emptyText || 'No encontramos vehículos con esos filtros.'}</p>
       </div>
     )
   }
@@ -25,7 +25,7 @@ export default function VehicleGrid({ vehicles }) {
     >
       <AnimatePresence mode="popLayout">
         {vehicles.map((v) => (
-          <VehicleCard key={v.id} vehicle={v} view={view} />
+          <VehicleCard key={v.id} vehicle={v} view={view} basePath={basePath} />
         ))}
       </AnimatePresence>
     </motion.div>

@@ -1,6 +1,6 @@
 import { NavLink, Link } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
-import { X, Home, LayoutGrid, Camera, ShieldCheck, Info } from 'lucide-react'
+import { X, Home, LayoutGrid, Camera, ShieldCheck, Info, BadgeCheck } from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import ThemeToggle from '@/components/common/ThemeToggle'
 import Logo from '@/components/common/Logo'
@@ -9,7 +9,8 @@ import { cn } from '@/lib/cn'
 
 const LINKS = [
   { to: '/', label: 'Historias', icon: Home, end: true },
-  { to: '/catalogo', label: 'Catálogo', icon: LayoutGrid },
+  { to: '/catalogo', label: 'Catálogo Usados', icon: LayoutGrid },
+  { to: '/catalogo-0km', label: 'Catálogo 0km', icon: BadgeCheck },
   { to: '/instagram', label: 'Instagram', icon: Camera },
   { to: '/cita', label: 'WhatsApp', icon: WhatsAppIcon },
   { to: '/sobre-nosotros', label: 'Sobre Nosotros', icon: Info },

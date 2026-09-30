@@ -63,6 +63,21 @@ export default function VehiculoFilters() {
       </div>
 
       <div>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Condición</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: '', label: 'Todos' },
+            { id: 'cero', label: '0 km' },
+            { id: 'usados', label: 'Usados' },
+          ].map((c) => (
+            <Chip key={c.id || 'todos'} activo={filtros.condicion === c.id} onClick={() => setFiltro('condicion', c.id)}>
+              {c.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div>
         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Tipo</p>
         <div className="flex flex-wrap gap-1.5">
           {TIPOS.map((t) => (

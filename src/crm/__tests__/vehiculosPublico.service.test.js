@@ -40,13 +40,14 @@ describe('vehiculosPublico.service', () => {
       expect(columnasSeleccionadas).not.toContain(privada)
     }
     expect(columnasSeleccionadas).toContain('precio_contado')
+    expect(columnasSeleccionadas).toContain('es_0km')
   })
 
   it('listarPublicos mapea filas de crm.vehiculos al shape en inglés que usa la UI', async () => {
     const fila = {
       id: 'v1', marca: 'Ford', modelo: 'Fiesta', version: 'S', color: 'Rojo', anio: 2020,
       moneda: 'USD', precio_contado: 15000, km: 40000, combustible: 'Nafta',
-      transmision: 'Manual', categoria: 'sedan', es_nuevo: false, descripcion: 'Buen estado',
+      transmision: 'Manual', categoria: 'sedan', es_nuevo: false, es_0km: true, descripcion: 'Buen estado',
       estado: 'disponible', creado_en: '2026-01-01',
       vehiculo_fotos: [
         { url: 'https://x/2.jpg', es_portada: false, orden: 1 },
@@ -58,9 +59,22 @@ describe('vehiculosPublico.service', () => {
     expect(v).toMatchObject({
       id: 'v1', brand: 'Ford', model: 'Fiesta', year: 2020, price_amount: 15000, currency: 'USD',
       price_usd: 15000, // ya está en USD, no se convierte
-      fuel_type: 'Nafta', transmission: 'Manual', category: 'sedan', is_new: false,
+      fuel_type: 'Nafta', transmission: 'Manual', category: 'sedan', is_new: false, is_zero_km: true,
       main_image_url: 'https://x/1.jpg', images: ['https://x/1.jpg', 'https://x/2.jpg'],
     })
+  })
+
+  it('condition cero filtra por es_0km=true y usados excluye los 0km (null-safe)', async () => {
+    const cero = chain({ data: [], error: null })
+    selectMock.mockReturnValue(cero)
+    await listarPublicos({ condition: 'cero' })
+    expect(cero.eq).toHaveBeenCalledWith('es_0km', true)
+
+    const usados = chain({ data: [], error: null })
+    selectMock.mockReturnValue(usados)
+    await listarPublicos({ condition: 'usados' })
+    expect(usados.or).toHaveBeenCalledWith('es_0km.is.false,es_0km.is.null')
+    expect(usados.eq).not.toHaveBeenCalledWith('es_0km', true)
   })
 
   it('un vehículo en ARS muestra su precio en ARS, pero se compara internamente en USD', async () => {

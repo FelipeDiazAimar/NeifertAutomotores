@@ -160,7 +160,7 @@ function Spec({ icon: Icon, children }) {
 
 /** Botón único de compartir que despliega un popover vertical (hacia
  *  arriba) con WhatsApp y copiar enlace. Se cierra al tocar afuera. */
-function ShareMenu({ vehicle, className }) {
+function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const waHref = vehicleWaLink(phone, vehicle)
   const [open, setOpen] = useState(false)
@@ -198,7 +198,7 @@ function ShareMenu({ vehicle, className }) {
     trackShareClick({ kind: 'vehicle', id: vehicle.id })
     trackEvent(vehicle.id, 'compartir', detectSource())
     shareOrCopy({
-      url: `/catalogo/${vehicle.id}?ref=share`,
+      url: `${basePath}/${vehicle.id}?ref=share`,
       title: `${vehicle.brand} ${vehicle.model} — Neifert Automotores`,
       text: `Mirá este ${vehicle.brand} ${vehicle.model} ${vehicle.year} en Neifert.`,
     })
@@ -268,7 +268,7 @@ function ShareMenu({ vehicle, className }) {
   )
 }
 
-export default function VehicleCard({ vehicle, view = 'grid' }) {
+export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catalogo' }) {
   const [isCardHovered, setIsCardHovered] = useState(false)
   const isSold = (vehicle.status || 'disponible') === 'vendido'
   const isReserved = (vehicle.status || 'disponible') === 'reservado'
@@ -299,7 +299,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       >
         {isSold && <SoldRibbon />}
         <Link
-          to={`/catalogo/${vehicle.id}`}
+          to={`${basePath}/${vehicle.id}`}
           className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
         >
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
@@ -313,7 +313,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           )}
         </Link>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
-          <Link to={`/catalogo/${vehicle.id}`}>
+          <Link to={`${basePath}/${vehicle.id}`}>
             <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
               {vehicle.brand}
             </p>
@@ -329,7 +329,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
             <PriceAmount value={formatVehiclePrice(vehicle)} />
           </p>
           <div className="flex items-center gap-1.5 sm:gap-2">
-            <ShareMenu vehicle={vehicle} />
+            <ShareMenu vehicle={vehicle} basePath={basePath} />
           </div>
         </div>
       </motion.div>
@@ -345,7 +345,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       className="group glass relative overflow-hidden rounded-[20px] shadow-glass"
     >
       {isSold && <SoldRibbon />}
-      <Link to={`/catalogo/${vehicle.id}`} className="block">
+      <Link to={`${basePath}/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
           {/* Mobile: año abajo a la izquierda. */}
@@ -367,11 +367,16 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
                 Nuevo
               </span>
             )}
+            {vehicle.is_zero_km && (
+              <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+                0 km
+              </span>
+            )}
           </div>
         </div>
       </Link>
       <div className="p-2.5 sm:p-4">
-        <Link to={`/catalogo/${vehicle.id}`} className="block">
+        <Link to={`${basePath}/${vehicle.id}`} className="block">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
               {vehicle.brand}
@@ -379,6 +384,11 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
             {vehicle.is_new && (
               <span className="rounded-full bg-neifert px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
                 Nuevo
+              </span>
+            )}
+            {vehicle.is_zero_km && (
+              <span className="rounded-full bg-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
+                0 km
               </span>
             )}
           </div>
@@ -397,7 +407,7 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
               <PriceAmount value={formatVehiclePrice(vehicle)} />
             </p>
           </div>
-          <ShareMenu vehicle={vehicle} />
+          <ShareMenu vehicle={vehicle} basePath={basePath} />
         </div>
       </div>
     </motion.div>
