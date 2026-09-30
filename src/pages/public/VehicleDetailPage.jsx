@@ -18,6 +18,7 @@ import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
 import VehicleGallery from '@/components/catalog/VehicleGallery'
 import RelatedVehicles from '@/components/catalog/RelatedVehicles'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 const STATUS_LABEL = { reservado: 'Reservado', vendido: 'Vendido' }
 
@@ -109,7 +110,7 @@ export default function VehicleDetailPage() {
             width: isLarge ? (galleryWide ? '58%' : '50%') : '100%',
           }}
           transition={{ duration: 0.5, width: { duration: 0.8, ease: EASE } }}
-          className="relative w-full lg:shrink-0"
+          className="relative w-full overflow-hidden rounded-[24px] lg:shrink-0"
         >
           <div className={available ? '' : 'opacity-90 grayscale-[35%]'}>
             <VehicleGallery
@@ -119,6 +120,7 @@ export default function VehicleDetailPage() {
               onActiveWideChange={setGalleryWide}
             />
           </div>
+          {v.status === 'vendido' && <SoldRibbon large />}
           {!available && (
             <span className="absolute left-4 top-4 z-20 rounded-full bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-bg shadow-glass">
               {statusLabel}

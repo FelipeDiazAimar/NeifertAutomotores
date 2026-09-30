@@ -78,7 +78,7 @@ export default function AppMobileSidebar() {
               </button>
             </div>
 
-            <nav className="flex-1 overflow-y-auto px-3 py-1">
+            <nav data-lenis-prevent className="crm-scrollbar min-h-0 flex-1 overflow-y-auto overscroll-contain px-3 py-1">
               {items.map(({ to, label, icon: Icon, badge, end }) => (
                 <NavLink
                   key={to}

@@ -40,13 +40,18 @@ export default function AppSidebar() {
   }
 
   return (
-    <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col gap-3 py-5 pl-2 pr-3 md:flex">
+    <aside className="sticky top-0 hidden h-screen max-h-screen w-60 shrink-0 self-start flex-col gap-3 py-5 pl-2 pr-3 md:flex">
       <Link to="/" className="shrink-0 px-2 pt-2" aria-label="Inicio">
         <Logo />
       </Link>
 
-      <div dir="rtl" className="crm-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
-        <nav dir="ltr" className="flex flex-col gap-1 pr-1.5">
+      {/* data-lenis-prevent: la app usa Lenis root (smooth scroll) y sin esto
+          la rueda nunca llega a este scroll interno, scrollea la página. */}
+      <div
+        data-lenis-prevent
+        className="crm-scrollbar min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain"
+      >
+        <nav className="flex min-h-min flex-col gap-1 pb-1 pr-1.5">
           {items.map(({ to, label, icon: Icon, badge, end }) => (
             <NavLink
               key={to}

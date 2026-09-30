@@ -7,7 +7,7 @@ import Modal from '@/components/common/Modal'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
 import { cn } from '@/lib/cn'
 import { useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import VehiculoForm from './VehiculoForm'
@@ -61,7 +61,7 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
                   estadoVariant(v.estado) === 'neutral' && 'bg-ink text-white',
                 )}
               >
-                {v.estado}
+                {estadoLabel(v.estado)}
               </Badge>
             </div>
           </div>
@@ -110,7 +110,7 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
                 <DropdownMenuContent className="crm-root">
                   {ESTADOS.map((e) => (
                     <DropdownMenuItem key={e} disabled={e === v.estado} onClick={() => onCambiarEstado(e)}>
-                      {e}
+                      {estadoLabel(e)}
                     </DropdownMenuItem>
                   ))}
                 </DropdownMenuContent>

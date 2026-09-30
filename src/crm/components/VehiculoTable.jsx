@@ -4,7 +4,7 @@ import { ChevronDown, Plus, Share2, Link2, Eye, EyeOff } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import EstadoStrip from './EstadoStrip'
 import VehiculoThumb from './VehiculoThumb'
-import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
 import { shareOrCopy } from '@/lib/share'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -108,13 +108,13 @@ export default function VehiculoTable({ filas, onCambiarEstado, onCambiarPublica
                       aria-label={`Estado de ${v.modelo}`}
                       className="inline-flex items-center gap-1"
                     >
-                      <Badge variant={estadoVariant(v.estado)}>{v.estado}</Badge>
+                      <Badge variant={estadoVariant(v.estado)}>{estadoLabel(v.estado)}</Badge>
                       <ChevronDown size={13} className="text-ink-3" />
                     </DropdownMenuTrigger>
                     <DropdownMenuContent className="crm-root">
                       {ESTADOS.map((e) => (
                         <DropdownMenuItem key={e} onClick={() => onCambiarEstado(v, e)} disabled={e === v.estado}>
-                          {e}
+                          {estadoLabel(e)}
                         </DropdownMenuItem>
                       ))}
                     </DropdownMenuContent>

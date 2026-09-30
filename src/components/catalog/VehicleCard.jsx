@@ -14,6 +14,7 @@ import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
 import PriceAmount from '@/components/catalog/PriceAmount'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 function ImgPlaceholder({ brand }) {
   return (
@@ -269,6 +270,8 @@ function ShareMenu({ vehicle, className }) {
 
 export default function VehicleCard({ vehicle, view = 'grid' }) {
   const [isCardHovered, setIsCardHovered] = useState(false)
+  const isSold = (vehicle.status || 'disponible') === 'vendido'
+  const isReserved = (vehicle.status || 'disponible') === 'reservado'
 
   const specs = (
     <div className="flex flex-wrap gap-x-4 gap-y-1.5">
@@ -292,8 +295,9 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
         {...layoutProps}
         onMouseEnter={() => setIsCardHovered(true)}
         onMouseLeave={() => setIsCardHovered(false)}
-        className="group glass flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 shadow-glass sm:flex-row sm:gap-4 sm:p-3"
+        className="group glass relative flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 shadow-glass sm:flex-row sm:gap-4 sm:p-3"
       >
+        {isSold && <SoldRibbon />}
         <Link
           to={`/catalogo/${vehicle.id}`}
           className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
@@ -302,6 +306,11 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:bottom-auto sm:left-auto sm:right-2 sm:top-2 sm:px-2.5 sm:text-xs">
             {vehicle.year}
           </span>
+          {isReserved && (
+            <span className="absolute left-2 top-2 z-10 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-bg">
+              Reservado
+            </span>
+          )}
         </Link>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
           <Link to={`/catalogo/${vehicle.id}`}>
@@ -333,8 +342,9 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
       whileHover={{ y: -8 }}
       onMouseEnter={() => setIsCardHovered(true)}
       onMouseLeave={() => setIsCardHovered(false)}
-      className="group glass overflow-hidden rounded-[20px] shadow-glass"
+      className="group glass relative overflow-hidden rounded-[20px] shadow-glass"
     >
+      {isSold && <SoldRibbon />}
       <Link to={`/catalogo/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
@@ -342,6 +352,11 @@ export default function VehicleCard({ vehicle, view = 'grid' }) {
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:hidden">
             {vehicle.year}
           </span>
+          {isReserved && (
+            <span className="absolute left-2 top-2 z-10 rounded-full bg-ink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bg sm:left-3 sm:top-3">
+              Reservado
+            </span>
+          )}
           {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}
           <div className="absolute right-3 top-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">
             <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">

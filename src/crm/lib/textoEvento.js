@@ -1,4 +1,6 @@
 /** Texto legible de un evento de la bitácora (crm.eventos). */
+import { estadoLabel } from './formatVehiculo.js'
+
 export function textoEvento(ev) {
   const quien = ev.usuario?.nombre ?? 'Alguien'
   const d = ev.datos ?? {}
@@ -8,7 +10,7 @@ export function textoEvento(ev) {
     case 'edicion':
       return `${quien} editó ${d.campos?.length ? d.campos.join(', ') : 'el vehículo'}`
     case 'cambio_estado':
-      return `${quien} cambió el estado de ${d.de} a ${d.a}`
+      return `${quien} cambió el estado de ${estadoLabel(d.de)} a ${estadoLabel(d.a)}`
     case 'peritaje':
       return `${quien} ${d.editado ? 'editó un' : 'cargó un'} peritaje`
     case 'gestoria':

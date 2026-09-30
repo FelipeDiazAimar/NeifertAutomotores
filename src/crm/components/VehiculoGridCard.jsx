@@ -5,7 +5,7 @@ import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
 import VehiculoStats from './VehiculoStats'
 import { copiarEnlace } from './VehiculoTable'
-import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
 import { shareOrCopy } from '@/lib/share'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
@@ -74,13 +74,13 @@ export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambi
         <div className="flex h-fit shrink-0 flex-col items-end gap-1" onClick={(e) => e.stopPropagation()}>
           <DropdownMenu>
             <DropdownMenuTrigger aria-label={`Estado de ${v.modelo}`} className="inline-flex items-center gap-0.5">
-              <Badge variant={estadoVariant(v.estado)}>{v.estado}</Badge>
+              <Badge variant={estadoVariant(v.estado)}>{estadoLabel(v.estado)}</Badge>
               <ChevronDown size={12} className="text-ink-3" />
             </DropdownMenuTrigger>
             <DropdownMenuContent className="crm-root">
               {ESTADOS.map((e) => (
                 <DropdownMenuItem key={e} onClick={() => onCambiarEstado(v, e)} disabled={e === v.estado}>
-                  {e}
+                  {estadoLabel(e)}
                 </DropdownMenuItem>
               ))}
             </DropdownMenuContent>

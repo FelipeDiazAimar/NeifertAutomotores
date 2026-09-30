@@ -18,6 +18,10 @@ const SORT_MAP = {
   'km-asc': ['km', true],
 }
 
+// Estados visibles en la web pública (siempre con publicado=true).
+// "baja" nunca se publica: es stock dado de baja (devuelto, error, etc.).
+const ESTADOS_PUBLICOS = ['disponible', 'reservado', 'vendido']
+
 /** Traduce una fila de crm.vehiculos (+ sus fotos) al shape en inglés que ya
  *  usa la UI pública (mismo que devolvía vehicles.service.js). `usdRate`
  *  (ARS por USD) se usa solo para calcular `price_usd` — un equivalente en
@@ -84,7 +88,7 @@ export async function listarPublicos({
 } = {}) {
   const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
 
-  let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('estado', 'disponible').eq('publicado', true)
+  let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).in('estado', ESTADOS_PUBLICOS).eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
   query = aplicarFiltros(query, { search, filters })
   if (!ordenaPorPrecio) {
@@ -121,7 +125,7 @@ export async function listarTodos() {
 
 export async function obtenerPublicoPorId(id) {
   const [{ data, error }, usdRate] = await Promise.all([
-    db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).eq('estado', 'disponible').eq('publicado', true).maybeSingle(),
+    db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).in('estado', ESTADOS_PUBLICOS).eq('publicado', true).maybeSingle(),
     obtenerCotizacionUsd(),
   ])
   if (error) throw error

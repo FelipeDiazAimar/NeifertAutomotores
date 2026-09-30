@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listarPublicos } from '@/crm/services/vehiculosPublico.service'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 /** Carrusel horizontal con desplazamiento lento de autos de la misma
  *  categoría, ordenados por precio. Pausa al pasar el mouse. */
@@ -46,8 +47,9 @@ export default function RelatedVehicles({ current }) {
             <Link
               key={`${v.id}-${i}`}
               to={`/catalogo/${v.id}`}
-              className="group/card glass w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
+              className="group/card glass relative w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
             >
+              {(v.status || 'disponible') === 'vendido' && <SoldRibbon />}
               <div className="relative aspect-[4/3] overflow-hidden">
                 {v.main_image_url || v.images?.[0] ? (
                   <img
