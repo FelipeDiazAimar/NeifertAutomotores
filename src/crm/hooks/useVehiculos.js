@@ -19,6 +19,16 @@ export function useVehiculo(id) {
   })
 }
 
+/** Recuento por estado para el encabezado de la lista. Se invalida junto
+ *  con ['crm', 'vehiculos'] en cada mutación. */
+export function useConteoVehiculos({ busqueda = '', filtros = {} } = {}) {
+  return useQuery({
+    queryKey: ['crm', 'vehiculos', 'conteo', { busqueda, filtros }],
+    queryFn: () => svc.contarPorEstado({ busqueda, filtros }),
+    keepPreviousData: true,
+  })
+}
+
 export function useVehiculoMutations() {
   const qc = useQueryClient()
   const { id: autorId } = useCrmPerfil()

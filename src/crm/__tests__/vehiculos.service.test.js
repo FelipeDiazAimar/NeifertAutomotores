@@ -44,6 +44,29 @@ describe('listar', () => {
   })
 })
 
+describe('contarPorEstado', () => {
+  it('agrupa por estado e ignora el filtro de estado', async () => {
+    const { client, calls } = makeSupabase({
+      'select:vehiculos': {
+        data: [
+          { estado: 'disponible' }, { estado: 'disponible' },
+          { estado: 'reservado' }, { estado: 'vendido' }, { estado: 'baja' },
+        ],
+        error: null,
+      },
+    })
+    holder.client = client
+    const r = await svc.contarPorEstado({ busqueda: 'hilux', filtros: { estado: ['disponible'] } })
+    expect(r).toEqual({ disponible: 2, reservado: 1, vendido: 1, baja: 1 })
+    const call = calls.find((c) => c.table === 'vehiculos')
+    expect(call.select).toBe('estado')
+    // aplica búsqueda pero no filtra por estado ni pagina
+    expect(call.filters.some((f) => f[0] === 'or')).toBe(true)
+    expect(call.filters.some((f) => f[0] === 'in' && f[1] === 'estado')).toBe(false)
+    expect(call.filters.some((f) => f[0] === 'range')).toBe(false)
+  })
+})
+
 describe('crear', () => {
   it('inyecta creado_por y registra evento alta', async () => {
     const { client } = makeSupabase({ 'insert:vehiculos': { data: [{ id: 'v9' }], error: null } })

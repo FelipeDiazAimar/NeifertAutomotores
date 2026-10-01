@@ -5,7 +5,7 @@ import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
 import GlassCard from '@/components/common/GlassCard'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
-import { useVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
+import { useVehiculos, useConteoVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import { useViewModeStore } from '@/crm/store/useViewModeStore'
@@ -44,13 +44,28 @@ export default function VehiculosListPage() {
   const filas = data?.filas ?? []
   const total = data?.total ?? 0
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const { data: conteo } = useConteoVehiculos({ busqueda, filtros })
+  const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">Vehículos</h1>
-          <p className="text-sm text-ink-3">{total} en stock</p>
+          <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-3">
+            <span>
+              <span className="font-bold text-success">{c.disponible}</span> disponibles
+            </span>
+            <span>
+              <span className="font-bold text-amber">{c.reservado}</span> reservados
+            </span>
+            <span>
+              <span className="font-bold text-ink">{c.vendido}</span> vendidos
+            </span>
+            <span>
+              <span className="font-bold text-neifert">{c.baja}</span> en baja
+            </span>
+          </p>
         </div>
         <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
           Cargar vehículo
