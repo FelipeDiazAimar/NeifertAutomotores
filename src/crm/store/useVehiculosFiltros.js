@@ -9,7 +9,6 @@ export const FILTROS_VACIOS = {
   anioMax: '',
   precioMin: '',
   precioMax: '',
-  incluirArchivados: false,
 }
 
 const ORDEN_INICIAL = { campo: 'creado_en', dir: 'desc' }
@@ -37,7 +36,6 @@ export const useVehiculosFiltros = create((set) => ({
     if (f.condicion) n++
     if (f.anioMin || f.anioMax) n++
     if (f.precioMin || f.precioMax) n++
-    if (f.incluirArchivados) n++
     return n
   },
 }))

@@ -107,7 +107,7 @@ describe('peritajes.service.listarVehiculos', () => {
     ])
     const c = calls.find((x) => x.table === 'vehiculos')
     expect(c.select).toContain('peritajes(')
-    expect(c.filters).toEqual(expect.arrayContaining([['is', 'archivado_en', null]]))
+    expect(c.filters.some((f) => f[1] === 'archivado_en')).toBe(false)
   })
 
   it('filtra por estado derivado', async () => {

@@ -51,21 +51,6 @@ export function useVehiculoMutations() {
     onError: (e) => toast.error(e.message),
   })
 
-  const archivar = useMutation({
-    mutationFn: (id) => svc.archivar(id, autorId),
-    onSuccess: () => {
-      invalidar()
-      toast.success('Vehículo archivado.')
-    },
-    onError: (e) => toast.error(e.message),
-  })
-
-  const desarchivar = useMutation({
-    mutationFn: (id) => svc.desarchivar(id, autorId),
-    onSuccess: () => invalidar(),
-    onError: (e) => toast.error(e.message),
-  })
-
   const eliminar = useMutation({
     mutationFn: (id) => svc.eliminar(id),
     onSuccess: () => {
@@ -75,5 +60,5 @@ export function useVehiculoMutations() {
     onError: (e) => toast.error(e.message.includes('permission') ? 'Solo un administrador puede eliminar.' : e.message),
   })
 
-  return { crear, actualizar, cambiarEstado, archivar, desarchivar, eliminar }
+  return { crear, actualizar, cambiarEstado, eliminar }
 }

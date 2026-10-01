@@ -29,7 +29,7 @@ function fusionar(...listas) {
  *  existe (schema sin migrar) se usa solo lo derivado de los vehiculos. */
 export async function listar() {
   const [vehRes, catRes] = await Promise.all([
-    db().from('vehiculos').select(CAMPOS.join(',')).is('archivado_en', null),
+    db().from('vehiculos').select(CAMPOS.join(',')),
     db().from('opciones_campo').select('campo,valor'),
   ])
   if (vehRes.error) throw vehRes.error

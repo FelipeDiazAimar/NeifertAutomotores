@@ -39,7 +39,6 @@ export default function VehiculosListPage() {
 
   const opts = {
     busqueda, filtros, orden, pagina, pageSize: PAGE_SIZE,
-    incluirArchivados: filtros.incluirArchivados,
   }
   const { data, isLoading } = useVehiculos(opts)
   const filas = data?.filas ?? []

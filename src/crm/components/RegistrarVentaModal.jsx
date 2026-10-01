@@ -15,7 +15,6 @@ export default function RegistrarVentaModal({ clienteId, open, onClose }) {
   const { data, isLoading } = useVehiculos({
     filtros: { estado: ['disponible'] },
     pageSize: 200,
-    incluirArchivados: false,
   })
   const filtrados = useMemo(() => {
     const todos = data?.filas ?? []

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, ChevronDown, Archive, Trash2, Sparkles, Globe, BadgeCheck } from 'lucide-react'
+import { Pencil, ChevronDown, Trash2, Sparkles, Globe, BadgeCheck } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
@@ -38,7 +38,7 @@ function Dato({ k, children }) {
   )
 }
 
-export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar, onEliminar, puedeEliminar }) {
+export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onEliminar, puedeEliminar }) {
   const [confirmar, setConfirmar] = useState(false)
   const [editando, setEditando] = useState(false)
   const { actualizar } = useVehiculoMutations()
@@ -118,9 +118,6 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onArchivar
                   ))}
                 </DropdownMenuContent>
               </DropdownMenu>
-              <Button variant="ghost" icon={Archive} onClick={onArchivar} className="w-full sm:w-auto">
-                Archivar
-              </Button>
               <button
                 type="button"
                 onClick={() => actualizar.mutate({ id: v.id, data: { es_0km: !v.es_0km } })}

@@ -10,7 +10,7 @@ const vehiculo = { id: 'v1', marca: 'Toyota', modelo: 'Hilux', estado: 'disponib
 vi.mock('../hooks/useVehiculos.js', () => ({
   useVehiculo: () => ({ data: vehiculo, isLoading: false }),
   useVehiculoMutations: () => ({
-    cambiarEstado: { mutate: vi.fn() }, archivar: { mutate: vi.fn() }, eliminar: { mutate: vi.fn() },
+    cambiarEstado: { mutate: vi.fn() }, eliminar: { mutate: vi.fn() },
   }),
 }))
 const peritajesHolder = vi.hoisted(() => ({ data: [] }))

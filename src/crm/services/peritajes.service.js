@@ -4,7 +4,7 @@ import { registrar } from './eventos.service.js'
 
 const db = () => supabase.schema('crm')
 
-/** Para la sección dedicada: TODOS los vehículos no archivados con su peritaje
+/** Para la sección dedicada: TODOS los vehículos con su peritaje
  *  más reciente y el estado derivado (sin_iniciar / en_proceso / completo).
  *  `estado` filtra por ese estado; `busqueda` matchea marca/modelo/patente. */
 export async function listarVehiculos({ busqueda = '', estado } = {}) {
@@ -15,7 +15,6 @@ export async function listarVehiculos({ busqueda = '', estado } = {}) {
         'peritajes(id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
         'peritado_por_nombre, peritador:usuarios(nombre))',
     )
-    .is('archivado_en', null)
     .order('marca', { ascending: true })
     .order('fecha', { referencedTable: 'peritajes', ascending: false })
   if (error) throw error

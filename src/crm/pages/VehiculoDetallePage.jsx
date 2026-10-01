@@ -235,7 +235,7 @@ export default function VehiculoDetallePage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const { data: v, isLoading } = useVehiculo(id)
-  const { cambiarEstado, archivar, eliminar } = useVehiculoMutations()
+  const { cambiarEstado, eliminar } = useVehiculoMutations()
   const { esAdmin } = useCrmPerfil()
 
   const tab = TABS_VALIDOS.includes(params.get('tab')) ? params.get('tab') : 'resumen'
@@ -275,7 +275,6 @@ export default function VehiculoDetallePage() {
             vehiculo={v}
             puedeEliminar={esAdmin}
             onCambiarEstado={(e) => cambiarEstado.mutate({ id, de: v.estado, a: e })}
-            onArchivar={() => archivar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
             onEliminar={() => eliminar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
           />
         </TabsContent>

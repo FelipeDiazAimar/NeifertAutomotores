@@ -32,19 +32,19 @@ const wrap = (ui) => {
 
 describe('FichaVehiculo', () => {
   it('sin fotos muestra la patente como placeholder', () => {
-    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onArchivar={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
+    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
     expect(screen.getAllByText('AB123CD').length).toBeGreaterThan(0)
     expect(screen.getByText(/32\.000/)).toBeInTheDocument()
   })
 
   it('sin permiso no muestra Eliminar', () => {
-    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onArchivar={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
+    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
     expect(screen.queryByRole('button', { name: /eliminar/i })).not.toBeInTheDocument()
   })
 
   it('cambiar estado dispara el callback', async () => {
     const onCambiarEstado = vi.fn()
-    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={onCambiarEstado} onArchivar={vi.fn()} onEliminar={vi.fn()} puedeEliminar />)
+    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={onCambiarEstado} onEliminar={vi.fn()} puedeEliminar />)
     await userEvent.click(screen.getByRole('button', { name: /cambiar estado/i }))
     await userEvent.click(await screen.findByRole('menuitem', { name: /vendido/i }))
     expect(onCambiarEstado).toHaveBeenCalledWith('vendido')

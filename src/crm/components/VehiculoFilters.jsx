@@ -136,14 +136,6 @@ export default function VehiculoFilters() {
             </Chip>
           ))}
         </label>
-        <label className="flex items-center gap-2 text-xs text-ink-2">
-          <input
-            type="checkbox"
-            checked={filtros.incluirArchivados}
-            onChange={(e) => setFiltro('incluirArchivados', e.target.checked)}
-          />
-          Incluir archivados
-        </label>
       </div>
     </div>
   )

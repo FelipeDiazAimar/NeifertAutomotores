@@ -7,14 +7,14 @@ const BUSQUEDA_CAMPOS = ['marca', 'modelo', 'version', 'patente', 'duenio_nombre
 
 /** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, condicion
  *  ('cero' | 'usados' | ''), anioMin, anioMax, precioMin, precioMax }.
- *  `orden`: { campo, dir }. */
+ *  `orden`: { campo, dir }. Sin filtro de archivados: todo vehículo se ve
+ *  en la lista y se da de baja con estado='baja'. */
 export async function listar({
   busqueda = '',
   filtros = {},
   orden = { campo: 'creado_en', dir: 'desc' },
   pagina = 1,
   pageSize = 20,
-  incluirArchivados = false,
 } = {}) {
   let q = db()
     .from('vehiculos')
@@ -22,8 +22,6 @@ export async function listar({
       '*, fotos:vehiculo_fotos(url,es_portada), peritajes(items_ok,items_obs,items_falta,fecha), gestoria(estado)',
       { count: 'exact' },
     )
-
-  if (!incluirArchivados) q = q.is('archivado_en', null)
 
   const b = busqueda.trim()
   if (b) q = q.or(BUSQUEDA_CAMPOS.map((c) => `${c}.ilike.%${b}%`).join(','))
@@ -92,21 +90,6 @@ export async function cambiarEstado(id, estadoAnterior, estado, autorId) {
     entidad: 'vehiculo', entidadId: id, tipo: 'cambio_estado',
     datos: { de: estadoAnterior, a: estado }, usuarioId: autorId,
   })
-}
-
-export async function archivar(id, autorId) {
-  const { error } = await db()
-    .from('vehiculos')
-    .update({ archivado_en: new Date().toISOString(), editado_por: autorId })
-    .eq('id', id)
-  if (error) throw error
-  await registrar({ entidad: 'vehiculo', entidadId: id, tipo: 'archivado', datos: { archivado: true }, usuarioId: autorId })
-}
-
-export async function desarchivar(id, autorId) {
-  const { error } = await db().from('vehiculos').update({ archivado_en: null, editado_por: autorId }).eq('id', id)
-  if (error) throw error
-  await registrar({ entidad: 'vehiculo', entidadId: id, tipo: 'archivado', datos: { archivado: false }, usuarioId: autorId })
 }
 
 export async function eliminar(id) {

@@ -19,16 +19,16 @@ beforeEach(() => {
 })
 
 describe('listar', () => {
-  it('filtra archivados y pagina', async () => {
+  it('lista sin filtro de archivados y pagina', async () => {
     const { client, calls } = makeSupabase({ 'select:vehiculos': { data: [{ id: '1' }], error: null, count: 42 } })
     holder.client = client
     const r = await svc.listar({ pagina: 2, pageSize: 20 })
     expect(r).toEqual({ filas: [{ id: '1' }], total: 42 })
     const call = calls.find((c) => c.table === 'vehiculos')
     expect(call.filters).toEqual(expect.arrayContaining([
-      ['is', 'archivado_en', null],
       ['range', 20, 39],
     ]))
+    expect(call.filters.some((f) => f[1] === 'archivado_en')).toBe(false)
     // embebe peritaje + gestoría para las columnas de la tabla
     expect(call.select).toContain('peritajes(')
     expect(call.select).toContain('gestoria(')
@@ -67,16 +67,7 @@ describe('cambiarEstado', () => {
   })
 })
 
-describe('archivar / eliminar', () => {
-  it('archivar setea archivado_en no-null y registra evento', async () => {
-    const { client, calls } = makeSupabase({ 'update:vehiculos': { data: [{ id: 'v1' }], error: null } })
-    holder.client = client
-    await svc.archivar('v1', 'user-1')
-    const payload = calls.find((c) => c.table === 'vehiculos').payload
-    expect(payload.archivado_en).toBeTruthy()
-    expect(registrar).toHaveBeenCalledWith(expect.objectContaining({ tipo: 'archivado' }))
-  })
-
+describe('eliminar', () => {
   it('eliminar hace delete', async () => {
     const { client, calls } = makeSupabase({ 'delete:vehiculos': { data: [], error: null } })
     holder.client = client

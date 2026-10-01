@@ -14,11 +14,11 @@ export async function kpis() {
     db().from('clientes').select('id', { count: 'exact', head: true })
       .in('status', ['activo', 'en_seguimiento']).is('archivado_en', null),
     db().from('vehiculos').select('id', { count: 'exact', head: true })
-      .eq('estado', 'disponible').is('archivado_en', null),
+      .eq('estado', 'disponible'),
     db().from('tareas').select('id', { count: 'exact', head: true })
       .eq('done', false).is('archivado_en', null),
     db().from('vehiculos').select('precio_contado, moneda')
-      .eq('estado', 'disponible').is('archivado_en', null),
+      .eq('estado', 'disponible'),
     db().from('vehiculos').select('id', { count: 'exact', head: true })
       .eq('estado', 'vendido').gte('fecha_venta', primerDiaDelMes()),
   ])
@@ -76,7 +76,7 @@ export async function oportunidades() {
   const [veh, cli] = await Promise.all([
     db().from('vehiculos')
       .select('id, marca, modelo, version, tipo, anio, km, moneda, precio_contado, fotos:vehiculo_fotos(url,es_portada)')
-      .eq('estado', 'disponible').is('archivado_en', null),
+      .eq('estado', 'disponible'),
     db().from('clientes')
       .select('id, nombre, telefono, notas, marca_interes, modelo_interes, tipo_interes, anio_min, anio_max, presupuesto, intereses:cliente_intereses(marca,modelo)')
       .in('status', ['activo', 'en_seguimiento']).is('archivado_en', null),
