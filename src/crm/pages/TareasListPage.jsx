@@ -53,29 +53,28 @@ export default function TareasListPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <h1 className="font-display text-2xl font-bold text-ink">Tareas</h1>
-        <Button icon={Plus} onClick={() => setModal({ open: true, tarea: null })}>
-          Nueva tarea
-        </Button>
-      </div>
-
-      <div className="flex justify-end">
-        <button
-          type="button"
-          onClick={() => setMostrarFiltros((v) => !v)}
-          aria-expanded={mostrarFiltros}
-          className={cn(
-            'glass flex h-11 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors',
-            mostrarFiltros || filtrosActivos > 0 ? 'text-neifert' : 'text-ink-2 hover:text-ink',
-          )}
-        >
-          <SlidersHorizontal size={16} />
-          Filtros
-          {filtrosActivos > 0 && (
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
-              {filtrosActivos}
-            </span>
-          )}
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setMostrarFiltros((v) => !v)}
+            aria-expanded={mostrarFiltros}
+            className={cn(
+              'glass flex h-11 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors',
+              mostrarFiltros || filtrosActivos > 0 ? 'text-neifert' : 'text-ink-2 hover:text-ink',
+            )}
+          >
+            <SlidersHorizontal size={16} />
+            Filtros
+            {filtrosActivos > 0 && (
+              <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
+                {filtrosActivos}
+              </span>
+            )}
+          </button>
+          <Button icon={Plus} onClick={() => setModal({ open: true, tarea: null })}>
+            Nueva tarea
+          </Button>
+        </div>
       </div>
 
       {mostrarFiltros && <TareaFilters />}

@@ -1,5 +1,5 @@
 import { useNavigate } from 'react-router-dom'
-import { ChevronDown } from 'lucide-react'
+import { ChevronDown, UserRound } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import { lineaInteres, statusVariant, canalLabel } from '@/crm/lib/formatCliente'
 import {
@@ -31,7 +31,14 @@ export default function ClienteTable({ filas, onCambiarStatus }) {
               onClick={() => navigate(`/crm/clientes/${c.id}`)}
               className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface"
             >
-              <td className="px-4 py-3 font-semibold text-ink">{c.nombre}</td>
+              <td className="px-4 py-3">
+                <div className="flex items-center gap-3">
+                  <span className="grid h-9 w-9 shrink-0 place-items-center rounded-full bg-neifert/10 text-neifert">
+                    <UserRound size={17} />
+                  </span>
+                  <span className="font-semibold text-ink">{c.nombre}</span>
+                </div>
+              </td>
               <td className="px-4 py-3 text-ink-2">{c.telefono || '—'}</td>
               <td className="px-4 py-3 text-ink-2">{c.localidad || '—'}</td>
               <td className="px-4 py-3 text-ink-2">{lineaInteres(c)}</td>

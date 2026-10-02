@@ -2,6 +2,7 @@ import { Filter, X } from 'lucide-react'
 import Button from '@/components/common/Button'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import { cn } from '@/lib/cn'
+import { formatMiles, parseMiles } from '@/lib/numberMask'
 
 const ESTADOS = [
   { id: 'disponible', label: 'Disponible' },
@@ -62,6 +63,21 @@ export default function VehiculoFilters() {
       </div>
 
       <div>
+        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Condición</p>
+        <div className="flex flex-wrap gap-1.5">
+          {[
+            { id: '', label: 'Todos' },
+            { id: 'cero', label: '0 km' },
+            { id: 'usados', label: 'Usados' },
+          ].map((c) => (
+            <Chip key={c.id || 'todos'} activo={filtros.condicion === c.id} onClick={() => setFiltro('condicion', c.id)}>
+              {c.label}
+            </Chip>
+          ))}
+        </div>
+      </div>
+
+      <div>
         <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Tipo</p>
         <div className="flex flex-wrap gap-1.5">
           {TIPOS.map((t) => (
@@ -94,18 +110,18 @@ export default function VehiculoFilters() {
         <label className="text-xs text-ink-3">
           Precio desde
           <input
-            type="number"
-            value={filtros.precioMin}
-            onChange={(e) => setFiltro('precioMin', e.target.value)}
+            inputMode="numeric"
+            value={formatMiles(filtros.precioMin)}
+            onChange={(e) => setFiltro('precioMin', parseMiles(e.target.value))}
             className="glass field-glass mt-1 h-10 w-full rounded-2xl px-3 text-sm text-ink outline-none"
           />
         </label>
         <label className="text-xs text-ink-3">
           Precio hasta
           <input
-            type="number"
-            value={filtros.precioMax}
-            onChange={(e) => setFiltro('precioMax', e.target.value)}
+            inputMode="numeric"
+            value={formatMiles(filtros.precioMax)}
+            onChange={(e) => setFiltro('precioMax', parseMiles(e.target.value))}
             className="glass field-glass mt-1 h-10 w-full rounded-2xl px-3 text-sm text-ink outline-none"
           />
         </label>
@@ -119,14 +135,6 @@ export default function VehiculoFilters() {
               {m || 'Todas'}
             </Chip>
           ))}
-        </label>
-        <label className="flex items-center gap-2 text-xs text-ink-2">
-          <input
-            type="checkbox"
-            checked={filtros.incluirArchivados}
-            onChange={(e) => setFiltro('incluirArchivados', e.target.checked)}
-          />
-          Incluir archivados
         </label>
       </div>
     </div>

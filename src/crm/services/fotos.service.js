@@ -1,4 +1,5 @@
 import { supabase } from '@/services/supabaseClient'
+import { deleteMedia } from '@/services/media.service'
 
 const db = () => supabase.schema('crm')
 
@@ -46,9 +47,32 @@ export async function subir(vehiculoId, file, autorId) {
   return data[0]
 }
 
-export async function borrar(id) {
+/** Sube un único archivo a R2 (sin insertar fila en vehiculo_fotos) y
+ *  devuelve su URL pública. Para slots de foto individuales (seguro, título). */
+export async function subirArchivoUnico(carpeta, file) {
+  const nombre = `${carpeta}/${Date.now()}-${file.name.replace(/[^\w.-]/g, '_')}`
+
+  const pre = await fetch('/api/r2/presign', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename: nombre, contentType: file.type }),
+  })
+  const json = await pre.json()
+  if (!json?.ok) throw new Error(json?.error || 'No se pudo preparar la subida.')
+
+  const put = await fetch(json.uploadUrl, {
+    method: 'PUT',
+    headers: { 'Content-Type': file.type || 'application/octet-stream' },
+    body: file,
+  })
+  if (!put.ok) throw new Error('Falló la subida del archivo.')
+  return json.publicUrl
+}
+
+export async function borrar(id, url) {
   const { error } = await db().from('vehiculo_fotos').delete().eq('id', id)
   if (error) throw error
+  if (url) deleteMedia(url).catch((e) => console.warn('[fotos] no se pudo borrar en R2', url, e.message))
 }
 
 export async function marcarPortada(vehiculoId, id) {

@@ -18,6 +18,7 @@ import GlassCard from '@/components/common/GlassCard'
 import Spinner from '@/components/common/Spinner'
 import VehicleGallery from '@/components/catalog/VehicleGallery'
 import RelatedVehicles from '@/components/catalog/RelatedVehicles'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 const STATUS_LABEL = { reservado: 'Reservado', vendido: 'Vendido' }
 
@@ -35,9 +36,12 @@ function SpecCard({ icon: Icon, label, value }) {
   )
 }
 
-export default function VehicleDetailPage() {
+export default function VehicleDetailPage({ variant = 'usados' }) {
   const { id } = useParams()
   const { data: v, isLoading } = useVehicle(id)
+  // Base de la sección de origen: /catalogo (usados) o /catalogo-0km.
+  const basePath = variant === 'cero' ? '/catalogo-0km' : '/catalogo'
+  const condition = variant === 'cero' ? 'cero' : 'usados'
   const phone = useSiteStore((s) => s.socials.whatsappPhone)
   const sourceRef = useRef('Directo')
   const isLarge = useIsLarge()
@@ -63,7 +67,7 @@ export default function VehicleDetailPage() {
     return (
       <div className="mx-auto max-w-3xl px-4 py-24 text-center">
         <p className="text-ink-2">No encontramos esta unidad.</p>
-        <Link to="/catalogo" className="mt-4 inline-block">
+        <Link to={basePath} className="mt-4 inline-block">
           <Button variant="glass" icon={ArrowLeft}>
             Volver al catálogo
           </Button>
@@ -85,7 +89,7 @@ export default function VehicleDetailPage() {
     trackShareClick({ kind: 'vehicle', id: v.id, source: sourceRef.current })
     trackEvent(v.id, 'compartir', sourceRef.current)
     shareOrCopy({
-      url: `/catalogo/${v.id}?ref=share`,
+      url: `${basePath}/${v.id}?ref=share`,
       title: `${v.brand} ${v.model} — Neifert Automotores`,
       text: `Mirá este ${v.brand} ${v.model} ${v.year} en Neifert Automotores.`,
     })
@@ -94,7 +98,7 @@ export default function VehicleDetailPage() {
   return (
     <section className="mx-auto max-w-6xl px-4 py-10 md:px-8">
       <Link
-        to="/catalogo"
+        to={basePath}
         className="inline-flex items-center gap-2 text-sm text-ink-2 transition-colors hover:text-neifert"
       >
         <ArrowLeft size={16} /> Volver al catálogo
@@ -109,16 +113,18 @@ export default function VehicleDetailPage() {
             width: isLarge ? (galleryWide ? '58%' : '50%') : '100%',
           }}
           transition={{ duration: 0.5, width: { duration: 0.8, ease: EASE } }}
-          className="relative w-full lg:shrink-0"
+          className="relative w-full overflow-hidden rounded-[24px] lg:shrink-0"
         >
           <div className={available ? '' : 'opacity-90 grayscale-[35%]'}>
             <VehicleGallery
               images={gallery}
               alt={`${v.brand} ${v.model}`}
               isNew={v.is_new}
+              isZeroKm={v.is_zero_km}
               onActiveWideChange={setGalleryWide}
             />
           </div>
+          {v.status === 'vendido' && <SoldRibbon large />}
           {!available && (
             <span className="absolute left-4 top-4 z-20 rounded-full bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-bg shadow-glass">
               {statusLabel}
@@ -198,7 +204,7 @@ export default function VehicleDetailPage() {
         </motion.div>
       </div>
 
-      <RelatedVehicles current={v} />
+      <RelatedVehicles current={v} condition={condition} basePath={basePath} />
     </section>
   )
 }

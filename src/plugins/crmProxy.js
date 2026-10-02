@@ -1,10 +1,8 @@
 import {
-  crmLogin,
   fetchExtVehiculos,
   createExtLead,
   fetchExtWebLeads,
   fetchCrmClientes,
-  bridgeCrmSession,
 } from '../server/crmCore.js'
 
 /**
@@ -16,9 +14,6 @@ import {
  * GET  /api/crm/leads          → leads que empujamos nosotros (verificación)
  * POST /api/crm/leads          → empuja un lead nuevo del sitio
  * GET  /api/crm/clientes       → cartera completa (panel interno, login de empleado)
- * POST /api/crm/login          → valida usuario/contraseña contra el login real
- * POST /api/crm/bridge-session → crea/encuentra la cuenta puente en Supabase
- *                                 Auth y devuelve un token de un solo uso
  */
 
 function readJsonBody(req) {
@@ -44,8 +39,6 @@ function sendJson(res, status, payload) {
 }
 
 export function crmProxyPlugin({
-  supabaseUrl,
-  supabaseServiceRoleKey,
   crmExtApiToken,
   crmSyncUser,
   crmSyncPass,
@@ -87,7 +80,7 @@ export function crmProxyPlugin({
       })
 
       server.middlewares.use('/api/crm/seed-usuarios', async (req, res) => {
-        const { handleSeedUsuarios } = await import('../../api/crm/seed-usuarios.js')
+        const { handleSeedUsuarios } = await import('../server/seedUsuarios.js')
         const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
         const shim = {
           setHeader: (k, v) => res.setHeader(k, v),
@@ -120,6 +113,23 @@ export function crmProxyPlugin({
           end: (b) => res.end(b),
         }
         await handleUsuarios({ ...req, body }, shim)
+      })
+
+      server.middlewares.use('/api/crm/check-alertas', async (req, res) => {
+        const { handleCheckAlertas } = await import('../../api/crm/check-alertas.js')
+        const shim = {
+          setHeader: (k, v) => res.setHeader(k, v),
+          status: (c) => {
+            res.statusCode = c
+            return shim
+          },
+          json: (b) => {
+            res.setHeader('Content-Type', 'application/json')
+            res.end(JSON.stringify(b))
+          },
+          end: (b) => res.end(b),
+        }
+        await handleCheckAlertas(req, shim)
       })
 
       server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
@@ -165,29 +175,6 @@ export function crmProxyPlugin({
         sendJson(res, 405, { ok: false, error: 'Method not allowed' })
       })
 
-      server.middlewares.use('/api/crm/login', async (req, res) => {
-        if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' })
-        try {
-          const { user, pass } = await readJsonBody(req)
-          const { status, json } = await crmLogin(user, pass)
-          sendJson(res, status, json)
-        } catch (e) {
-          console.error('[crm-proxy] login:', e.message)
-          sendJson(res, 502, { ok: false, error: 'Error de conexión con el CRM.' })
-        }
-      })
-
-      server.middlewares.use('/api/crm/bridge-session', async (req, res) => {
-        if (req.method !== 'POST') return sendJson(res, 405, { ok: false, error: 'Method not allowed' })
-        try {
-          const { user, nombre, role } = await readJsonBody(req)
-          const result = await bridgeCrmSession({ supabaseUrl, supabaseServiceRoleKey, user, nombre, role })
-          sendJson(res, 200, { ok: true, ...result })
-        } catch (e) {
-          console.error('[crm-proxy] bridge-session:', e.message)
-          sendJson(res, 500, { ok: false, error: e.message })
-        }
-      })
     },
   }
 }

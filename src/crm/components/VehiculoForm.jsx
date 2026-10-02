@@ -2,6 +2,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
+import MilesInput from '@/components/common/MilesInput'
 import Select from '@/components/common/Select'
 import Combobox from '@/crm/components/Combobox'
 import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
@@ -11,6 +12,8 @@ import { vehiculoSchema } from '@/crm/lib/vehiculoSchema'
 // Semilla para "Tipo" — se fusiona con lo que ya haya cargado.
 const TIPOS = ['Pickup', 'Sedan', 'SUV', 'Hatchback', 'Utilitario', 'Coupé', 'Familiar', 'Otro']
 const TRANS = ['manual', 'automático']
+const CATEGORIAS = ['sedan', 'suv', 'pickup', 'hatchback', 'utilitario', 'coupe', 'familiar']
+const COMBUSTIBLES = ['Nafta', 'Diésel', 'GNC', 'Híbrido', 'Eléctrico']
 const opt = (arr) => arr.map((x) => ({ id: x, label: x }))
 
 /** Fusiona una semilla con la lista guardada, dedup sin distinguir mayúsculas. */
@@ -97,7 +100,7 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
         <CampoCombo control={control} name="version" label="Versión" options={opciones.version ?? []} />
         <CampoCombo control={control} name="tipo" label="Tipo" options={opcionesTipo} />
         <Input label="Año" type="number" {...register('anio')} error={errors.anio?.message} />
-        <Input label="Km" type="number" {...register('km')} error={errors.km?.message} />
+        <MilesInput control={control} name="km" label="Km" />
         <Controller
           control={control} name="transmision"
           render={({ field }) => (
@@ -120,8 +123,8 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
           )}
         />
         <span />
-        <Input label="Precio contado" type="number" {...register('precio_contado')} error={errors.precio_contado?.message} />
-        <Input label="Precio en canje" type="number" {...register('precio_canje')} error={errors.precio_canje?.message} />
+        <MilesInput control={control} name="precio_contado" label="Precio contado" />
+        <MilesInput control={control} name="precio_canje" label="Precio en canje" />
       </Seccion>
 
       <Seccion titulo="Dueño">
@@ -156,6 +159,24 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
       <Seccion titulo="Nota">
         <div className="sm:col-span-2">
           <Input as="textarea" {...register('nota')} />
+        </div>
+      </Seccion>
+
+      <Seccion titulo="Publicación en la web">
+        <Controller
+          control={control} name="categoria"
+          render={({ field }) => (
+            <Select label="Categoría" options={opt(CATEGORIAS)} value={field.value ?? ''} onChange={field.onChange} />
+          )}
+        />
+        <Controller
+          control={control} name="combustible"
+          render={({ field }) => (
+            <Select label="Combustible" options={opt(COMBUSTIBLES)} value={field.value ?? ''} onChange={field.onChange} />
+          )}
+        />
+        <div className="sm:col-span-2">
+          <Input as="textarea" label="Descripción (para la web)" {...register('descripcion')} />
         </div>
       </Seccion>
 

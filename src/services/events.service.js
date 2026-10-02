@@ -12,6 +12,22 @@ export async function trackEvent(vehiculoId, tipo, origen = 'Directo') {
   if (error) console.error('[eventos_vehiculo] insert falló:', error.message)
 }
 
+/** Vistas/consultas/tasa de conversión de un solo vehículo (ficha del CRM). */
+export async function fetchVehicleStats(vehiculoId) {
+  if (!isSupabaseConfigured || !vehiculoId) return { views: 0, conversions: 0, rate: 0 }
+  const { data, error } = await supabase
+    .from('eventos_vehiculo')
+    .select('tipo')
+    .eq('vehiculo_id', vehiculoId)
+  if (error) {
+    console.error('[eventos_vehiculo] fetchVehicleStats falló:', error.message)
+    return { views: 0, conversions: 0, rate: 0 }
+  }
+  const views = data.filter((e) => e.tipo === 'vista').length
+  const conversions = data.filter((e) => e.tipo === 'consulta').length
+  return { views, conversions, rate: views > 0 ? (conversions / views) * 100 : 0 }
+}
+
 const EMPTY_COUNTS = { views: 0, conversions: 0, sales: 0 }
 const KEY_BY_TIPO = { vista: 'views', consulta: 'conversions', venta: 'sales' }
 const DAY = 86_400_000

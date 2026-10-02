@@ -8,7 +8,7 @@
 - **TanStack Query** for remote data (vehicles, leads)
 - **Framer Motion** + **Lenis** for animations/scroll
 - **React Router v7** with `lazy()` code-splitting per page
-- No test framework (no `test` script, no test files)
+- **Vitest + Testing Library** (`npm test` → `vitest run`, jsdom) for unit/integration tests
 
 ## Commands
 
@@ -105,6 +105,12 @@ All in `src/plugins/`: `instagramProxy`, `crmProxy`, `r2Proxy`, `usersProxy`, `i
 | `CRM_EXT_API_TOKEN` | No | CRM viejo: API pública (stock + leads) |
 | `CRM_SYNC_*` | No | CRM viejo: panel interno (cartera completa de clientes) |
 | `INSTAGRAM_AGENT_TOKEN` | No | Instagram sync |
+| `CRON_SECRET` | Sí (prod) | Auth del cron `api/crm/check-alertas` (`Authorization: Bearer`) |
+| `SEED_SECRET` | No (cae a `CRON_SECRET`) | Script `scripts/seed-crm-usuarios.mjs` |
+| `RESEND_API_KEY` | Sí (prod, alertas) | Emails de alertas vía Resend (solo servidor) |
+| `VITE_VAPID_PUBLIC_KEY` | Sí (prod, alertas) | Web Push (la usa el frontend para suscribirse) |
+| `VAPID_PRIVATE_KEY` | Sí (prod, alertas) | Web Push (solo servidor) |
+| `VAPID_SUBJECT` | Sí (prod, alertas) | Web Push (`mailto:alertas@neifertautomotores.com`) |
 
 `loadEnv(mode, cwd, '')` in vite.config.js loads ALL env vars (not just `VITE_` prefix) so proxies can use service-role keys.
 

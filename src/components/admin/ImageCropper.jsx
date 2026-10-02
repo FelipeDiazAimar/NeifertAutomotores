@@ -27,6 +27,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspec
   useEffect(() => {
     const next = file || null
     setActiveFile(next)
+    setWorking(false)
     if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null }
     if (next) { urlRef.current = URL.createObjectURL(next); setPreview(urlRef.current) }
     else setPreview(null)
@@ -156,6 +157,7 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspec
         sizeMB: +(cropped.size / 1048576).toFixed(2),
       })
       onConfirm(cropped)
+      setWorking(false)
     } catch (error) {
       console.error('[IMG] cropper.confirm: ERROR recortando', error?.message, error)
       toast.error(error.message || 'No se pudo recortar la imagen')

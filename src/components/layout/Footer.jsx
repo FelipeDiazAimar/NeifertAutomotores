@@ -135,7 +135,7 @@ export default function Footer() {
         <div className="mt-12 flex flex-col items-center gap-3 pb-4 text-center sm:flex-row sm:justify-between sm:text-left">
           <p className="text-xs text-ink-3">{footer.copyright}</p>
           <Link
-            to="/login"
+            to="/crm/login"
             className="text-xs text-ink-3 transition-colors hover:text-neifert"
           >
             Acceso admin

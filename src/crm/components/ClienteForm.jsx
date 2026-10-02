@@ -2,6 +2,7 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
+import MilesInput from '@/components/common/MilesInput'
 import Select from '@/components/common/Select'
 import { clienteSchema } from '@/crm/lib/clienteSchema'
 import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
@@ -59,7 +60,7 @@ export default function ClienteForm({ inicial, onGuardar, guardando }) {
         />
         <Input label="Año desde" type="number" {...register('anio_min')} error={errors.anio_min?.message} />
         <Input label="Año hasta" type="number" {...register('anio_max')} error={errors.anio_max?.message} />
-        <Input label="Presupuesto" type="number" {...register('presupuesto')} error={errors.presupuesto?.message} />
+        <MilesInput control={control} name="presupuesto" label="Presupuesto" />
         <label className="flex items-center gap-2 text-sm text-ink-2">
           <input type="checkbox" {...register('interes_cero_km')} />
           Le interesa 0 km

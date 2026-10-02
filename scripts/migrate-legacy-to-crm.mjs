@@ -1,6 +1,13 @@
-// Migra crm_legacy -> crm. Uso: node --env-file=.env scripts/migrate-legacy-to-crm.mjs
-// Requiere: crm_schema.sql + crm_migracion.sql aplicados, crm_legacy poblado,
-// y los usuarios seedeados (scripts/seed-crm-usuarios.mjs).
+// Migra/re-sincroniza crm_legacy -> crm (vehículos, gestoría, clientes,
+// peritajes). Idempotente por id_legacy — correrlo de nuevo actualiza lo que
+// cambió en crm_legacy desde la última vez (OJO: pisa precio/estado/notas de
+// vehículos y clientes migrados con lo que haya en crm_legacy en ese momento;
+// no toca filas cargadas directamente en el CRM nuevo, que tienen id_legacy
+// null). Conviene correr scripts/backup-crm-before-resync.mjs antes.
+// Uso: node --env-file=.env scripts/migrate-legacy-to-crm.mjs
+// Requiere: crm_schema.sql + crm_migracion.sql + crm_clientes_migracion.sql
+// aplicados, crm_legacy poblado, y los usuarios seedeados
+// (scripts/seed-crm-usuarios.mjs).
 import { createClient } from '@supabase/supabase-js'
 import { resumenPeritaje } from '../src/crm/lib/mapeos.js'
 
@@ -14,9 +21,17 @@ if (rpcErr) {
   console.error('migrar_desde_legacy():', rpcErr.message)
   process.exit(1)
 }
-console.log('SQL:', JSON.stringify(sqlRes))
+console.log('vehiculos/gestoria:', JSON.stringify(sqlRes))
 
-// 2) peritajes (JS — el resumen se calcula acá)
+// 2) clientes (+ intereses, autos en entrega)
+const { data: clientesRes, error: clientesErr } = await admin.schema('crm').rpc('migrar_clientes_desde_legacy')
+if (clientesErr) {
+  console.error('migrar_clientes_desde_legacy():', clientesErr.message)
+  process.exit(1)
+}
+console.log('clientes:', JSON.stringify(clientesRes))
+
+// 3) peritajes (JS — el resumen se calcula acá)
 const { data: legacyPer, error: perErr } = await admin.schema('crm_legacy').from('peritajes').select('*')
 if (perErr) {
   console.error('leer crm_legacy.peritajes:', perErr.message)
@@ -52,8 +67,8 @@ for (const p of legacyPer ?? []) {
   else ok++
 }
 
-// 3) conteos finales
-for (const t of ['usuarios', 'vehiculos', 'gestoria', 'peritajes']) {
+// 4) conteos finales
+for (const t of ['usuarios', 'vehiculos', 'clientes', 'gestoria', 'peritajes']) {
   const { count } = await admin.schema('crm').from(t).select('*', { count: 'exact', head: true })
   console.log(`crm.${t} =`, count)
 }

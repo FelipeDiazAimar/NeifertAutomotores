@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest'
-import { handleSeedUsuarios } from '../../../api/crm/seed-usuarios.js'
+import { handleSeedUsuarios } from '../../server/seedUsuarios.js'
 
 function mockRes() {
   return {

@@ -19,6 +19,16 @@ export function useVehiculo(id) {
   })
 }
 
+/** Recuento por estado para el encabezado de la lista. Se invalida junto
+ *  con ['crm', 'vehiculos'] en cada mutación. */
+export function useConteoVehiculos({ busqueda = '', filtros = {} } = {}) {
+  return useQuery({
+    queryKey: ['crm', 'vehiculos', 'conteo', { busqueda, filtros }],
+    queryFn: () => svc.contarPorEstado({ busqueda, filtros }),
+    keepPreviousData: true,
+  })
+}
+
 export function useVehiculoMutations() {
   const qc = useQueryClient()
   const { id: autorId } = useCrmPerfil()
@@ -51,21 +61,6 @@ export function useVehiculoMutations() {
     onError: (e) => toast.error(e.message),
   })
 
-  const archivar = useMutation({
-    mutationFn: (id) => svc.archivar(id, autorId),
-    onSuccess: () => {
-      invalidar()
-      toast.success('Vehículo archivado.')
-    },
-    onError: (e) => toast.error(e.message),
-  })
-
-  const desarchivar = useMutation({
-    mutationFn: (id) => svc.desarchivar(id, autorId),
-    onSuccess: () => invalidar(),
-    onError: (e) => toast.error(e.message),
-  })
-
   const eliminar = useMutation({
     mutationFn: (id) => svc.eliminar(id),
     onSuccess: () => {
@@ -75,5 +70,5 @@ export function useVehiculoMutations() {
     onError: (e) => toast.error(e.message.includes('permission') ? 'Solo un administrador puede eliminar.' : e.message),
   })
 
-  return { crear, actualizar, cambiarEstado, archivar, desarchivar, eliminar }
+  return { crear, actualizar, cambiarEstado, eliminar }
 }

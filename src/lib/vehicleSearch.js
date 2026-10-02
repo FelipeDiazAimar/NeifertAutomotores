@@ -23,7 +23,7 @@ const tokenize = (text) =>
  *  de compararla semánticamente (TF-IDF) contra cada vehículo. */
 const INTENTS = [
   { words: ['barato', 'economico', 'accesible'], concepts: [], score: (v, ctx) => (v.price_usd <= ctx.priceMid ? 2 : 0) },
-  { words: ['nuevo', '0km', 'okm', 'cero'], concepts: ['nuevo'], score: (v) => (v.km === 0 || v.is_new ? 2 : 0) },
+  { words: ['nuevo', '0km', 'okm', 'cero'], concepts: ['nuevo'], score: (v) => (v.km === 0 || v.is_new || v.is_zero_km ? 2 : 0) },
   { words: ['usado'], concepts: [], score: (v) => (v.km > 0 ? 1 : 0) },
   { words: ['electrico', 'ev', 'enchufable'], concepts: ['electrico'], score: (v) => (v.fuel_type === 'Eléctrico' ? 3 : 0) },
   { words: ['hibrido'], concepts: ['hibrido'], score: (v) => (v.fuel_type === 'Híbrido' ? 3 : 0) },
@@ -105,7 +105,7 @@ function parseYearRange(qNorm) {
 function haystackParts(v, catLabel) {
   const primary = norm([v.brand, v.model].filter(Boolean).join(' '))
   const secondary = norm(
-    [v.fuel_type, v.transmission, v.engine, v.category, catLabel[v.category], v.year, STATUS_WORDS[v.status] || v.status, v.is_new ? 'nuevo' : '']
+    [v.fuel_type, v.transmission, v.engine, v.category, catLabel[v.category], v.year, STATUS_WORDS[v.status] || v.status, v.is_new ? 'nuevo' : '', v.is_zero_km ? '0km cero' : '']
       .filter((x) => x !== null && x !== undefined && x !== '')
       .join(' ')
   )

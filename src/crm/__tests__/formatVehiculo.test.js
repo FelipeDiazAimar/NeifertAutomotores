@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { lineaSpecs, precioFmt, estadoVariant } from '../lib/formatVehiculo.js'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '../lib/formatVehiculo.js'
 
 describe('lineaSpecs', () => {
   it('junta año, km y transmisión presentes', () => {
@@ -26,5 +26,14 @@ describe('estadoVariant', () => {
     expect(estadoVariant('reservado')).toBe('amber')
     expect(estadoVariant('vendido')).toBe('neutral')
     expect(estadoVariant('baja')).toBe('red')
+  })
+})
+
+describe('estadoLabel', () => {
+  it('muestra los estados con mayúscula inicial', () => {
+    expect(estadoLabel('disponible')).toBe('Disponible')
+    expect(estadoLabel('reservado')).toBe('Reservado')
+    expect(estadoLabel('vendido')).toBe('Vendido')
+    expect(estadoLabel('baja')).toBe('Baja')
   })
 })

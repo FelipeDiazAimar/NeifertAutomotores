@@ -4,18 +4,17 @@ import { registrar } from './eventos.service.js'
 
 const db = () => supabase.schema('crm')
 
-/** Para la sección dedicada: TODOS los vehículos no archivados con su peritaje
+/** Para la sección dedicada: TODOS los vehículos con su peritaje
  *  más reciente y el estado derivado (sin_iniciar / en_proceso / completo).
  *  `estado` filtra por ese estado; `busqueda` matchea marca/modelo/patente. */
 export async function listarVehiculos({ busqueda = '', estado } = {}) {
   const { data, error } = await db()
     .from('vehiculos')
     .select(
-      'id, marca, modelo, patente, estado, ' +
+      'id, marca, modelo, patente, estado, tipo, fotos:vehiculo_fotos(url,es_portada), ' +
         'peritajes(id, fecha, costo_total, items_ok, items_obs, items_falta, ' +
         'peritado_por_nombre, peritador:usuarios(nombre))',
     )
-    .is('archivado_en', null)
     .order('marca', { ascending: true })
     .order('fecha', { referencedTable: 'peritajes', ascending: false })
   if (error) throw error
@@ -23,7 +22,7 @@ export async function listarVehiculos({ busqueda = '', estado } = {}) {
   let filas = (data ?? []).map((v) => {
     const ultimo = v.peritajes?.[0] ?? null
     return {
-      vehiculo: { id: v.id, marca: v.marca, modelo: v.modelo, patente: v.patente, estado: v.estado },
+      vehiculo: { id: v.id, marca: v.marca, modelo: v.modelo, patente: v.patente, estado: v.estado, tipo: v.tipo, fotos: v.fotos },
       peritaje: ultimo,
       cantidad: v.peritajes?.length ?? 0,
       estadoPeritaje: estadoPeritaje(ultimo),
@@ -65,7 +64,16 @@ export async function obtener(id) {
   return data
 }
 
+/** Rige UN peritaje por vehículo: si ya existe, se edita en vez de crear otro. */
 export async function crear({ vehiculoId, datos, fecha, resena, costo_total, peritadoPor }) {
+  const { data: existentes, error: errExisten } = await db()
+    .from('peritajes')
+    .select('id')
+    .eq('vehiculo_id', vehiculoId)
+    .limit(1)
+  if (errExisten) throw errExisten
+  if (existentes?.length) throw new Error('Este vehículo ya tiene un peritaje. Editalo en vez de crear otro.')
+
   const r = resumenPeritaje(datos)
   const { data, error } = await db()
     .from('peritajes')
@@ -85,6 +93,16 @@ export async function crear({ vehiculoId, datos, fecha, resena, costo_total, per
     datos: { peritaje_id: data[0].id, resumen: r }, usuarioId: peritadoPor,
   })
   return data[0]
+}
+
+/** Elimina un peritaje (duplicados legacy). El delete en la DB es solo admin. */
+export async function eliminar(id, vehiculoId, autorId) {
+  const { error } = await db().from('peritajes').delete().eq('id', id)
+  if (error) throw error
+  await registrar({
+    entidad: 'vehiculo', entidadId: vehiculoId, tipo: 'peritaje',
+    datos: { peritaje_id: id, eliminado: true }, usuarioId: autorId,
+  })
 }
 
 export async function actualizar(id, { vehiculoId, datos, fecha, resena, costo_total, peritadoPor }) {

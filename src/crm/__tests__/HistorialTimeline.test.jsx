@@ -10,8 +10,8 @@ vi.mock('../hooks/useEventos.js', () => ({ useEventos: () => mockUse() }))
 describe('textoEvento', () => {
   it('cambio_estado incluye de y a', () => {
     const t = textoEvento({ tipo: 'cambio_estado', datos: { de: 'disponible', a: 'reservado' }, usuario: { nombre: 'Bruno' } })
-    expect(t).toContain('disponible')
-    expect(t).toContain('reservado')
+    expect(t).toContain('Disponible')
+    expect(t).toContain('Reservado')
     expect(t).toContain('Bruno')
   })
 })

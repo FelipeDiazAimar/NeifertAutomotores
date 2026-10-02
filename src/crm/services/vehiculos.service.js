@@ -5,15 +5,16 @@ const db = () => supabase.schema('crm')
 
 const BUSQUEDA_CAMPOS = ['marca', 'modelo', 'version', 'patente', 'duenio_nombre', 'duenio_apellido']
 
-/** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, anioMin,
- *  anioMax, precioMin, precioMax }. `orden`: { campo, dir }. */
+/** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, condicion
+ *  ('cero' | 'usados' | ''), anioMin, anioMax, precioMin, precioMax }.
+ *  `orden`: { campo, dir }. Sin filtro de archivados: todo vehículo se ve
+ *  en la lista y se da de baja con estado='baja'. */
 export async function listar({
   busqueda = '',
   filtros = {},
   orden = { campo: 'creado_en', dir: 'desc' },
   pagina = 1,
   pageSize = 20,
-  incluirArchivados = false,
 } = {}) {
   let q = db()
     .from('vehiculos')
@@ -22,14 +23,14 @@ export async function listar({
       { count: 'exact' },
     )
 
-  if (!incluirArchivados) q = q.is('archivado_en', null)
-
   const b = busqueda.trim()
   if (b) q = q.or(BUSQUEDA_CAMPOS.map((c) => `${c}.ilike.%${b}%`).join(','))
 
   if (filtros.estado?.length) q = q.in('estado', filtros.estado)
   if (filtros.tipo?.length) q = q.in('tipo', filtros.tipo)
   if (filtros.moneda) q = q.eq('moneda', filtros.moneda)
+  if (filtros.condicion === 'cero') q = q.eq('es_0km', true)
+  else if (filtros.condicion === 'usados') q = q.or('es_0km.is.false,es_0km.is.null')
   if (filtros.anioMin != null && filtros.anioMin !== '') q = q.gte('anio', Number(filtros.anioMin))
   if (filtros.anioMax != null && filtros.anioMax !== '') q = q.lte('anio', Number(filtros.anioMax))
   if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
@@ -45,6 +46,33 @@ export async function listar({
   const { data, error, count } = await q
   if (error) throw error
   return { filas: data ?? [], total: count ?? 0 }
+}
+
+/** Recuento por estado para el encabezado de la lista. Aplica la misma
+ *  búsqueda y filtros que `listar`, salvo el propio filtro de estado (para
+ *  que los números sean estables al filtrar por estado). */
+export async function contarPorEstado({ busqueda = '', filtros = {} } = {}) {
+  let q = db().from('vehiculos').select('estado')
+
+  const b = busqueda.trim()
+  if (b) q = q.or(BUSQUEDA_CAMPOS.map((c) => `${c}.ilike.%${b}%`).join(','))
+
+  if (filtros.tipo?.length) q = q.in('tipo', filtros.tipo)
+  if (filtros.moneda) q = q.eq('moneda', filtros.moneda)
+  if (filtros.condicion === 'cero') q = q.eq('es_0km', true)
+  else if (filtros.condicion === 'usados') q = q.or('es_0km.is.false,es_0km.is.null')
+  if (filtros.anioMin != null && filtros.anioMin !== '') q = q.gte('anio', Number(filtros.anioMin))
+  if (filtros.anioMax != null && filtros.anioMax !== '') q = q.lte('anio', Number(filtros.anioMax))
+  if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
+  if (filtros.precioMax != null && filtros.precioMax !== '') q = q.lte('precio_contado', Number(filtros.precioMax))
+
+  const { data, error } = await q
+  if (error) throw error
+  const conteo = { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
+  for (const f of data ?? []) {
+    if (f.estado in conteo) conteo[f.estado]++
+  }
+  return conteo
 }
 
 export async function obtener(id) {
@@ -89,21 +117,6 @@ export async function cambiarEstado(id, estadoAnterior, estado, autorId) {
     entidad: 'vehiculo', entidadId: id, tipo: 'cambio_estado',
     datos: { de: estadoAnterior, a: estado }, usuarioId: autorId,
   })
-}
-
-export async function archivar(id, autorId) {
-  const { error } = await db()
-    .from('vehiculos')
-    .update({ archivado_en: new Date().toISOString(), editado_por: autorId })
-    .eq('id', id)
-  if (error) throw error
-  await registrar({ entidad: 'vehiculo', entidadId: id, tipo: 'archivado', datos: { archivado: true }, usuarioId: autorId })
-}
-
-export async function desarchivar(id, autorId) {
-  const { error } = await db().from('vehiculos').update({ archivado_en: null, editado_por: autorId }).eq('id', id)
-  if (error) throw error
-  await registrar({ entidad: 'vehiculo', entidadId: id, tipo: 'archivado', datos: { archivado: false }, usuarioId: autorId })
 }
 
 export async function eliminar(id) {

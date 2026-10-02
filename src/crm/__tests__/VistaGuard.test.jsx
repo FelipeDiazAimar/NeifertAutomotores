@@ -17,6 +17,7 @@ function renderEn(path) {
           <Route path="/crm/clientes" element={<div>CLIENTES OK</div>} />
           <Route path="/crm/roles" element={<div>ROLES OK</div>} />
           <Route path="/crm/cambiar-password" element={<div>PASS OK</div>} />
+          <Route path="/admin/admin" element={<div>ADMIN OK</div>} />
         </Route>
       </Routes>
     </MemoryRouter>,
@@ -35,6 +36,19 @@ describe('VistaGuard', () => {
     renderEn('/crm/roles')
     expect(screen.getByText(/no tenés acceso a esta sección/i)).toBeInTheDocument()
     expect(screen.queryByText('ROLES OK')).not.toBeInTheDocument()
+  })
+
+  it('bloquea /admin/admin para un rol sin la vista "admin" (ej. vendedor)', () => {
+    misVistas.mockReturnValue({ vistas: ['panel', 'clientes'], cargando: false })
+    renderEn('/admin/admin')
+    expect(screen.getByText(/no tenés acceso a esta sección/i)).toBeInTheDocument()
+    expect(screen.queryByText('ADMIN OK')).not.toBeInTheDocument()
+  })
+
+  it('deja pasar /admin/admin si la vista "admin" está habilitada', () => {
+    misVistas.mockReturnValue({ vistas: ['panel', 'admin'], cargando: false })
+    renderEn('/admin/admin')
+    expect(screen.getByText('ADMIN OK')).toBeInTheDocument()
   })
 
   it('rutas sin gate pasan siempre', () => {

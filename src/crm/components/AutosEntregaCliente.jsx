@@ -4,6 +4,7 @@ import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import GlassCard from '@/components/common/GlassCard'
 import { useClienteMutations } from '@/crm/hooks/useClientes'
+import { formatMiles, parseMiles } from '@/lib/numberMask'
 
 const VACIO = { marca: '', modelo: '', version: '', anio: '', km: '', color: '', trans: '', notas: '' }
 
@@ -64,7 +65,7 @@ export default function AutosEntregaCliente({ clienteId, autos = [] }) {
         <Input label="Modelo" value={form.modelo} onChange={(e) => set('modelo', e.target.value)} />
         <Input label="Versión" value={form.version} onChange={(e) => set('version', e.target.value)} />
         <Input label="Año" type="number" value={form.anio} onChange={(e) => set('anio', e.target.value)} />
-        <Input label="Km" type="number" value={form.km} onChange={(e) => set('km', e.target.value)} />
+        <Input label="Km" inputMode="numeric" value={formatMiles(form.km)} onChange={(e) => set('km', parseMiles(e.target.value))} />
         <Input label="Color" value={form.color} onChange={(e) => set('color', e.target.value)} />
         <Input label="Transmisión" value={form.trans} onChange={(e) => set('trans', e.target.value)} />
         <Input label="Notas" value={form.notas} onChange={(e) => set('notas', e.target.value)} />

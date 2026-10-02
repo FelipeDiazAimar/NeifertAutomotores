@@ -57,6 +57,12 @@ create table if not exists crm.vehiculos (
   tiene_iva boolean not null default false,
   nota text,
   estado crm.estado_vehiculo not null default 'disponible',
+  categoria text,
+  descripcion text,
+  es_nuevo boolean not null default false,
+  es_0km boolean not null default false,
+  combustible text,
+  publicado boolean not null default false,
   creado_por uuid references crm.usuarios(id),
   editado_por uuid references crm.usuarios(id),
   creado_en timestamptz not null default now(),
@@ -67,6 +73,7 @@ create index if not exists idx_crm_veh_estado on crm.vehiculos(estado);
 create index if not exists idx_crm_veh_marca_modelo on crm.vehiculos(marca, modelo);
 create index if not exists idx_crm_veh_patente on crm.vehiculos(patente);
 create index if not exists idx_crm_veh_archivado on crm.vehiculos(archivado_en);
+create index if not exists idx_crm_veh_es_0km on crm.vehiculos(es_0km) where publicado = true;
 
 create table if not exists crm.vehiculo_fotos (
   id bigserial primary key,

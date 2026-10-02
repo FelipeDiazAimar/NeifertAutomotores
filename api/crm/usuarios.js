@@ -1,15 +1,24 @@
 import { createClient } from '@supabase/supabase-js'
 import { emailDeUsuario } from '../../src/crm/lib/authEmail.js'
+import { handleCheckAlertas } from './check-alertas.js'
 
-/** Serverless — alta de usuario y reset de contraseña del CRM nuevo, disparado
- *  desde la UI (/crm/usuarios). Autoriza validando que el llamador sea un
- *  usuario activo con rol admin o dueno.
+/** Serverless — alta de usuario, reset de contraseña, suscripción a push y
+ *  email propio del CRM nuevo. `push_subscribe` y `guardar_mi_email` las puede
+ *  usar cualquier usuario logueado (cada uno sobre sí mismo);
+ *  `crear`/`reset_password` requieren rol admin o dueno. Todo en un mismo
+ *  archivo porque el plan Hobby de Vercel tope a 12 funciones serverless —
+ *  separarlas nos hizo pasarnos por 1.
  *
  *  POST /api/crm/usuarios
  *  Authorization: Bearer <access token del usuario logueado>
- *  body: { accion: 'crear',          usuario, nombre, rol, password }
- *      | { accion: 'reset_password', id, password }
- */
+  *  body: { accion: 'crear',          usuario, nombre, rol, password }
+  *      | { accion: 'reset_password', id, password }
+  *      | { accion: 'push_subscribe', endpoint, p256dh, auth }
+  *      | { accion: 'guardar_mi_email', email }
+  *      | { accion: 'disparar_alertas' } (solo admin/dueno: corre la revisión
+  *        de alertas como si la hubiera llamado el cron — para probar a mano
+  *        desde el CRM sin exponer CRON_SECRET al navegador)
+  */
 export async function handleUsuarios(req, res, { env = process.env, deps = {} } = {}) {
   res.setHeader('Access-Control-Allow-Origin', '*')
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
@@ -33,6 +42,32 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
   if (authErr || !uid) return res.status(401).json({ ok: false, error: 'Sesión inválida' })
 
   const admin = makeAdmin()
+  const body = req.body || {}
+
+  // push_subscribe: cualquier usuario logueado se suscribe a sí mismo, no
+  // requiere ser admin/dueno.
+  if (body.accion === 'push_subscribe') {
+    const { endpoint, p256dh, auth: authKey } = body
+    if (!endpoint || !p256dh || !authKey) return res.status(400).json({ ok: false, error: 'Faltan datos de la suscripción.' })
+    const { error } = await admin.schema('crm').from('push_subscriptions')
+      .upsert({ usuario_id: uid, endpoint, p256dh, auth: authKey }, { onConflict: 'endpoint' })
+    if (error) return res.status(500).json({ ok: false, error: error.message })
+    return res.status(200).json({ ok: true })
+  }
+
+  // guardar_mi_email: cualquier usuario logueado guarda SU propio email
+  // (para las alertas) — no requiere ser admin/dueno. Va con service_role
+  // porque las policies de crm.usuarios solo dejan update a admin/dueno.
+  if (body.accion === 'guardar_mi_email') {
+    const email = String(body.email ?? '').trim()
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ ok: false, error: 'Email inválido.' })
+    }
+    const { error } = await admin.schema('crm').from('usuarios').update({ email }).eq('id', uid)
+    if (error) return res.status(500).json({ ok: false, error: error.message })
+    return res.status(200).json({ ok: true })
+  }
+
   const { data: caller, error: callerErr } = await admin
     .schema('crm').from('usuarios').select('rol, activo').eq('id', uid).maybeSingle()
   if (callerErr) return res.status(500).json({ ok: false, error: callerErr.message })
@@ -40,9 +75,21 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
     return res.status(403).json({ ok: false, error: 'No tenés permiso para gestionar usuarios' })
   }
 
-  const body = req.body || {}
-
   try {
+    if (body.accion === 'disparar_alertas') {
+      const ejecutar = deps.ejecutarChequeo || ((rq, rs) => handleCheckAlertas(rq, rs, { env }))
+      const fakeReq = { method: 'POST', headers: { authorization: `Bearer ${env.CRON_SECRET}` }, body: {} }
+      let status = 200
+      let payload = null
+      const fakeRes = {
+        setHeader() {},
+        status(c) { status = c; return this },
+        json(b) { payload = b; return this },
+      }
+      await ejecutar(fakeReq, fakeRes)
+      return res.status(status).json(payload)
+    }
+
     if (body.accion === 'crear') {
       const { usuario, nombre, rol, password } = body
       if (!usuario || !nombre || !rol || !password) {

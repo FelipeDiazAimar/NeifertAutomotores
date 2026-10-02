@@ -6,7 +6,7 @@ import { Sparkles, Search, X, LayoutGrid, List } from 'lucide-react'
 import { ReactLenis, useLenis } from 'lenis/react'
 import VehicleCard from '@/components/catalog/VehicleCard'
 import Button from '@/components/common/Button'
-import { fetchVehicles } from '@/services/vehicles.service'
+import { listarPublicos } from '@/crm/services/vehiculosPublico.service'
 import { searchVehicles } from '@/lib/vehicleSearch'
 import { useUiStore } from '@/store/useUiStore'
 import { useSiteStore } from '@/store/useSiteStore'
@@ -33,7 +33,7 @@ export default function AiSearchOverlay() {
 
   const { data: pool = [] } = useQuery({
     queryKey: ['vehicles', 'ai-pool'],
-    queryFn: () => fetchVehicles({ category: 'todos', sort: 'price-desc' }),
+    queryFn: () => listarPublicos({ category: 'todos', sort: 'price-desc' }),
     enabled: open,
   })
 

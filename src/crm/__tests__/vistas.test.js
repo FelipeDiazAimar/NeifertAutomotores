@@ -8,9 +8,10 @@ import {
 } from '@/crm/lib/vistas.js'
 
 describe('vistas.js', () => {
-  it('VISTAS tiene las 9 vistas top-level en orden', () => {
+  it('VISTAS tiene las 14 vistas top-level en orden', () => {
     expect(VISTAS.map((v) => v.key)).toEqual([
-      'panel', 'clientes', 'vehiculos', 'peritaje', 'gestoria', 'tareas', 'usuarios', 'roles', 'whatsapp',
+      'panel', 'clientes', 'vehiculos', 'peritaje', 'gestoria', 'tareas', 'alertas', 'usuarios', 'roles',
+      'whatsapp', 'leads', 'contenido', 'estadisticas', 'admin',
     ])
   })
 
@@ -28,8 +29,14 @@ describe('vistas.js', () => {
       expect(vistaDeRuta('/crm/peritaje')).toBe('peritaje')
       expect(vistaDeRuta('/crm/gestoria')).toBe('gestoria')
       expect(vistaDeRuta('/crm/tareas')).toBe('tareas')
+      expect(vistaDeRuta('/crm/alertas')).toBe('alertas')
       expect(vistaDeRuta('/crm/usuarios')).toBe('usuarios')
       expect(vistaDeRuta('/crm/roles')).toBe('roles')
+      expect(vistaDeRuta('/admin/crm')).toBe('leads')
+      expect(vistaDeRuta('/admin/crm/lead-123')).toBe('leads')
+      expect(vistaDeRuta('/admin/contenido')).toBe('contenido')
+      expect(vistaDeRuta('/admin/estadisticas')).toBe('estadisticas')
+      expect(vistaDeRuta('/admin/admin')).toBe('admin')
     })
     it('rutas sin gate → null', () => {
       expect(vistaDeRuta('/crm/cambiar-password')).toBeNull()

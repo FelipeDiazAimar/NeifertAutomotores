@@ -22,3 +22,15 @@ export function precioFmt(v) {
 export function estadoVariant(estado) {
   return { disponible: 'green', reservado: 'amber', vendido: 'neutral', baja: 'red' }[estado] ?? 'neutral'
 }
+
+/** Etiqueta con mayúscula inicial para un estado de vehículo. */
+export const ESTADO_LABEL = {
+  disponible: 'Disponible',
+  reservado: 'Reservado',
+  vendido: 'Vendido',
+  baja: 'Baja',
+}
+
+export function estadoLabel(estado) {
+  return ESTADO_LABEL[estado] ?? estado
+}

@@ -8,7 +8,8 @@ import { cn } from '@/lib/cn'
 
 const LINKS = [
   { to: '/', label: 'Historias', end: true },
-  { to: '/catalogo', label: 'Catálogo' },
+  { to: '/catalogo', label: 'Catálogo Usados' },
+  { to: '/catalogo-0km', label: 'Catálogo 0km' },
   { to: '/instagram', label: 'Instagram' },
   { to: '/cita', label: 'WhatsApp' },
   { to: '/sobre-nosotros', label: 'Sobre Nosotros' },

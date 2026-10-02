@@ -7,9 +7,14 @@ export const VISTAS = [
   { key: 'peritaje', label: 'Peritaje', ruta: '/crm/peritaje' },
   { key: 'gestoria', label: 'Gestoría', ruta: '/crm/gestoria' },
   { key: 'tareas', label: 'Tareas', ruta: '/crm/tareas' },
+  { key: 'alertas', label: 'Alertas', ruta: '/crm/alertas' },
   { key: 'usuarios', label: 'Usuarios', ruta: '/crm/usuarios' },
   { key: 'roles', label: 'Roles', ruta: '/crm/roles' },
   { key: 'whatsapp', label: 'WhatsApp', ruta: '/crm/whatsapp' },
+  { key: 'leads', label: 'Carga Leads', ruta: '/admin/crm' },
+  { key: 'contenido', label: 'Administración Contenido Web', ruta: '/admin/contenido' },
+  { key: 'estadisticas', label: 'Estadísticas', ruta: '/admin/estadisticas' },
+  { key: 'admin', label: 'Admin', ruta: '/admin/admin' },
 ]
 
 export const ROL_LABEL = { admin: 'Admin', dueno: 'Dueño', vendedor: 'Vendedor' }

@@ -148,7 +148,8 @@ const DEFAULT_CONTENT = {
         title: 'Navegación',
         items: [
           { label: 'Historias', href: '/' },
-          { label: 'Catálogo', href: '/catalogo' },
+          { label: 'Catálogo Usados', href: '/catalogo' },
+          { label: 'Catálogo 0km', href: '/catalogo-0km' },
           { label: 'Instagram', href: '/instagram' },
           { label: 'Coordinar cita', href: '/cita' },
         ],
@@ -368,18 +369,43 @@ export const useSiteStore = create(
     }),
     {
       name: 'nf-site-content',
-      version: 4,
-      migrate: (persistedState) => {
+      version: 5,
+      migrate: (persistedState, version) => {
         // v2 → v3: sobreNosotros pasó de array de bloques a { heading, items }.
         const sn = Array.isArray(persistedState.sobreNosotros)
           ? { heading: 'Nuestra historia, en primera persona', items: persistedState.sobreNosotros }
           : persistedState.sobreNosotros || { heading: 'Nuestra historia, en primera persona', items: [] }
-        return {
+        const next = {
           ...persistedState,
           socials: { ...persistedState.socials, whatsappPhone: '543564562413' },
           // v3 → v4: sobreNosotros suma la lista misionVision.
           sobreNosotros: { ...sn, items: sn.items || [], misionVision: sn.misionVision || [] },
         }
+        // v4 → v5: el footer suma "Catálogo 0km" y renombra "Catálogo" a
+        // "Catálogo Usados". Solo toca items que matchean el default viejo,
+        // para no pisar footers personalizados.
+        if ((version ?? 0) < 5 && next.footer?.columns) {
+          next.footer = {
+            ...next.footer,
+            columns: next.footer.columns.map((col) => {
+              if (!Array.isArray(col.items)) return col
+              let touched = false
+              const items = col.items.map((it) => {
+                if (it?.href === '/catalogo' && it?.label === 'Catálogo') {
+                  touched = true
+                  return { ...it, label: 'Catálogo Usados' }
+                }
+                return it
+              })
+              if (touched && !items.some((it) => it?.href === '/catalogo-0km')) {
+                const idx = items.findIndex((it) => it?.href === '/catalogo')
+                items.splice(idx + 1, 0, { label: 'Catálogo 0km', href: '/catalogo-0km' })
+              }
+              return touched ? { ...col, items } : col
+            }),
+          }
+        }
+        return next
       },
     }
   )

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import { ArrowLeft, Plus, ChevronRight } from 'lucide-react'
+import { ArrowLeft, Plus, ChevronRight, Pencil } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
@@ -10,12 +10,12 @@ import { useVehiculo, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import { usePeritajes, usePeritaje, usePeritajeMutations } from '@/crm/hooks/usePeritajes'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import FichaVehiculo from '@/crm/components/FichaVehiculo'
-import FotosUploader from '@/crm/components/FotosUploader'
 import PeritajeForm from '@/crm/components/PeritajeForm'
 import PeritajeLectura from '@/crm/components/PeritajeLectura'
 import GestoriaChecklist from '@/crm/components/GestoriaChecklist'
 import HistorialTimeline from '@/crm/components/HistorialTimeline'
 import EstadoStrip from '@/crm/components/EstadoStrip'
+import FotoMultiSlot from '@/crm/components/FotoMultiSlot'
 import { estadoPeritaje, PERITAJE_ESTADO_LABEL } from '@/crm/lib/peritajeSchema'
 import { cn } from '@/lib/cn'
 
@@ -31,20 +31,65 @@ function ChipCount({ tono, n, label }) {
   )
 }
 
-function PeritajePanel({ vehiculoId }) {
+function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
   const { data: peritajes = [], isLoading } = usePeritajes(vehiculoId)
-  const { crear } = usePeritajeMutations(vehiculoId)
+  const { crear, actualizar, eliminar } = usePeritajeMutations(vehiculoId)
   const [nuevo, setNuevo] = useState(false)
   const [verId, setVerId] = useState(null)
+  const [editando, setEditando] = useState(false)
+  const [confirmar, setConfirmar] = useState(null)
   const { data: seleccionado } = usePeritaje(verId)
+
+  // Desde ahora rige UN peritaje por vehículo: solo se puede crear cuando no
+  // hay ninguno. Los que ya tenían varios se resuelven abajo (conservar uno).
+  const duplicados = peritajes.length > 1
+  const tieneUno = peritajes.length === 1
+
+  function abrirVer(id) {
+    setEditando(false)
+    setVerId(id)
+  }
+
+  async function confirmarAccion() {
+    if (!confirmar) return
+    try {
+      if (confirmar.tipo === 'conservar') {
+        for (const p of peritajes.filter((p) => p.id !== confirmar.id)) {
+          await eliminar.mutateAsync(p.id)
+        }
+      } else {
+        await eliminar.mutateAsync(confirmar.id)
+        if (verId === confirmar.id) setVerId(null)
+      }
+    } finally {
+      setConfirmar(null)
+    }
+  }
 
   return (
     <div className="space-y-3">
       <div className="flex justify-end">
-        <Button icon={Plus} onClick={() => setNuevo(true)}>
-          Nuevo peritaje
-        </Button>
+        {peritajes.length === 0 && !isLoading && (
+          <Button icon={Plus} onClick={() => setNuevo(true)}>
+            Nuevo peritaje
+          </Button>
+        )}
+        {tieneUno && (
+          <p className="text-xs text-ink-3">Un peritaje por vehículo — tocá la tarjeta para verlo o editarlo.</p>
+        )}
       </div>
+
+      {duplicados && (
+        <GlassCard className="border-amber/40 p-4">
+          <p className="font-semibold text-ink">
+            Este vehículo tiene {peritajes.length} peritajes
+          </p>
+          <p className="mt-1 text-sm text-ink-2">
+            Ahora se permite uno solo por vehículo. Revisá cada uno y elegí cuál conservar
+            {esAdmin ? '' : ' — solo un admin puede eliminar'}.
+          </p>
+        </GlassCard>
+      )}
 
       {isLoading ? (
         <div className="grid place-items-center py-8">
@@ -60,12 +105,12 @@ function PeritajePanel({ vehiculoId }) {
             const quien = p.peritador?.nombre || p.peritado_por_nombre
             const est = estadoPeritaje(p)
             return (
-              <li key={p.id}>
-                <GlassCard
-                  as="button"
-                  onClick={() => setVerId(p.id)}
-                  className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-surface"
-                >
+                <li key={p.id} className="space-y-2">
+                  <GlassCard
+                    as="button"
+                    onClick={() => abrirVer(p.id)}
+                    className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-surface"
+                  >
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                       <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
@@ -91,9 +136,27 @@ function PeritajePanel({ vehiculoId }) {
                     </div>
                     <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
                   </div>
-                  <ChevronRight size={18} className="shrink-0 text-ink-3" />
-                </GlassCard>
-              </li>
+                    <ChevronRight size={18} className="shrink-0 text-ink-3" />
+                  </GlassCard>
+                  {duplicados && esAdmin && (
+                    <div className="flex flex-wrap gap-2 pl-1">
+                      <Button
+                        variant="glass"
+                        size="sm"
+                        onClick={() => setConfirmar({ tipo: 'conservar', id: p.id })}
+                      >
+                        Conservar este
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => setConfirmar({ tipo: 'eliminar', id: p.id })}
+                      >
+                        Eliminar
+                      </Button>
+                    </div>
+                  )}
+                </li>
             )
           })}
         </ul>
@@ -106,9 +169,61 @@ function PeritajePanel({ vehiculoId }) {
         />
       </Modal>
 
-      <Modal open={Boolean(verId)} onClose={() => setVerId(null)} title="Peritaje" size="xl">
-        {seleccionado ? <PeritajeLectura peritaje={seleccionado} /> : <Spinner size={20} />}
+      <Modal
+        open={Boolean(verId)}
+        onClose={() => { setVerId(null); setEditando(false) }}
+        title={editando ? 'Editar peritaje' : 'Peritaje'}
+        size="xl"
+      >
+        {editando && seleccionado ? (
+          <PeritajeForm
+            inicial={seleccionado}
+            guardando={actualizar.isPending}
+            onGuardar={(data) => actualizar.mutate({ id: verId, data }, { onSuccess: () => setEditando(false) })}
+          />
+        ) : seleccionado ? (
+          <div className="space-y-4">
+            <PeritajeLectura peritaje={seleccionado} />
+            <div className="flex justify-end">
+              <Button variant="glass" icon={Pencil} onClick={() => setEditando(true)}>
+                Editar
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <Spinner size={20} />
+        )}
       </Modal>
+
+      <Modal
+        open={Boolean(confirmar)}
+        onClose={() => setConfirmar(null)}
+        title={confirmar?.tipo === 'conservar' ? 'Conservar este peritaje' : 'Eliminar peritaje'}
+      >
+        <p className="text-sm text-ink-2">
+          {confirmar?.tipo === 'conservar'
+            ? `Se conserva este peritaje y se eliminan los otros ${peritajes.length - 1}. Esta acción no se puede deshacer.`
+            : 'Se elimina este peritaje definitivamente. Esta acción no se puede deshacer.'}
+        </p>
+        <div className="mt-4 flex justify-end gap-2">
+          <Button variant="ghost" onClick={() => setConfirmar(null)}>
+            Cancelar
+          </Button>
+          <Button variant="primary" onClick={confirmarAccion}>
+            Confirmar
+          </Button>
+        </div>
+      </Modal>
+
+      <GlassCard className="p-5">
+        <h3 className="mb-4 font-display text-sm font-bold text-ink">Documentación</h3>
+        <FotoMultiSlot
+          label="Foto del seguro"
+          slot="seguro"
+          vehiculoId={vehiculoId}
+          vehiculo={vehiculo}
+        />
+      </GlassCard>
     </div>
   )
 }
@@ -120,7 +235,7 @@ export default function VehiculoDetallePage() {
   const navigate = useNavigate()
   const [params, setParams] = useSearchParams()
   const { data: v, isLoading } = useVehiculo(id)
-  const { cambiarEstado, archivar, eliminar } = useVehiculoMutations()
+  const { cambiarEstado, eliminar } = useVehiculoMutations()
   const { esAdmin } = useCrmPerfil()
 
   const tab = TABS_VALIDOS.includes(params.get('tab')) ? params.get('tab') : 'resumen'
@@ -139,7 +254,7 @@ export default function VehiculoDetallePage() {
   if (!v) return <p className="text-ink-3">Vehículo no encontrado.</p>
 
   return (
-    <div className="mx-auto max-w-4xl space-y-4">
+    <div className="space-y-4">
       <button onClick={() => navigate('/crm/vehiculos')} className="flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
         <ArrowLeft size={16} /> Vehículos
       </button>
@@ -160,21 +275,16 @@ export default function VehiculoDetallePage() {
             vehiculo={v}
             puedeEliminar={esAdmin}
             onCambiarEstado={(e) => cambiarEstado.mutate({ id, de: v.estado, a: e })}
-            onArchivar={() => archivar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
             onEliminar={() => eliminar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
           />
-          <GlassCard className="mt-4 p-5">
-            <h3 className="mb-3 font-display text-sm font-bold text-ink">Fotos</h3>
-            <FotosUploader vehiculoId={id} />
-          </GlassCard>
         </TabsContent>
 
         <TabsContent value="peritaje" className="pt-4">
-          <PeritajePanel vehiculoId={id} />
+          <PeritajePanel vehiculoId={id} vehiculo={v} esAdmin={esAdmin} />
         </TabsContent>
 
         <TabsContent value="gestoria" className="pt-4">
-          <GestoriaChecklist vehiculoId={id} />
+          <GestoriaChecklist vehiculoId={id} vehiculo={v} />
         </TabsContent>
 
         <TabsContent value="historial" className="pt-4">

@@ -1,57 +1,34 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { useCatalogStore } from '@/store/useCatalogStore'
-import {
-  fetchVehicles,
-  fetchAllVehicles,
-  fetchVehicleById,
-  createVehicle,
-  updateVehicle,
-  deleteVehicle,
-} from '@/services/vehicles.service'
+import { listarPublicos, listarTodos, obtenerPublicoPorId } from '@/crm/services/vehiculosPublico.service'
 
-/** Lista pública de vehículos derivada de los filtros del catálogo (Zustand). */
-export function useVehicles() {
+/** Lista pública de vehículos derivada de los filtros del catálogo (Zustand).
+ *  `condition`: 'todos' | 'usados' | 'cero' — la pasa la página (Catálogo
+ *  Usados vs Catálogo 0km). */
+export function useVehicles(condition = 'todos') {
   const category = useCatalogStore((s) => s.category)
   const sort = useCatalogStore((s) => s.sort)
   const search = useCatalogStore((s) => s.search)
   const filters = useCatalogStore((s) => s.filters)
 
   return useQuery({
-    queryKey: ['vehicles', { category, sort, search, filters }],
-    queryFn: () => fetchVehicles({ category, sort, search, filters }),
+    queryKey: ['vehicles', { category, sort, search, filters, condition }],
+    queryFn: () => listarPublicos({ category, sort, search, filters, condition }),
   })
 }
 
-/** Todos los vehículos (panel admin), sin filtrar por estado. */
+/** Todos los vehículos (panel admin/estadísticas), sin filtrar por estado. */
 export function useAllVehicles() {
   return useQuery({
     queryKey: ['vehicles', 'all'],
-    queryFn: fetchAllVehicles,
+    queryFn: listarTodos,
   })
 }
 
 export function useVehicle(id) {
   return useQuery({
     queryKey: ['vehicle', id],
-    queryFn: () => fetchVehicleById(id),
+    queryFn: () => obtenerPublicoPorId(id),
     enabled: Boolean(id),
   })
-}
-
-/** Mutaciones del catálogo (crear/editar/borrar) para el panel admin. */
-export function useVehicleMutations() {
-  const qc = useQueryClient()
-  const invalidate = () => qc.invalidateQueries({ queryKey: ['vehicles'] })
-
-  const create = useMutation({ mutationFn: createVehicle, onSuccess: invalidate })
-  const update = useMutation({
-    mutationFn: ({ id, patch }) => updateVehicle(id, patch),
-    onSuccess: (_d, vars) => {
-      invalidate()
-      qc.invalidateQueries({ queryKey: ['vehicle', vars.id] })
-    },
-  })
-  const remove = useMutation({ mutationFn: deleteVehicle, onSuccess: invalidate })
-
-  return { create, update, remove }
 }

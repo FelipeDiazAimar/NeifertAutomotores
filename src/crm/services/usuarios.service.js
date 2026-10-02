@@ -6,7 +6,7 @@ const db = () => supabase.schema('crm')
 export async function listar() {
   const { data, error } = await db()
     .from('usuarios')
-    .select('id, usuario, nombre, rol, activo, vistas_override, creado_en')
+    .select('id, usuario, nombre, rol, activo, vistas_override, email, creado_en')
     .order('nombre', { ascending: true })
   if (error) throw error
   return data ?? []
@@ -55,6 +55,11 @@ async function llamarEndpoint(body) {
     throw new Error(json.error || `Error ${res.status}`)
   }
   return json
+}
+
+/** Guarda el email propio del usuario logueado (para las alertas). */
+export function guardarMiEmail(email) {
+  return llamarEndpoint({ accion: 'guardar_mi_email', email })
 }
 
 /** Alta de usuario (crea el auth user + fila en crm.usuarios). */

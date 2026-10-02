@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
@@ -8,6 +8,13 @@ const usePeritajesVehiculos = vi.fn()
 vi.mock('../hooks/usePeritajes.js', () => ({ usePeritajesVehiculos: (o) => usePeritajesVehiculos(o) }))
 
 const { default: PeritajesListPage } = await import('../pages/PeritajesListPage.jsx')
+const { useViewModeStore } = await import('../store/useViewModeStore.js')
+const { usePeritajeFiltros } = await import('../store/usePeritajeFiltros.js')
+
+beforeEach(() => {
+  useViewModeStore.setState({ viewMode: 'list' })
+  usePeritajeFiltros.setState({ busqueda: '', estado: null, orden: 'marca-asc', tipos: [], mostrarFiltros: false })
+})
 
 const filas = [
   {
@@ -62,5 +69,17 @@ describe('PeritajesListPage', () => {
     await userEvent.click(screen.getByRole('button', { name: /en proceso/i }))
     expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
     expect(screen.queryByText('Ford Ka')).not.toBeInTheDocument()
+  })
+
+  it('el toggle de vista cambia a tarjetas y sigue mostrando los datos', async () => {
+    usePeritajesVehiculos.mockReturnValue({ data: filas, isLoading: false })
+    render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
+    expect(document.querySelector('table')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: /ver como tarjetas/i }))
+
+    expect(document.querySelector('table')).not.toBeInTheDocument()
+    expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
+    expect(screen.getByText(/31 ok · 0 obs · 1 falta/)).toBeInTheDocument()
   })
 })

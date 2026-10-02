@@ -1,0 +1,143 @@
+import { supabase } from '@/services/supabaseClient'
+import { obtenerCotizacionUsd } from '@/lib/exchangeRate'
+
+const db = () => supabase.schema('crm')
+
+/** Solo columnas públicas: nunca las privadas de crm.vehiculos (dueño, ITV,
+ *  patente, nota, consignación, carpetas, IVA). */
+const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, precio_contado,
+  km, combustible, transmision, categoria, es_nuevo, es_0km, descripcion, estado,
+  creado_en, vehiculo_fotos ( url, es_portada, orden )`
+
+// year-desc/km-asc ordenan en el server. price-asc/price-desc se resuelven
+// aparte (ver listarPublicos): conviven vehículos en ARS y en USD, así que
+// para ordenarlos por precio hay que pasarlos a una moneda común primero —
+// eso no lo puede hacer un ORDER BY simple en la base.
+const SORT_MAP = {
+  'year-desc': ['anio', false],
+  'km-asc': ['km', true],
+}
+
+// Estados visibles en la web pública (siempre con publicado=true).
+// "baja" nunca se publica: es stock dado de baja (devuelto, error, etc.).
+const ESTADOS_PUBLICOS = ['disponible', 'reservado', 'vendido']
+
+/** Traduce una fila de crm.vehiculos (+ sus fotos) al shape en inglés que ya
+ *  usa la UI pública (mismo que devolvía vehicles.service.js). `usdRate`
+ *  (ARS por USD) se usa solo para calcular `price_usd` — un equivalente en
+ *  USD para poder comparar/ordenar vehículos en distinta moneda; lo que se
+ *  MUESTRA sigue siendo `price_amount` en su propia `currency`, sin tocar. */
+function mapear(v, usdRate = null) {
+  const fotos = [...(v.vehiculo_fotos ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  const portada = fotos.find((f) => f.es_portada) ?? fotos[0]
+  const precioUsd =
+    v.precio_contado == null
+      ? null
+      : v.moneda === 'USD'
+        ? v.precio_contado
+        : usdRate
+          ? v.precio_contado / usdRate
+          : null
+  return {
+    id: v.id,
+    brand: v.marca,
+    model: v.modelo,
+    version: v.version,
+    color: v.color,
+    year: v.anio,
+    currency: v.moneda,
+    price_amount: v.precio_contado,
+    price_usd: precioUsd,
+    km: v.km,
+    fuel_type: v.combustible,
+    transmission: v.transmision,
+    category: v.categoria,
+    is_new: v.es_nuevo,
+    is_zero_km: v.es_0km ?? false,
+    status: v.estado,
+    description: v.descripcion,
+    main_image_url: portada?.url ?? null,
+    images: fotos.map((f) => f.url),
+    view_count: 0,
+    created_at: v.creado_en,
+  }
+}
+
+/** condition: 'todos' | 'usados' | 'cero'.
+ *  'cero' → solo es_0km=true. 'usados' → es_0km=false o NULL (filas
+ *  anteriores a la migración 2026-09-30). 'todos' → sin filtro. */
+function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
+  if (condition === 'cero') {
+    query = query.eq('es_0km', true)
+  } else if (condition === 'usados') {
+    query = query.or('es_0km.is.false,es_0km.is.null')
+  }
+  if (search) {
+    const numeric = /^\d{4}$/.test(search.trim())
+    query = numeric
+      ? query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%,anio.eq.${search.trim()}`)
+      : query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%`)
+  }
+  if (filters) {
+    if (filters.fuels?.length) query = query.in('combustible', filters.fuels)
+    if (filters.transmissions?.length) query = query.in('transmision', filters.transmissions)
+    if (filters.yearMin != null) query = query.gte('anio', filters.yearMin)
+    if (filters.yearMax != null) query = query.lte('anio', filters.yearMax)
+    if (filters.kmMin != null) query = query.gte('km', filters.kmMin)
+    if (filters.kmMax != null) query = query.lte('km', filters.kmMax)
+  }
+  return query
+}
+
+export async function listarPublicos({
+  category = 'todos',
+  sort = 'price-desc',
+  search = '',
+  filters = null,
+  condition = 'todos',
+} = {}) {
+  const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
+
+  let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).in('estado', ESTADOS_PUBLICOS).eq('publicado', true)
+  if (category !== 'todos') query = query.eq('categoria', category)
+  query = aplicarFiltros(query, { search, filters, condition })
+  if (!ordenaPorPrecio) {
+    const [col, asc] = SORT_MAP[sort] || SORT_MAP['year-desc']
+    query = query.order(col, { ascending: asc })
+  }
+
+  const [{ data, error }, usdRate] = await Promise.all([query, obtenerCotizacionUsd()])
+  if (error) throw error
+  const vehiculos = (data ?? []).map((v) => mapear(v, usdRate))
+
+  if (ordenaPorPrecio) {
+    const asc = sort === 'price-asc'
+    vehiculos.sort((a, b) => {
+      if (a.price_usd == null && b.price_usd == null) return 0
+      if (a.price_usd == null) return 1
+      if (b.price_usd == null) return -1
+      return asc ? a.price_usd - b.price_usd : b.price_usd - a.price_usd
+    })
+  }
+  return vehiculos
+}
+
+/** Todos los vehículos (cualquier estado, publicados o no) para las
+ *  estadísticas del panel — requiere sesión, no se usa desde la web pública. */
+export async function listarTodos() {
+  const [{ data, error }, usdRate] = await Promise.all([
+    db().from('vehiculos').select(COLUMNAS_PUBLICAS).order('creado_en', { ascending: false }),
+    obtenerCotizacionUsd(),
+  ])
+  if (error) throw error
+  return (data ?? []).map((v) => mapear(v, usdRate))
+}
+
+export async function obtenerPublicoPorId(id) {
+  const [{ data, error }, usdRate] = await Promise.all([
+    db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).in('estado', ESTADOS_PUBLICOS).eq('publicado', true).maybeSingle(),
+    obtenerCotizacionUsd(),
+  ])
+  if (error) throw error
+  return data ? mapear(data, usdRate) : null
+}

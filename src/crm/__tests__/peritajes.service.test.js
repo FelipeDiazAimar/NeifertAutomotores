@@ -20,7 +20,10 @@ beforeEach(() => {
 
 describe('peritajes.service.crear', () => {
   it('calcula el resumen desde datos y registra evento peritaje', async () => {
-    const { client, calls } = makeSupabase({ 'insert:peritajes': (s) => ({ data: [{ id: 5, ...s.payload }], error: null }) })
+    const { client, calls } = makeSupabase({
+      'select:peritajes': { data: [], error: null },
+      'insert:peritajes': (s) => ({ data: [{ id: 5, ...s.payload }], error: null }),
+    })
     holder.client = client
     await svc.crear({
       vehiculoId: 'v1',
@@ -34,6 +37,29 @@ describe('peritajes.service.crear', () => {
     })
     expect(registrar).toHaveBeenCalledWith(expect.objectContaining({
       entidad: 'vehiculo', entidadId: 'v1', tipo: 'peritaje',
+    }))
+  })
+
+  it('rige un peritaje por vehículo: si ya existe, no inserta y lanza error', async () => {
+    const { client, calls } = makeSupabase({
+      'select:peritajes': { data: [{ id: 7 }], error: null },
+    })
+    holder.client = client
+    await expect(svc.crear({ vehiculoId: 'v1', datos: {} })).rejects.toThrow(/ya tiene un peritaje/)
+    expect(calls.some((c) => c.table === 'peritajes' && c.op === 'insert')).toBe(false)
+  })
+})
+
+describe('peritajes.service.eliminar', () => {
+  it('borra la fila y registra el evento de eliminación', async () => {
+    const { client, calls } = makeSupabase({ 'delete:peritajes': { data: null, error: null } })
+    holder.client = client
+    await svc.eliminar(9, 'v1', 'user-1')
+    const del = calls.find((c) => c.table === 'peritajes' && c.op === 'delete')
+    expect(del.filters).toEqual(expect.arrayContaining([['eq', 'id', 9]]))
+    expect(registrar).toHaveBeenCalledWith(expect.objectContaining({
+      entidad: 'vehiculo', entidadId: 'v1', tipo: 'peritaje',
+      datos: { peritaje_id: 9, eliminado: true },
     }))
   })
 })
@@ -81,7 +107,7 @@ describe('peritajes.service.listarVehiculos', () => {
     ])
     const c = calls.find((x) => x.table === 'vehiculos')
     expect(c.select).toContain('peritajes(')
-    expect(c.filters).toEqual(expect.arrayContaining([['is', 'archivado_en', null]]))
+    expect(c.filters.some((f) => f[1] === 'archivado_en')).toBe(false)
   })
 
   it('filtra por estado derivado', async () => {

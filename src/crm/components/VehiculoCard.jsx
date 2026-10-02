@@ -2,7 +2,7 @@ import { useNavigate } from 'react-router-dom'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
 import EstadoStrip from './EstadoStrip'
-import { lineaSpecs, precioFmt, estadoVariant } from '@/crm/lib/formatVehiculo'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
 
 const GESTORIA_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', completo: 'Completo' }
 
@@ -33,7 +33,7 @@ export default function VehiculoCard({ vehiculo: v }) {
             {v.marca} {v.modelo}
           </p>
           <Badge variant={estadoVariant(v.estado)} className="shrink-0">
-            {v.estado}
+            {estadoLabel(v.estado)}
           </Badge>
         </div>
 

@@ -5,6 +5,7 @@ import { emailDeUsuario } from '@/crm/lib/authEmail'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import GlassCard from '@/components/common/GlassCard'
+import Logo from '@/components/common/Logo'
 import '@/crm/styles/tokens.css'
 
 export default function CrmLoginPage() {
@@ -45,11 +46,9 @@ export default function CrmLoginPage() {
   return (
     <div className="crm-root grid min-h-screen place-items-center p-4">
       <div className="w-full max-w-sm">
-        <div className="mb-8 text-center">
-          <div className="font-display text-2xl font-bold text-ink">
-            Neifert<span className="text-neifert">.</span>CRM
-          </div>
-          <div className="mt-1 text-[11px] uppercase tracking-wider text-ink-3">
+        <div className="mb-8 flex flex-col items-center text-center">
+          <Logo className="h-10" />
+          <div className="mt-2 text-[11px] uppercase tracking-wider text-ink-3">
             Sistema de gestión automotor
           </div>
         </div>

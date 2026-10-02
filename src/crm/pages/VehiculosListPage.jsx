@@ -5,13 +5,16 @@ import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
 import GlassCard from '@/components/common/GlassCard'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
-import { useVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
+import { useVehiculos, useConteoVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
+import { useViewModeStore } from '@/crm/store/useViewModeStore'
 import VehiculoFilters from '@/crm/components/VehiculoFilters'
 import VehiculoTable from '@/crm/components/VehiculoTable'
 import VehiculoCard from '@/crm/components/VehiculoCard'
+import VehiculoGridCard from '@/crm/components/VehiculoGridCard'
 import VehiculoFormModal from '@/crm/components/VehiculoFormModal'
+import ViewModeToggle from '@/crm/components/ViewModeToggle'
 import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 20
@@ -23,7 +26,8 @@ export default function VehiculosListPage() {
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [abrirNuevo, setAbrirNuevo] = useState(false)
-  const { cambiarEstado } = useVehiculoMutations()
+  const { cambiarEstado, actualizar } = useVehiculoMutations()
+  const viewMode = useViewModeStore((s) => s.viewMode)
 
   // debounce búsqueda → store
   useEffect(() => {
@@ -35,19 +39,33 @@ export default function VehiculosListPage() {
 
   const opts = {
     busqueda, filtros, orden, pagina, pageSize: PAGE_SIZE,
-    incluirArchivados: filtros.incluirArchivados,
   }
   const { data, isLoading } = useVehiculos(opts)
   const filas = data?.filas ?? []
   const total = data?.total ?? 0
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
+  const { data: conteo } = useConteoVehiculos({ busqueda, filtros })
+  const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
 
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="font-display text-2xl font-bold text-ink">Vehículos</h1>
-          <p className="text-sm text-ink-3">{total} en stock</p>
+          <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-3">
+            <span>
+              <span className="font-bold text-success">{c.disponible}</span> disponibles
+            </span>
+            <span>
+              <span className="font-bold text-amber">{c.reservado}</span> reservados
+            </span>
+            <span>
+              <span className="font-bold text-ink">{c.vendido}</span> vendidos
+            </span>
+            <span>
+              <span className="font-bold text-neifert">{c.baja}</span> en baja
+            </span>
+          </p>
         </div>
         <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
           Cargar vehículo
@@ -64,6 +82,7 @@ export default function VehiculosListPage() {
             className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
           />
         </div>
+        <ViewModeToggle className="h-12" />
         <button
           type="button"
           onClick={() => setMostrarFiltros((v) => !v)}
@@ -97,10 +116,22 @@ export default function VehiculosListPage() {
             Cargar vehículo
           </Button>
         </GlassCard>
+      ) : viewMode === 'card' ? (
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+          {filas.map((v) => (
+            <VehiculoGridCard
+              key={v.id}
+              vehiculo={v}
+              onCambiarEstado={(veh, e) => cambiarEstado.mutate({ id: veh.id, de: veh.estado, a: e })}
+              onCambiarPublicado={(veh, publicado) => actualizar.mutate({ id: veh.id, data: { publicado } })}
+            />
+          ))}
+        </div>
       ) : esDesktop ? (
         <VehiculoTable
           filas={filas}
           onCambiarEstado={(v, e) => cambiarEstado.mutate({ id: v.id, de: v.estado, a: e })}
+          onCambiarPublicado={(v, publicado) => actualizar.mutate({ id: v.id, data: { publicado } })}
         />
       ) : (
         <div className="space-y-2">

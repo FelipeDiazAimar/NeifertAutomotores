@@ -15,8 +15,36 @@ import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { useVehicles } from '@/hooks/useVehicles'
 
-export default function CatalogPage() {
-  const { data: vehicles = [], isLoading } = useVehicles()
+const VARIANT_COPY = {
+  usados: {
+    condition: 'usados',
+    basePath: '/catalogo',
+    badge: 'Inventario Premium',
+    eyebrow: '— Stock Disponible',
+    titleA: 'Encontrá tu próximo',
+    titleB: 'destino.',
+    shareTitle: 'Catálogo Usados — Neifert Automotores',
+    shareText: 'Mirá el catálogo de usados de Neifert Automotores.',
+    countLabel: 'vehículos exclusivos',
+    emptyText: 'No encontramos usados con esos filtros.',
+  },
+  cero: {
+    condition: 'cero',
+    basePath: '/catalogo-0km',
+    badge: 'Unidades 0 km',
+    eyebrow: '— Nuevos, directo a patentar',
+    titleA: 'Estrená tu próximo',
+    titleB: '0 kilómetro.',
+    shareTitle: 'Catálogo 0 km — Neifert Automotores',
+    shareText: 'Mirá el catálogo 0 km de Neifert Automotores.',
+    countLabel: 'unidades 0 km',
+    emptyText: 'Todavía no hay unidades 0 km con esos filtros.',
+  },
+}
+
+export default function CatalogPage({ variant = 'usados' }) {
+  const copy = VARIANT_COPY[variant] || VARIANT_COPY.usados
+  const { data: vehicles = [], isLoading } = useVehicles(copy.condition)
   const [visible, setVisible] = useState(8)
   const shown = vehicles.slice(0, visible)
 
@@ -24,19 +52,19 @@ export default function CatalogPage() {
     <section className="mx-auto max-w-7xl px-4 py-10 md:px-8">
       <div className="mb-4 flex justify-center">
         <span className="rounded-full bg-neifert px-4 py-1 text-xs font-semibold text-white shadow-glow-red">
-          Inventario Premium
+          {copy.badge}
         </span>
       </div>
 
       <div className="flex flex-col gap-5">
         <div>
           <p className="text-xs font-bold uppercase tracking-wider text-neifert">
-            — Stock Disponible
+            {copy.eyebrow}
           </p>
           <h1 className="mt-1 font-display text-4xl font-extrabold leading-tight text-ink md:text-5xl">
-            Encontrá tu próximo
+            {copy.titleA}
             <br />
-            <span className="text-ink-3">destino.</span>
+            <span className="text-ink-3">{copy.titleB}</span>
           </h1>
         </div>
         <div className="flex flex-wrap items-center gap-2 md:flex-nowrap md:justify-end">
@@ -50,9 +78,9 @@ export default function CatalogPage() {
               trackShareClick({ kind: 'catalog' })
               trackEvent(null, 'compartir', detectSource())
               shareOrCopy({
-                url: '/catalogo?ref=share',
-                title: 'Catálogo — Neifert Automotores',
-                text: 'Mirá el catálogo de vehículos de Neifert Automotores.',
+                url: `${copy.basePath}?ref=share`,
+                title: copy.shareTitle,
+                text: copy.shareText,
               })
             }}
             whileHover={{ scale: 1.05 }}
@@ -75,14 +103,14 @@ export default function CatalogPage() {
             <Spinner size={32} />
           </div>
         ) : (
-          <VehicleGrid vehicles={shown} />
+          <VehicleGrid vehicles={shown} basePath={copy.basePath} emptyText={copy.emptyText} />
         )}
       </div>
 
       {!isLoading && vehicles.length > 0 && (
         <div className="mt-4 text-center sm:mt-12">
           <p className="text-sm text-ink-3">
-            Mostrando {shown.length} de {vehicles.length} vehículos exclusivos
+            Mostrando {shown.length} de {vehicles.length} {copy.countLabel}
           </p>
           {visible < vehicles.length && (
             <Button

@@ -7,10 +7,12 @@ export const useCrmStore = create((set) => ({
   search: '',
   sort: 'date-desc', // ver LEAD_SORT_OPTIONS en lib/constants.js
   originFilter: 'todos', // 'todos' | uno de LEAD_SOURCES
+  page: 1,
 
   setQuickFilter: (quickFilter) => set({ quickFilter }),
   setMobileTab: (mobileTab) => set({ mobileTab }),
   setSearch: (search) => set({ search }),
   setSort: (sort) => set({ sort }),
   setOriginFilter: (originFilter) => set({ originFilter }),
+  setPage: (page) => set({ page }),
 }))

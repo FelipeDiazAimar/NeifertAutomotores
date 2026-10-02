@@ -1,16 +1,18 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { fetchVehicles } from '@/services/vehicles.service'
+import { listarPublicos } from '@/crm/services/vehiculosPublico.service'
 import { formatVehiclePrice, formatKm } from '@/lib/formatters'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 /** Carrusel horizontal con desplazamiento lento de autos de la misma
- *  categoría, ordenados por precio. Pausa al pasar el mouse. */
-export default function RelatedVehicles({ current }) {
+ *  categoría, ordenados por precio. Pausa al pasar el mouse.
+ *  `condition` limita los relacionados a la misma sección (usados / 0km). */
+export default function RelatedVehicles({ current, condition = 'todos', basePath = '/catalogo' }) {
   const category = current?.category
 
   const { data: list = [] } = useQuery({
-    queryKey: ['vehicles', 'related', category],
-    queryFn: () => fetchVehicles({ category, sort: 'price-asc' }),
+    queryKey: ['vehicles', 'related', category, condition],
+    queryFn: () => listarPublicos({ category, sort: 'price-asc', condition }),
     enabled: Boolean(category),
   })
 
@@ -32,7 +34,7 @@ export default function RelatedVehicles({ current }) {
             Más de la misma categoría
           </h2>
         </div>
-        <Link to="/catalogo" className="text-sm font-semibold text-neifert hover:underline">
+        <Link to={basePath} className="text-sm font-semibold text-neifert hover:underline">
           Ver catálogo
         </Link>
       </div>
@@ -45,9 +47,10 @@ export default function RelatedVehicles({ current }) {
           {loop.map((v, i) => (
             <Link
               key={`${v.id}-${i}`}
-              to={`/catalogo/${v.id}`}
-              className="group/card glass w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
+              to={`${basePath}/${v.id}`}
+              className="group/card glass relative w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
             >
+              {(v.status || 'disponible') === 'vendido' && <SoldRibbon />}
               <div className="relative aspect-[4/3] overflow-hidden">
                 {v.main_image_url || v.images?.[0] ? (
                   <img

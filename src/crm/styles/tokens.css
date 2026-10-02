@@ -28,3 +28,31 @@
   color: var(--c-text);
   font-family: var(--font-sans);
 }
+
+/* El sitio oculta la scrollbar nativa en todos lados (*, con !important en
+   @layer base) y la reemplaza por un indicador propio de la página. Para
+   regiones con su propio scroll interno (sidebar, galería de fotos, listas
+   largas) esa ocultación global hace invisible la única señal de que hay más
+   contenido — acá se revierte puntualmente.
+   OJO con la cascada: para declaraciones !important una regla CON capa le
+   gana a una SIN capa, así que este override de Firefox tiene que vivir en
+   la misma @layer base (ahí decide la especificidad: .crm-scrollbar le gana
+   a *). Las reglas ::-webkit-scrollbar de abajo no necesitan capa porque la
+   regla global no usa !important. */
+@layer base {
+  .crm-scrollbar {
+    scrollbar-width: thin !important;
+    scrollbar-color: var(--c-border) transparent;
+  }
+}
+.crm-scrollbar::-webkit-scrollbar {
+  display: block !important;
+  width: 6px !important;
+}
+.crm-scrollbar::-webkit-scrollbar-thumb {
+  background-color: var(--c-border);
+  border-radius: 999px;
+}
+.crm-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
