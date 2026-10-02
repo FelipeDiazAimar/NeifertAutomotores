@@ -1,13 +1,27 @@
 import fs from 'node:fs'
 import express from 'express'
-import { HOST, PUERTO, WEB_DIR } from './src/config.js'
-import { emitir, log, suscribir, ultimosLogs } from './src/eventos.js'
-import { buscarMensajes, config, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { HOST, LOGIN_CONFIGURADO, MODO_PRUEBA, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
+import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
+import { cerrarSesion, exigirSesion, iniciarSesion, iniciarSesionPrueba, sesionActual } from './src/auth.js'
+import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import { rutaFoto } from './src/fotos.js'
 
+// Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
+// podría escribir con el número de la concesionaria. En ese caso no se arranca.
+if (!SOLO_ESTA_PC && !LOGIN_CONFIGURADO) {
+  console.error(
+    `HOST=${HOST} deja el panel abierto a otras computadoras, pero el login con el CRM no está configurado.
+` +
+      'Definí SUPABASE_URL, SUPABASE_ANON_KEY y SUPABASE_SERVICE_ROLE_KEY (ver Whatsapp/docs/SERVIDOR.md), o volvé a HOST=127.0.0.1.',
+  )
+  process.exit(1)
+}
+
 const app = express()
 app.disable('x-powered-by')
+// Detrás de un proxy: así se sabe si el pedido vino por https (para la cookie).
+app.set('trust proxy', true)
 app.use(express.json({ limit: '1mb' }))
 app.use(express.static(WEB_DIR))
 
@@ -32,6 +46,19 @@ function archivoDe(req) {
   if (!Buffer.isBuffer(req.body) || !req.body.length) throw new Error('No llegó ningún archivo')
   return req.body
 }
+
+/* Sesión: lo único de /api que se puede usar sin haber entrado */
+app.post('/api/sesion', iniciarSesion)
+app.post('/api/sesion/salir', cerrarSesion)
+app.post('/api/sesion/prueba', iniciarSesionPrueba)
+
+// Todo lo demás exige haber entrado desde el CRM.
+app.use('/api', exigirSesion)
+app.get('/api/sesion', ruta((req) => sesionActual(req)))
+
+/* Quién más está usando el panel */
+app.get('/api/agentes', ruta(() => agentes()))
+app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.chatId || null)))
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))
@@ -103,9 +130,26 @@ app.post('/api/chats/:id/media/:msgId/descargar', ruta((req) => wa.descargarAhor
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta inexistente' }))
 
-/* Arranque */
+/* Arranque: primero el almacén (en modo supabase trae todo de la base), después el panel y WhatsApp. */
+let almacen
+try {
+  almacen = await iniciarAlmacen()
+} catch (err) {
+  console.error(`No se pudo cargar el almacén desde Supabase: ${err.message}`)
+  console.error('Revisá WA_DATABASE_URL en Whatsapp/servidor/.env, o arrancá con ALMACEN=local para trabajar con archivos.')
+  process.exit(1)
+}
+
 const servidor = app.listen(PUERTO, HOST, () => {
-  log('ok', `Panel listo en http://localhost:${PUERTO}`)
+  log('ok', `Panel listo en http://localhost:${PUERTO}`, SOLO_ESTA_PC ? 'solo desde esta PC' : `abierto en ${HOST} con login del CRM`)
+  log(
+    'info',
+    almacen.modo === 'supabase' ? 'Mensajes guardados en Supabase' : 'Mensajes guardados en archivos locales (modo prueba)',
+    almacen.modo === 'supabase' ? `${almacen.chats} chats · ${almacen.mensajes} mensajes cargados` : `${almacen.chats} chats`,
+  )
+  if (MODO_PRUEBA) log('aviso', 'Modo prueba encendido', 'Se entra eligiendo un nombre, sin el CRM. Solo desde esta PC.')
+  else if (process.env.WHATSAPP_PRUEBA === 'on') log('aviso', 'Modo prueba ignorado', 'Solo funciona con HOST=127.0.0.1')
+  else if (!LOGIN_CONFIGURADO) log('aviso', 'Login con el CRM sin configurar', 'Solo se puede usar desde esta PC')
   wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message))
 })
 
@@ -118,11 +162,16 @@ servidor.on('error', (err) => {
   process.exit(1)
 })
 
-function cerrar() {
+let cerrando = false
+async function cerrar() {
+  if (cerrando) return
+  cerrando = true
   log('info', 'Cerrando el servicio')
   wa.detener()
   servidor.close()
-  setTimeout(() => process.exit(0), 600).unref()
+  // Lo que falta guardar en Supabase se escribe antes de salir (con un tope de 8 s).
+  await Promise.race([cerrarAlmacen(), new Promise((r) => setTimeout(r, 8000))]).catch(() => {})
+  process.exit(0)
 }
 process.on('SIGINT', cerrar)
 process.on('SIGTERM', cerrar)

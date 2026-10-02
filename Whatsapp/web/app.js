@@ -66,7 +66,7 @@ const state = {
   visibles: PAGINA, pegadoAbajo: true, nuevosAbajo: 0, sinLeerDesde: null, sinLeerCantidad: 0,
   presencias: new Map(), respondiendo: null, menuBoton: null, velocidades: new Map(),
   conn: { conexion: 'iniciando', qr: null, yo: null }, config: {}, logs: [],
-  grabacion: null, codigo: null, composerOff: null, revelados: new Set(),
+  grabacion: null, codigo: null, composerOff: null, revelados: new Set(), agentes: [],
 }
 const borradores = new Map(Object.entries(leerLocal('wa-borradores', {})))
 const conectado = () => state.conn.conexion === 'conectado'
@@ -78,6 +78,7 @@ async function api(ruta, { method = 'GET', json, body, headers } = {}) {
     body: json ? JSON.stringify(json) : body,
   })
   const data = await res.json().catch(() => ({}))
+  if ((res.status === 401 || res.status === 403) && data.login) pantallaSinSesion(data)
   if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
   return data
 }
@@ -225,7 +226,9 @@ function rotuloChat(c) {
 function filaChat(c) {
   const r = rotuloChat(c)
   const sub = r.sub ? `<span class="row-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</span>` : ''
+  const otros = otrosEnChat(c.id)
   const iconos = [
+    otros.length ? `<span class="agente-dot" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${esc(otros[0].nombre.charAt(0).toUpperCase())}</span>` : '',
     c.silenciado ? ic('mute') : '',
     c.fijado && !c.archivado ? ic('fijado') : '',
     c.noLeidos ? `<span class="unread tnum">${c.noLeidos}</span>` : '',
@@ -287,6 +290,7 @@ function renderList() {
 
 async function abrirChat(id) {
   const chat = state.chats.get(id)
+  if (state.activo !== id) avisarViendo(id)
   state.activo = id
   state.mensajes = new Map()
   state.revelados.clear()
@@ -373,6 +377,7 @@ function renderHead() {
       <div class="who"><b>${esc(tituloChat(c))}</b>${subtituloChat(c)}</div>
     </button>
     <button class="icon-btn" data-act="buscar-chat" aria-label="Buscar en este chat" title="Buscar en este chat">${ic('search')}</button>
+    ${otrosEnChat(c.id).length ? `<span class="tag equipo" title="Tiene este chat abierto ahora">${ic('user')} ${esc(nombresLista(otrosEnChat(c.id)))} ${otrosEnChat(c.id).length === 1 ? 'está' : 'están'} acá</span>` : ''}
     ${c.silenciado ? `<span class="tag">${ic('mute')} Silenciado</span>` : ''}
     ${c.archivado ? `<span class="tag">${ic('archive')} Archivado</span>` : ''}`
 }
@@ -418,7 +423,7 @@ function renderMensajes({ mantenerPosicion = false } = {}) {
       partes.push(sinLeerHtml(state.sinLeerCantidad))
       lado = null
     }
-    const ladoActual = m.deMi ? 'out' : `in:${m.autorNombre || ''}`
+    const ladoActual = `${m.deMi ? 'out' : 'in'}:${firmanteDe(m)}`
     partes.push(msgHtml(m, ladoActual !== lado))
     lado = ladoActual
   }
@@ -509,7 +514,7 @@ function onMensaje({ chatId, mensaje }) {
   if (dias[dias.length - 1]?.dataset.dia !== d) lista.insertAdjacentHTML('beforeend', diaHtml(d))
   const ultimo = lista.lastElementChild
   const mismoLado = ultimo?.classList.contains('msg') && ultimo.classList.contains(mensaje.deMi ? 'out' : 'in')
-  const mismoAutor = (ultimo?.dataset.autor || '') === (mensaje.autorNombre || '')
+  const mismoAutor = (ultimo?.dataset.autor || '') === firmanteDe(mensaje)
   const cola = !(mismoLado && mismoAutor)
   lista.insertAdjacentHTML('beforeend', msgHtml(mensaje, cola))
   if (esAudio(mensaje)) actualizarVoz(mensaje.id)
@@ -650,7 +655,9 @@ function msgHtml(m, cola) {
   // En un grupo, quién habló va arriba de la burbuja y solo cuando cambia de persona.
   const nombreAutor = !m.deMi && cola && esGrupoActivo() && m.autorNombre
     ? `<div class="autor" style="--autor:${colorAutor(m.autorNombre)}">${esc(m.autorNombre)}</div>`
-    : ''
+    : m.deMi && cola && m.enviadoPor
+      ? `<div class="firma">${esc(m.enviadoPor.id === sesion.usuario?.id ? 'Vos' : m.enviadoPor.nombre)}</div>`
+      : ''
 
   // Distribución de la hora dentro de la burbuja, igual que WhatsApp.
   let distribucion
@@ -668,7 +675,7 @@ function msgHtml(m, cola) {
     reacciones.length && 'has-reacts',
     m.tipo === 'desconocido' && 'desconocido',
   ].filter(Boolean).join(' ')
-  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(m.autorNombre || '')}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${reacts}</div>`
+  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${reacts}</div>`
 }
 
 /** Lleva al mensaje citado: si todavía no está dibujado, agranda la tanda hasta incluirlo. */
@@ -808,6 +815,122 @@ async function accionEnLote(accion) {
   toast(ok === ids.length ? 'Listo.' : `Se pudo con ${fmtNum(ok)} de ${fmtNum(ids.length)}.`)
   salirSeleccion()
 }
+
+/* ---------------- Sesión (login del CRM) y equipo ---------------- */
+
+// Identifica esta pestaña ante el servidor, para saber qué chat tiene abierto cada una.
+const PESTANA = Math.random().toString(36).slice(2, 12)
+const sesion = { usuario: null, login: false, prueba: false }
+
+/**
+ * Entra al panel. El CRM abre esta página con su token en la URL (#t=...): se canjea
+ * por la cookie del panel y se borra de la barra de direcciones. Sin token, se revisa
+ * si ya había una sesión abierta.
+ */
+async function entrar() {
+  const m = /[#&]t=([^&]+)/.exec(location.hash)
+  let res
+  if (m) {
+    history.replaceState(null, '', location.pathname + location.search)
+    res = await fetch('/api/sesion', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ token: decodeURIComponent(m[1]) }),
+    })
+  } else {
+    res = await fetch('/api/sesion')
+  }
+  const data = await res.json().catch(() => ({}))
+  if (!res.ok) {
+    pantallaSinSesion(data)
+    return false
+  }
+  sesion.usuario = data.usuario || null
+  sesion.login = !!data.login
+  sesion.prueba = !!data.prueba
+  renderYo()
+  return true
+}
+
+/** Tapa el panel y explica cómo entrar. En modo prueba, ofrece elegir un nombre. */
+function pantallaSinSesion(data = {}) {
+  const pane = $('#sinSesion')
+  pane.querySelector('h2').textContent = data.prueba ? 'Modo prueba' : 'Entrá desde el CRM'
+  $('#sinSesionTxt').textContent = data.prueba ? '¿Con qué nombre entrás?' : data.error || 'Entrá al WhatsApp desde el CRM.'
+  const link = $('#sinSesionLink')
+  link.hidden = !data.crmUrl || !!data.prueba
+  if (data.crmUrl) link.href = data.crmUrl
+  $('#sinSesionPrueba').hidden = !data.prueba
+  pane.hidden = false
+  if (data.prueba) $('#pruebaNombre').focus()
+}
+
+/** Modo prueba: entra con un nombre inventado y arranca el panel. */
+async function entrarDePrueba(nombre) {
+  const limpio = String(nombre || '').trim()
+  if (!limpio) return
+  const res = await fetch('/api/sesion/prueba', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ nombre: limpio }),
+  })
+  if (res.ok) location.reload()
+  else $('#sinSesionTxt').textContent = (await res.json().catch(() => ({}))).error || 'No se pudo entrar.'
+}
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('[data-prueba]')
+  if (b) entrarDePrueba(b.dataset.prueba)
+})
+document.addEventListener('submit', (e) => {
+  if (e.target.id !== 'sinSesionPrueba') return
+  e.preventDefault()
+  entrarDePrueba($('#pruebaNombre').value)
+})
+
+async function salirDeSesion() {
+  try {
+    await fetch('/api/sesion/salir', { method: 'POST' })
+  } finally {
+    // En modo prueba se vuelve a elegir nombre; con el CRM, hay que volver a entrar desde allá.
+    if (sesion.prueba) location.reload()
+    else pantallaSinSesion({ error: 'Cerraste la sesión del WhatsApp.', crmUrl: null })
+  }
+}
+
+/** Quién está usando este panel, arriba a la derecha. */
+function renderYo() {
+  const el = $('#yo')
+  if (!sesion.usuario) {
+    el.hidden = true
+    return
+  }
+  const otros = state.agentes.filter((a) => a.id !== sesion.usuario.id)
+  el.hidden = false
+  el.innerHTML = `
+    <span class="yo-nombre" title="${otros.length ? `También conectados: ${esc(otros.map((a) => a.nombre).join(', '))}` : 'Nadie más conectado'}">
+      ${ic('user')}${esc(sesion.usuario.nombre)}${otros.length ? `<em class="tnum">+${otros.length}</em>` : ''}
+    </span>
+    ${sesion.prueba ? '<span class="tag prueba-tag">Prueba</span>' : ''}
+    <button class="icon-btn" data-act="salir-sesion" aria-label="${sesion.prueba ? 'Cambiar de persona' : 'Cerrar sesión'}" title="${sesion.prueba ? 'Cambiar de persona' : 'Cerrar sesión'}">${ic('unlink')}</button>`
+}
+
+/** Compañeros que tienen abierto ese chat ahora mismo (sin contarme a mí). */
+function otrosEnChat(chatId) {
+  if (!chatId) return []
+  return state.agentes.filter((a) => a.id !== sesion.usuario?.id && a.chats.includes(chatId))
+}
+
+const nombresLista = (ps) => ps.map((p) => p.nombre.split(' ')[0]).join(', ')
+
+/** Le avisa al servidor qué chat tengo abierto, para que los demás lo vean. */
+function avisarViendo(chatId) {
+  if (!sesion.login) return
+  api('/api/viendo', { method: 'POST', json: { pestana: PESTANA, chatId: chatId || null } }).catch(() => {})
+}
+
+/** Quién firmó un mensaje: el autor en un grupo, o el empleado que lo mandó. */
+const firmanteDe = (m) => (m.deMi ? m.enviadoPor?.nombre || '' : m.autorNombre || '')
 
 /* ---------------- Búsqueda de mensajes ---------------- */
 
@@ -1370,6 +1493,7 @@ function infoMensaje(m) {
     m.eliminado ? `Eliminado a las ${hora(m.eliminado.ts)} por ${m.eliminado.por === 'yo' ? 'la línea' : 'el contacto'}` : null,
     m.ediciones?.length ? `Editado ${m.ediciones.length} ${m.ediciones.length === 1 ? 'vez' : 'veces'}` : null,
     m.media?.tamano ? `Archivo: ${fmtBytes(m.media.tamano)}` : null,
+    m.enviadoPor ? `Enviado por ${m.enviadoPor.nombre}` : null,
     m.origen === 'historial' ? 'Llegó con el historial al vincular' : null,
   ].filter(Boolean)
   toast(partes.join(' · '), 7000)
@@ -1703,7 +1827,7 @@ function renderLog() {
   $('#logList').innerHTML = state.logs.length
     ? state.logs.slice(0, 100).map((l) => {
         const d = new Date(l.ts)
-        return `<li><time>${pad(d.getHours())}:${pad(d.getMinutes())}</time><span class="dot ${clase[l.nivel] ?? 'info'}"></span><div>${esc(l.texto)}${l.detalle ? `<small>${esc(l.detalle)}</small>` : ''}</div></li>`
+        return `<li><time>${pad(d.getHours())}:${pad(d.getMinutes())}</time><span class="dot ${clase[l.nivel] ?? 'info'}"></span><div>${esc(l.texto)}${l.detalle || l.quien ? `<small>${esc([l.detalle, l.quien].filter(Boolean).join(' · '))}</small>` : ''}</div></li>`
       }).join('')
     : '<li style="display:block">Sin actividad todavía.</li>'
 }
@@ -1773,6 +1897,24 @@ function onEstado(nuevo) {
   }
   $('#tabInbox').disabled = !hayLinea()
   actualizarComposer()
+}
+
+/** Sale del chat abierto y vuelve a la pantalla de bienvenida, como Esc en WhatsApp Web. */
+function cerrarChat() {
+  if (!state.activo) return
+  if (!$('#msgInput')?.value.trim()) guardarBorrador(state.activo, '')
+  avisarViendo(null)
+  detenerAudios()
+  cerrarMenu()
+  cerrarInfo()
+  state.activo = null
+  state.mensajes = new Map()
+  state.respondiendo = null
+  $('#viewInbox').classList.remove('open')
+  $('#convEmpty').hidden = false
+  for (const sel of ['#convHead', '#messages', '#composer']) $(sel).hidden = true
+  renderRespuesta()
+  renderList()
 }
 
 /** Deja la bandeja en blanco: se usa al desvincular. */
@@ -1848,8 +1990,18 @@ async function sincronizar() {
 }
 
 function conectarEventos() {
-  const es = new EventSource('/api/eventos')
-  es.addEventListener('open', sincronizar)
+  const es = new EventSource(`/api/eventos?pestana=${PESTANA}`)
+  es.addEventListener('open', () => {
+    sincronizar()
+    // Tras un corte el servidor olvidó qué chat tenía abierto esta pestaña.
+    if (state.activo) avisarViendo(state.activo)
+  })
+  es.addEventListener('agentes', (e) => {
+    state.agentes = JSON.parse(e.data)
+    renderYo()
+    pedirLista()
+    if (state.activo) renderHead()
+  })
   es.addEventListener('error', () => {
     if (es.readyState !== EventSource.OPEN) onEstado({ ...state.conn, conexion: 'servicio' })
   })
@@ -2176,7 +2328,13 @@ document.addEventListener('click', async (e) => {
       $('#dlgNuevo').showModal()
       break
     case 'cerrar-dlg': $('#dlgNuevo').close(); break
-    case 'volver': $('#viewInbox').classList.remove('open'); break
+    case 'volver':
+      $('#viewInbox').classList.remove('open')
+      avisarViendo(null)
+      break
+    case 'salir-sesion':
+      await salirDeSesion()
+      break
     case 'adjuntar': $('#fileInput').click(); break
     case 'grabar': empezarGrabacion(); break
     case 'enviar': enviarTexto(); break
@@ -2282,7 +2440,7 @@ document.addEventListener('keydown', (e) => {
     else if (state.respondiendo) {
       state.respondiendo = null
       renderRespuesta()
-    }
+    } else if (state.activo) cerrarChat()
   }
 })
 
@@ -2324,4 +2482,6 @@ if (tema) document.documentElement.dataset.theme = tema
 syncTema()
 setView('inbox')
 renderList()
-conectarEventos()
+entrar()
+  .then((ok) => ok && conectarEventos())
+  .catch(() => pantallaSinSesion({ error: 'No se pudo conectar con el servidor del WhatsApp.' }))

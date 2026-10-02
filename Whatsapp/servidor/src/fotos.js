@@ -8,6 +8,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { DATA_DIR } from './config.js'
 import { clave, infoFoto, listarChats, setFoto } from './almacen.js'
+import { sinUsuario } from './auth.js'
 
 export const FOTOS_DIR = path.join(DATA_DIR, 'fotos')
 fs.mkdirSync(FOTOS_DIR, { recursive: true })
@@ -43,7 +44,8 @@ export function pedirFotos(jids, { urgente = false } = {}) {
     if (urgente) cola.unshift(jid)
     else cola.push(jid)
   }
-  procesar()
+  // La cola sigue trabajando después del pedido que la despertó: va sin usuario.
+  sinUsuario(() => procesar())
 }
 
 export function pedirFotosDeTodos() {

@@ -66,12 +66,36 @@
       <button role="tab" id="tabConnect" data-view="connect" aria-selected="false">Conexión</button>
     </div>
     <div class="topbar-actions">
+      <div class="yo glass" id="yo" hidden></div>
       <button class="line-pill glass" id="linePill" data-view="connect"><span class="dot info"></span>Conectando con el servicio…</button>
       <button class="theme-btn" data-act="theme" aria-label="Cambiar tema"><svg class="i"><use href="#i-moon"/></svg></button>
     </div>
   </header>
 
   <div class="banner" id="banner" hidden></div>
+
+  <!-- Sin sesión: el panel se usa entrando desde el CRM -->
+  <div class="sin-sesion" id="sinSesion" hidden>
+    <div class="card glass shadow">
+      <svg class="i" aria-hidden="true"><use href="#i-wa"/></svg>
+      <h2>Entrá desde el CRM</h2>
+      <p id="sinSesionTxt">Entrá al WhatsApp desde el CRM.</p>
+      <a class="btn primary" id="sinSesionLink" href="#" hidden>Ir al CRM</a>
+      <form class="prueba" id="sinSesionPrueba" hidden>
+        <div class="prueba-rapida">
+          <button type="button" class="btn ghost" data-prueba="Empleado 1">Empleado 1</button>
+          <button type="button" class="btn ghost" data-prueba="Empleado 2">Empleado 2</button>
+          <button type="button" class="btn ghost" data-prueba="Empleado 3">Empleado 3</button>
+          <button type="button" class="btn ghost" data-prueba="Empleado 4">Empleado 4</button>
+        </div>
+        <div class="prueba-libre">
+          <input id="pruebaNombre" type="text" placeholder="u otro nombre" aria-label="Nombre para entrar" maxlength="40">
+          <button type="submit" class="btn primary">Entrar</button>
+        </div>
+        <small>Cada ventana del navegador es una persona. Para probar a otro empleado a la vez, abrí una ventana privada u otro navegador.</small>
+      </form>
+    </div>
+  </div>
 
   <!-- ===================== BANDEJA ===================== -->
   <section id="viewInbox" class="inbox" aria-label="Bandeja de WhatsApp">

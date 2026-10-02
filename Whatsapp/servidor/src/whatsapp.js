@@ -33,6 +33,7 @@ import makeWASocket, {
 } from 'baileys'
 import { BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG } from './config.js'
 import { emitir, log } from './eventos.js'
+import { sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
 import { configurarFotos, pedirFotos, pedirFotosDeTodos } from './fotos.js'
 import {
@@ -69,10 +70,33 @@ import {
   setMeta,
   setSilenciado,
   silenciadoDe,
+  recibioDespuesDe,
   vistaChat,
 } from './almacen.js'
 
-const logger = pino({ level: BAILEYS_LOG })
+/*
+ * Hasta cuándo vale cada archivado. Con "desarchivar al recibir mensajes" activado en el
+ * celular, WhatsApp no guarda "archivado" a secas sino "archivado hasta tal mensaje": si
+ * después escribe la otra persona, el chat vuelve a la bandeja. Baileys recibe ese
+ * mensaje de corte pero no lo pasa en el evento: solo aparece en su registro interno ("processing
+ * sync action"). El logger la captura acá, antes de que llegue el evento del chat.
+ */
+const rangoArchivado = new Map() // id del chat (como lo manda WhatsApp) → ids de los mensajes de corte
+
+const NIVELES = { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60, silent: Infinity }
+const logger = pino({
+  // trace para ver las acciones de sincronización; lo que se imprime sigue siendo BAILEYS_LOG.
+  level: 'trace',
+  hooks: {
+    logMethod(args, metodo, nivel) {
+      const accion = args[1] === 'processing sync action' ? args[0]?.syncAction : null
+      const rango = accion?.syncAction?.value?.archiveChatAction?.messageRange
+      const id = accion?.index?.[1]
+      if (id && rango) rangoArchivado.set(id, (rango.messages || []).map((m) => m?.key?.id).filter(Boolean))
+      if (nivel >= (NIVELES[BAILEYS_LOG] ?? Infinity)) metodo.apply(this, args)
+    },
+  },
+})
 
 let sock = null
 let conexion = 'iniciando' // iniciando | conectando | qr | conectado | desconectado
@@ -118,7 +142,12 @@ function programar(ms) {
   }, ms)
 }
 
-export async function iniciar() {
+/** Arranca (o reinicia) la conexión. Nunca queda atada al empleado que la pidió. */
+export function iniciar() {
+  return sinUsuario(() => iniciarConexion())
+}
+
+async function iniciarConexion() {
   clearTimeout(reconectarTimer)
   detenido = false
   if (sock) {
@@ -698,6 +727,29 @@ export async function suscribirPresencia(chatId) {
 
 /* ---------------- Archivados y fijados ---------------- */
 
+/**
+ * Si un archivado sigue en pie, con la misma regla que el celular: con "desarchivar al
+ * recibir mensajes" activado, un chat archivado vuelve a la bandeja si la otra persona
+ * escribió después de que se archivó.
+ */
+const cuentaArchivo = { siguen: 0, vuelven: 0, sinCorte: 0 } // para el registro de cada sincronización
+
+function archivadoVigente(ch, id) {
+  if (!ch.archived) return false
+  const creds = sock?.authState?.creds || authActual?.creds
+  const corte = rangoArchivado.get(ch.id)
+  rangoArchivado.delete(ch.id)
+  if (!creds?.accountSettings?.unarchiveChats) return true
+  const despues = corte?.length ? recibioDespuesDe(id, corte) : null
+  // Sin el mensaje de corte guardado no se puede saber: vale lo que dice WhatsApp.
+  if (despues === null) {
+    cuentaArchivo.sinCorte++
+    return true
+  }
+  cuentaArchivo[despues ? 'vuelven' : 'siguen']++
+  return !despues
+}
+
 async function procesarChats(chats, { crearGrupos = false } = {}) {
   for (const ch of chats || []) {
     if (!ch?.id) continue
@@ -716,7 +768,7 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
       upsertChat(id, { ultimoTs: toNumber(ch.conversationTimestamp) || 0 })
     }
     if (cambiaNombre) setGrupoNombre(id, ch.name)
-    if (cambiaArchivo) setArchivado(id, ch.archived)
+    if (cambiaArchivo) setArchivado(id, archivadoVigente(ch, id))
     if (cambiaFijado) setFijado(id, ch.pinned ? toNumber(ch.pinned) : null)
     if (cambiaSilencio) setSilenciado(id, ch.muteEndTime ? toNumber(ch.muteEndTime) : null)
   }
@@ -742,6 +794,8 @@ export async function sincronizarChats() {
     // Los eventos se procesan apenas termina la sincronización: se espera un momento antes de contar.
     await new Promise((r) => setTimeout(r, 1500))
     setMeta({ chatsSincronizados: Date.now() })
+    log('info', 'Archivados revisados', `${cuentaArchivo.siguen} siguen · ${cuentaArchivo.vuelven} volvieron a la bandeja por mensajes nuevos · ${cuentaArchivo.sinCorte} sin el mensaje de corte guardado`)
+    Object.assign(cuentaArchivo, { siguen: 0, vuelven: 0, sinCorte: 0 })
     const r = contarMarcas()
     log('ok', 'Chats sincronizados', `${r.archivados} archivados · ${r.fijados} fijados`)
     return r
@@ -893,7 +947,9 @@ export async function reenviarMensajes(origen, ids, destinos) {
         ? JSON.parse(m.raw, BufferJSON.reviver)
         : { key: claveMensaje(origen, m), message: { conversation: m.texto || '' } }
       try {
-        await sock.sendMessage(destino, { forward: wa })
+        const r = await sock.sendMessage(destino, { forward: wa })
+        if (r && !buscarMensaje(destino, r.key.id)) await procesarEntrante(r, 'append')
+        if (r) firmarEnviado(destino, r.key.id)
         enviados++
       } catch (err) {
         fallados.push(id)
@@ -1085,7 +1141,11 @@ export function encolarMedia(chatId, id, { forzar = false } = {}) {
   return true
 }
 
-async function arrancarCola() {
+function arrancarCola() {
+  sinUsuario(() => trabajarCola())
+}
+
+async function trabajarCola() {
   if (bajando) return
   bajando = true
   try {
@@ -1169,6 +1229,7 @@ async function enviar(chatId, contenido, buffer, quoted) {
     }
     // Normalmente ya lo guardó messages.upsert; esto cubre el caso en que no llegue.
     if (enviado && !buscarMensaje(chatId, enviado.key.id)) await procesarEntrante(enviado, 'append')
+    if (enviado) firmarEnviado(chatId, enviado.key.id)
     return enviado?.key?.id
   } finally {
     setTimeout(() => mediaPropia.delete(messageId), 60000)
@@ -1180,6 +1241,17 @@ function claveMensaje(chatId, m) {
   const key = { remoteJid: chatId, id: m.id, fromMe: !!m.deMi }
   if (esGrupo(chatId) && m.autor) key.participant = m.autor
   return key
+}
+
+/**
+ * Anota qué empleado mandó el mensaje. Lo guarda el evento de WhatsApp, que corre fuera
+ * del pedido del empleado, así que la firma se pone acá, cuando el envío ya volvió.
+ * Lo que se manda desde el celular queda sin firma.
+ */
+function firmarEnviado(chatId, id) {
+  const u = usuarioActual()
+  if (!u || !id || !buscarMensaje(chatId, id)) return
+  actualizarMensaje(chatId, id, { enviadoPor: { id: u.id, nombre: u.nombre } })
 }
 
 /** Mensaje a citar, armado con lo guardado: Baileys necesita la clave y el contenido original. */

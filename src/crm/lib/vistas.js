@@ -9,6 +9,7 @@ export const VISTAS = [
   { key: 'tareas', label: 'Tareas', ruta: '/crm/tareas' },
   { key: 'usuarios', label: 'Usuarios', ruta: '/crm/usuarios' },
   { key: 'roles', label: 'Roles', ruta: '/crm/roles' },
+  { key: 'whatsapp', label: 'WhatsApp', ruta: '/crm/whatsapp' },
 ]
 
 export const ROL_LABEL = { admin: 'Admin', dueno: 'Dueño', vendedor: 'Vendedor' }

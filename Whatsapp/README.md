@@ -1,9 +1,12 @@
 # WhatsApp · prueba local
 
-Versión preliminar de la bandeja de WhatsApp de Neifert. Corre entera en tu PC: un servicio Node con Baileys se conecta a WhatsApp, guarda todo en archivos locales y sirve una pantalla web para usarlo. Sirve para probar el funcionamiento real con tu número antes de integrarlo al CRM y pasarlo a producción.
+> **Varios empleados y login con el CRM:** ver [docs/SERVIDOR.md](docs/SERVIDOR.md).
+
+Versión preliminar de la bandeja de WhatsApp de Neifert. Corre entera en tu PC: un servicio Node con Baileys se conecta a WhatsApp, guarda los mensajes en Supabase y sirve una pantalla web para usarlo. Sirve para probar el funcionamiento real con tu número antes de integrarlo al CRM y pasarlo a producción.
 
 ```
 Whatsapp/
+  docs/       documentación (SERVIDOR.md, Baileys.md)
   mockup/     diseño de referencia (datos de ejemplo, sin conexión)
   servidor/   servicio Node + Baileys + API
   web/        pantalla de prueba (la sirve el servidor)
@@ -59,29 +62,31 @@ Para frenar el servicio: `Ctrl + C` en la terminal. La sesión queda guardada: a
 
 ## Dónde se guardan los datos
 
-Todo queda en `Whatsapp/servidor/data/`, que está en `.gitignore`:
+Chats, contactos y mensajes van a Supabase (esquema `wa`), si `WA_DATABASE_URL` está en
+`servidor/.env`. Con `ALMACEN=local` se guardan en archivos, para pruebas. Detalle en
+[docs/SERVIDOR.md](docs/SERVIDOR.md#4-dónde-se-guarda-cada-cosa).
+
+En `Whatsapp/servidor/data/` (en `.gitignore`) queda siempre:
 
 ```
 sesion/                 credenciales de WhatsApp (dan acceso a la cuenta: no compartir)
-estado.json             chats, nombres de contactos y preferencias
-mensajes/<chat>.jsonl   un cambio por línea; nada se borra ni se reescribe
 media/<chat>/           fotos, videos, audios y documentos
+estado.json, mensajes/  solo en modo local
 ```
-
-Para empezar de cero: frená el servicio y borrá la carpeta `data/`.
 
 ## Límites conocidos
 
-- **Solo chats individuales.** Grupos, estados y canales se ignoran.
+- **Estados y canales se ignoran.** Los chats individuales y los grupos sí entran.
 - **Historial inicial corto.** Al vincular, WhatsApp manda solo los mensajes recientes; lo anterior no se recupera.
 - **Lo borrado antes de conectar no se recupera.** El anti-borrado funciona con los mensajes que llegaron con el servicio andando.
 - **Archivos de más de 50 MB** no se descargan.
 - **Algunos contactos llegan sin número** (WhatsApp los identifica con un "LID"). En cuanto WhatsApp informa el número, el chat se une solo con el del teléfono.
 - **Una sola instancia por sesión.** Si abrís dos `npm start` con la misma carpeta `data/`, WhatsApp las desconecta.
-- El servicio escucha solo en `localhost`: no se puede abrir desde otro dispositivo de la red.
+- Por defecto escucha solo en `localhost`. Para que entren otras computadoras, ver [docs/SERVIDOR.md](docs/SERVIDOR.md): exige el login con el CRM.
 
 ## Después: integración al CRM
 
 - `servidor/src/almacen.js` es el único archivo que toca el disco. Para pasar a base de datos + Cloudflare R2 se reemplaza ese módulo.
 - `web/` es provisoria: en el CRM se reescribe en React con los componentes existentes, usando la misma API.
-- Para producción falta: autenticación de la API con los usuarios del CRM, correr el servicio en un servidor siempre prendido y definir cómo lo accede el panel publicado.
+- Login con los usuarios del CRM y varios empleados a la vez: hecho, ver [docs/SERVIDOR.md](docs/SERVIDOR.md).
+- Dónde alojar el servidor: pendiente de definir.

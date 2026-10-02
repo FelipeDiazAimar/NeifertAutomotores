@@ -1,5 +1,9 @@
 /*
- * Almacenamiento local en archivos. Estructura dentro de data/:
+ * Almacén de chats, contactos y mensajes. Dos modos (ALMACEN en config.js):
+ *
+ *   supabase  todo en la base (esquema "wa"): al arrancar se carga a memoria y los
+ *             cambios se escriben en tandas (ver nube.js).
+ *   local     archivos en data/, para pruebas. Estructura:
  *
  *   sesion/                 credenciales de Baileys
  *   estado.json             chats, contactos, mapa LID → teléfono y preferencias
@@ -10,13 +14,16 @@
  * corte de luz no puede dejar el historial corrupto y nada se borra: un mensaje
  * eliminado en WhatsApp es solo una línea "upd" más.
  *
- * Todo el acceso a disco pasa por este módulo: para migrar a una base de datos y
- * a Cloudflare R2 alcanza con reescribir este archivo.
+ * En los dos modos, la sesión de WhatsApp (data/sesion) y los archivos multimedia
+ * (data/media) quedan en disco. El resto del servidor no sabe en qué modo está.
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { DATA_DIR } from './config.js'
+import { ALMACEN, DATA_DIR } from './config.js'
 import { emitir } from './eventos.js'
+import * as nube from './nube.js'
+
+export const EN_SUPABASE = ALMACEN === 'supabase'
 
 export const AUTH_DIR = path.join(DATA_DIR, 'sesion')
 const MSG_DIR = path.join(DATA_DIR, 'mensajes')
@@ -27,16 +34,41 @@ for (const dir of [DATA_DIR, MSG_DIR, MEDIA_DIR]) fs.mkdirSync(dir, { recursive:
 
 const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false }
 
-const estado = leerJson(ESTADO_FILE, {})
-estado.chats ??= {}
-estado.contactos ??= {}
-estado.lids ??= {}
-estado.archivados ??= {}
-estado.fijados ??= {}
-estado.meta ??= {}
-estado.fotos ??= {}
-estado.silenciados ??= {}
-estado.config = { ...CONFIG_INICIAL, ...estado.config }
+const estado = EN_SUPABASE ? {} : leerJson(ESTADO_FILE, {})
+function completarEstado() {
+  estado.chats ??= {}
+  estado.contactos ??= {}
+  estado.lids ??= {}
+  estado.archivados ??= {}
+  estado.fijados ??= {}
+  estado.meta ??= {}
+  estado.fotos ??= {}
+  estado.silenciados ??= {}
+  estado.config = { ...CONFIG_INICIAL, ...estado.config }
+}
+completarEstado()
+
+/**
+ * Deja el almacén listo. En modo supabase trae todo de la base a memoria; hay que
+ * esperarlo antes de conectar WhatsApp.
+ */
+export async function iniciarAlmacen() {
+  if (!EN_SUPABASE) return { modo: 'local', chats: Object.keys(estado.chats).length }
+  const { estado: guardado, mensajes } = await nube.cargarTodo()
+  Object.assign(estado, guardado)
+  completarEstado()
+  cache.clear()
+  let total = 0
+  for (const [jid, porId] of mensajes) {
+    cache.set(clave(jid), porId)
+    total += porId.size
+  }
+  nube.conectarAlmacen(() => ({ estado, mensajes: (jid) => cache.get(clave(jid)) }))
+  return { modo: 'supabase', chats: Object.keys(estado.chats).length, mensajes: total }
+}
+
+/** Escribe lo pendiente antes de apagar (solo modo supabase). */
+export const cerrarAlmacen = () => (EN_SUPABASE ? nube.cerrar() : Promise.resolve())
 
 function leerJson(file, porDefecto) {
   try {
@@ -48,6 +80,7 @@ function leerJson(file, porDefecto) {
 
 let guardarTimer
 function guardarEstado() {
+  if (EN_SUPABASE) return nube.estadoCambiado()
   clearTimeout(guardarTimer)
   guardarTimer = setTimeout(() => {
     const tmp = `${ESTADO_FILE}.tmp`
@@ -81,6 +114,7 @@ export function setContacto(jid, { nombre, notify } = {}) {
   if (nuevo.nombre === previo.nombre && nuevo.notify === previo.notify) return
   estado.contactos[jid] = nuevo
   guardarEstado()
+  if (EN_SUPABASE) nube.contactoCambiado(jid)
   if (estado.chats[jid]) emitir('chat', vistaChat(estado.chats[jid]))
 }
 
@@ -104,6 +138,7 @@ export function setArchivado(jid, archivado) {
   if (archivado) estado.archivados[jid] = true
   else delete estado.archivados[jid]
   guardarEstado()
+  if (EN_SUPABASE && estado.chats[jid]) nube.chatCambiado(jid)
   if (estado.chats[jid]) emitir('chat', vistaChat(estado.chats[jid]))
   return true
 }
@@ -114,6 +149,7 @@ export function setFijado(jid, ts) {
   if (valor) estado.fijados[jid] = valor
   else delete estado.fijados[jid]
   guardarEstado()
+  if (EN_SUPABASE && estado.chats[jid]) nube.chatCambiado(jid)
   if (estado.chats[jid]) emitir('chat', vistaChat(estado.chats[jid]))
   return true
 }
@@ -143,6 +179,7 @@ export function setSilenciado(jid, hasta) {
   if (valor) estado.silenciados[jid] = valor
   else delete estado.silenciados[jid]
   guardarEstado()
+  if (EN_SUPABASE && estado.chats[jid]) nube.chatCambiado(jid)
   if (estado.chats[jid]) emitir('chat', vistaChat(estado.chats[jid]))
   return true
 }
@@ -177,8 +214,18 @@ export function registrarLid(lid, pn) {
   if (!viejo) return
   const kv = clave(lid)
   const kn = clave(pn)
+  if (EN_SUPABASE) {
+    // Los mensajes del chat con LID pasan al del teléfono; el viejo se borra de la base.
+    const destino = cargarClave(kn)
+    for (const [id, m] of cargarClave(kv)) {
+      destino.set(id, { ...destino.get(id), ...m })
+      nube.mensajeCambiado(pn, id)
+    }
+    cache.delete(kv)
+    nube.chatBorrado(lid)
+  }
   const archivoViejo = path.join(MSG_DIR, `${kv}.jsonl`)
-  if (fs.existsSync(archivoViejo)) {
+  if (!EN_SUPABASE && fs.existsSync(archivoViejo)) {
     fs.appendFileSync(path.join(MSG_DIR, `${kn}.jsonl`), fs.readFileSync(archivoViejo))
     fs.rmSync(archivoViejo)
   }
@@ -189,8 +236,10 @@ export function registrarLid(lid, pn) {
     for (const f of fs.readdirSync(mediaVieja)) fs.renameSync(path.join(mediaVieja, f), path.join(mediaNueva, f))
     fs.rmSync(mediaVieja, { recursive: true, force: true })
   }
-  cache.delete(kv)
-  cache.delete(kn)
+  if (!EN_SUPABASE) {
+    cache.delete(kv)
+    cache.delete(kn)
+  }
 
   const actual = estado.chats[pn]
   const viejoMasNuevo = (viejo.ultimoTs || 0) > (actual?.ultimoTs || 0)
@@ -205,6 +254,7 @@ export function registrarLid(lid, pn) {
   }
   delete estado.chats[lid]
   guardarEstado()
+  if (EN_SUPABASE) nube.chatCambiado(pn)
   emitir('chat-migrado', { de: lid, a: pn })
   emitir('chat', vistaChat(estado.chats[pn]))
 }
@@ -267,6 +317,7 @@ export function upsertChat(jid, patch = {}) {
   const chat = { ...previo, ...patch, id: jid }
   estado.chats[jid] = chat
   guardarEstado()
+  if (EN_SUPABASE) nube.chatCambiado(jid)
   emitir('chat', vistaChat(chat))
   return chat
 }
@@ -291,7 +342,7 @@ function cargarClave(k) {
   if (cache.has(k)) return cache.get(k)
   const porId = new Map()
   const file = path.join(MSG_DIR, `${k}.jsonl`)
-  if (fs.existsSync(file)) {
+  if (!EN_SUPABASE && fs.existsSync(file)) {
     for (const linea of fs.readFileSync(file, 'utf8').split('\n')) {
       if (!linea.trim()) continue
       try {
@@ -308,6 +359,7 @@ function cargarClave(k) {
 }
 
 function escribir(jid, op) {
+  if (EN_SUPABASE) return nube.mensajeCambiado(jid, op.m?.id ?? op.id)
   fs.appendFileSync(path.join(MSG_DIR, `${clave(jid)}.jsonl`), `${JSON.stringify(op)}\n`)
 }
 
@@ -332,6 +384,48 @@ export function listarMensajes(jid) {
 }
 
 export const buscarMensaje = (jid, id) => cargar(jid).get(id) || null
+
+/**
+ * ¿Escribió la otra persona después de `idsCorte`? Es la regla de WhatsApp para saber si
+ * un chat archivado vuelve a la bandeja. El corte es un mensaje, no una hora: la hora que
+ * informa WhatsApp puede diferir en minutos de la del mensaje guardado.
+ * Devuelve null si el mensaje de corte no está guardado (no se puede saber).
+ * Lee el archivo sin dejarlo en memoria: se usa para muchos chats de una vez.
+ */
+export function recibioDespuesDe(jid, idsCorte) {
+  const k = clave(jid)
+  let mensajes
+  if (cache.has(k)) {
+    mensajes = [...cache.get(k).values()].map((m) => ({ id: m.id, ts: m.ts, deMi: m.deMi, tipo: m.tipo, raw: m.raw }))
+  } else {
+    const file = path.join(MSG_DIR, `${k}.jsonl`)
+    if (!fs.existsSync(file)) return null
+    mensajes = []
+    for (const linea of fs.readFileSync(file, 'utf8').split('\n')) {
+      if (!linea.includes('"op":"add"')) continue
+      try {
+        const { id, ts, deMi, tipo, raw } = JSON.parse(linea).m
+        mensajes.push({ id, ts, deMi, tipo, raw })
+      } catch {
+        // Línea incompleta: se ignora.
+      }
+    }
+  }
+  const ids = new Set(idsCorte)
+  let corte = null
+  for (const m of mensajes) if (ids.has(m.id) && (corte === null || m.ts > corte)) corte = m.ts
+  if (corte === null) return null
+  // Un álbum llega como un mensaje "álbum" y después cada foto por separado, apuntando al
+  // álbum o a otra foto del mismo álbum. Si el corte es el álbum, toda esa cadena es el
+  // mismo envío y no cuenta como mensaje nuevo.
+  const posteriores = mensajes.filter((m) => m.ts > corte && !ids.has(m.id)).sort((a, b) => a.ts - b.ts)
+  for (const m of posteriores) {
+    if (m.raw && [...ids].some((id) => m.raw.includes(id))) ids.add(m.id)
+    // El aviso de un mensaje borrado no es un mensaje nuevo: WhatsApp no desarchiva por eso.
+    else if (!m.deMi && m.tipo !== 'desconocido') return true
+  }
+  return false
+}
 
 /** Guarda un mensaje nuevo. Si ya existía (llega dos veces por historial y en vivo), solo completa campos vacíos. */
 export function agregarMensaje(jid, m) {
@@ -394,7 +488,8 @@ export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
       if (!m.texto || !normalizar(m.texto).includes(q)) continue
       resultados.push({ chatId: chatJid, ...vistaMensaje(m) })
     }
-    if (!cacheados.has(k)) cache.delete(k)
+    // En modo local no se deja todo cargado; en supabase la memoria ES el almacén.
+    if (!EN_SUPABASE && !cacheados.has(k)) cache.delete(k)
   }
 
   resultados.sort((a, b) => b.ts - a.ts)
@@ -439,7 +534,7 @@ const CATEGORIA = {
   audios: ['ogg', 'opus', 'mp3', 'm4a', 'aac', 'wav', 'amr'],
 }
 
-export function usoAlmacenamiento() {
+export async function usoAlmacenamiento() {
   const media = { fotos: 0, videos: 0, audios: 0, documentos: 0 }
   recorrer(MEDIA_DIR, (p, size) => {
     const ext = path.extname(p).slice(1).toLowerCase()
@@ -449,7 +544,13 @@ export function usoAlmacenamiento() {
   let mensajesBytes = 0
   let mensajes = 0
   let eliminados = 0
-  recorrer(MSG_DIR, (p, size) => {
+  if (EN_SUPABASE) {
+    for (const porId of cache.values()) {
+      mensajes += porId.size
+      for (const m of porId.values()) if (m.eliminado) eliminados++
+    }
+    mensajesBytes = await nube.tamanos().then((t) => t.mensajes + t.resto).catch(() => 0)
+  } else recorrer(MSG_DIR, (p, size) => {
     mensajesBytes += size
     const txt = fs.readFileSync(p, 'utf8')
     mensajes += (txt.match(/"op":"add"/g) || []).length
@@ -462,6 +563,18 @@ export function usoAlmacenamiento() {
     mensajes,
     eliminados,
     bytes: { mensajes: mensajesBytes, sesion: sesionBytes, media },
-    carpeta: DATA_DIR,
+    carpeta: EN_SUPABASE ? `Supabase (esquema wa) · sesión y archivos en ${DATA_DIR}` : DATA_DIR,
+    almacen: ALMACEN,
+    pendientesDeGuardar: EN_SUPABASE ? nube.pendientesDeGuardar() : 0,
   }
+}
+
+/* ---------------- Importar lo local a Supabase ---------------- */
+
+/** Todo lo que hay en los archivos locales, para subirlo a Supabase. Solo en modo local. */
+export function volcarLocal() {
+  if (EN_SUPABASE) throw new Error('volcarLocal se usa con ALMACEN=local')
+  const mensajes = new Map()
+  for (const jid of Object.keys(estado.chats)) mensajes.set(jid, cargar(jid))
+  return { estado, mensajes }
 }

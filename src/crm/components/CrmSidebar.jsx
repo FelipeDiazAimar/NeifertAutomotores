@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, Car, Users, ListTodo, LogOut, KeyRound, UserCog, ShieldCheck,
-  ClipboardCheck, FileStack,
+  ClipboardCheck, FileStack, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
@@ -20,6 +20,7 @@ const NAV = [
   { to: '/crm/gestoria', label: 'Gestoría', icon: FileStack, vista: 'gestoria' },
   { to: '/crm/usuarios', label: 'Usuarios', icon: UserCog, vista: 'usuarios' },
   { to: '/crm/roles', label: 'Roles', icon: ShieldCheck, vista: 'roles' },
+  { to: '/crm/whatsapp', label: 'WhatsApp', icon: MessageCircle, vista: 'whatsapp' },
 ]
 
 export default function CrmSidebar({ onNavigate }) {

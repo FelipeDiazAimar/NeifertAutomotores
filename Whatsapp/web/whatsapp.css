@@ -343,3 +343,31 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 
 .btn.ghost.chico { padding: 6px 10px; font-size: 12px; border-radius: 9px; flex: none; }
 .btn.chico svg.i { width: 14px; height: 14px; }
+
+/* ---------- Sesión y equipo ---------- */
+.yo { display: flex; align-items: center; gap: 4px; padding: 4px 4px 4px 12px; border-radius: 99px; font-size: 13px; font-weight: 600; }
+.yo-nombre { display: flex; align-items: center; gap: 6px; }
+.yo-nombre svg.i { width: 15px; height: 15px; color: var(--ink-3); }
+.yo-nombre em { font-style: normal; font-size: 11px; color: var(--wa); background: var(--wa-soft); padding: 1px 6px; border-radius: 99px; }
+.yo .icon-btn { width: 30px; height: 30px; }
+
+/* Quién mandó el mensaje (empleado), arriba de la burbuja propia. */
+.msg .firma { font-size: 11.5px; font-weight: 700; color: var(--ink-3); margin-bottom: 2px; }
+
+/* Otro empleado tiene abierto este chat. */
+.agente-dot { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 99px; background: var(--wa); color: #fff; font-size: 10.5px; font-weight: 700; }
+.tag.equipo { background: var(--wa-soft); color: var(--wa); border-color: transparent; }
+
+.sin-sesion { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: var(--bg); }
+.sin-sesion .card { max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 28px; text-align: center; }
+.sin-sesion svg.i { width: 40px; height: 40px; color: var(--wa); }
+.sin-sesion h2 { font-size: 19px; }
+.sin-sesion p { color: var(--ink-2); margin: 0; line-height: 1.5; }
+
+/* Modo prueba */
+.prueba { display: flex; flex-direction: column; gap: 12px; width: 100%; }
+.prueba-rapida { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.prueba-libre { display: flex; gap: 8px; }
+.prueba-libre input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--field); background: var(--solid); font: inherit; color: inherit; }
+.prueba small { font-size: 12px; color: var(--ink-3); line-height: 1.45; }
+.tag.prueba-tag { background: var(--amber-soft); color: var(--amber); border-color: transparent; }

@@ -42,6 +42,7 @@ const DashboardPage = lazy(() => import('@/crm/pages/DashboardPage'))
 const UsuariosPage = lazy(() => import('@/crm/pages/UsuariosPage'))
 const RolesPage = lazy(() => import('@/crm/pages/RolesPage'))
 const CambiarPasswordPage = lazy(() => import('@/crm/pages/CambiarPasswordPage'))
+const WhatsappPage = lazy(() => import('@/crm/pages/WhatsappPage'))
 const VistaGuard = lazy(() => import('@/crm/routes/VistaGuard'))
 
 export default function AppRouter() {
@@ -97,6 +98,7 @@ export default function AppRouter() {
             <Route path="/crm/vehiculos/:id/editar" element={<VehiculoEditarPage />} />
             <Route path="/crm/usuarios" element={<UsuariosPage />} />
             <Route path="/crm/roles" element={<RolesPage />} />
+            <Route path="/crm/whatsapp" element={<WhatsappPage />} />
             <Route path="/crm/cambiar-password" element={<CambiarPasswordPage />} />
           </Route>
         </Route>
