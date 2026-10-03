@@ -4,8 +4,9 @@
  * Con WA_R2_BUCKET van a Cloudflare R2 (un bucket privado); si no, al disco (DATA_DIR).
  * Las claves son las mismas rutas en los dos lados, así pasar del disco a R2 es copiar:
  *
- *   media/<chat>/<id>.<ext>   archivos de los mensajes
- *   fotos/<chat>.jpg          fotos de perfil
+ *   media/<carpeta>/<id>.<ext>  archivos de los mensajes; la carpeta lleva el nombre del
+ *                               contacto y su número (ver claveMedia en almacen.js)
+ *   fotos/<chat>.jpg            fotos de perfil
  *
  * El navegador nunca habla con R2: el servidor trae cada archivo y lo entrega solo a
  * quien entró desde el CRM, así el bucket puede (y tiene que) quedar cerrado.
@@ -50,6 +51,12 @@ export async function guardar(clave, buffer, mime) {
   const ruta = enDisco(clave)
   fs.mkdirSync(path.dirname(ruta), { recursive: true })
   fs.writeFileSync(ruta, buffer)
+}
+
+/** Borra un archivo (de R2 y del disco, esté donde esté). */
+export async function borrar(clave) {
+  fs.rmSync(enDisco(clave), { force: true })
+  if (cliente) await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: clave }))
 }
 
 /**

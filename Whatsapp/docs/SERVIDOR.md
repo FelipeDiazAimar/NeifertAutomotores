@@ -157,7 +157,7 @@ escribe los cambios en tandas cada 1,5 segundos. Si la base no responde, reinten
 | Chats (archivado, fijado, silenciado) | `wa.chats` |
 | Contactos | `wa.contactos` |
 | LIDs, preferencias, fotos de perfil conocidas | `wa.estado` |
-| Fotos, videos, audios, stickers, documentos | Cloudflare R2 `media/<chat>/` (sin R2: `DATA_DIR/media/<chat>/`) |
+| Fotos, videos, audios, stickers, documentos | Cloudflare R2 `media/<carpeta>/` (sin R2: `DATA_DIR/media/<carpeta>/`) |
 | Fotos de perfil | Cloudflare R2 `fotos/` (sin R2: `DATA_DIR/fotos/`) |
 | Sesión de WhatsApp (la llave) | `DATA_DIR/sesion/` |
 | Firma de las cookies | `DATA_DIR/secreto-sesion` |
@@ -183,6 +183,16 @@ se pueden adelantar sin bajar todo (pedidos parciales).
 4. Lo que ya estaba en el disco se sigue viendo (el servidor lo busca primero ahí). Para
    subirlo: `npm run subir-r2`. Cuando termine sin errores, `npm run subir-r2 -- --borrar`
    lo borra del disco. Se puede correr más de una vez.
+
+**Una carpeta por contacto.** Dentro de `media/`, cada chat tiene su carpeta con el nombre
+y el número: `Uli Avendaño (+5493406643845)`, o `Grupo Proyecto GIMNASIO (120363…)` para
+los grupos. El número va siempre porque dos contactos pueden llamarse igual. El nombre se
+fija la primera vez que se guarda un archivo de ese chat: si el contacto después se cambia
+el nombre, la carpeta sigue igual (así nada queda repartido en dos). Las carpetas del
+formato anterior (`media/<número>_s_whatsapp_net/`) se renombran solas al arrancar.
+
+Las fotos de perfil van aparte, en `fotos/`, por número. Si una figura como guardada y no
+está (por ejemplo, se borró a mano), el servidor la vuelve a bajar al conectar.
 
 Sin `WA_R2_BUCKET`, los archivos quedan en `DATA_DIR` como antes. En producción R2 evita
 depender del disco del servidor: si se cambia de host, solo hay que llevar `data/sesion`.

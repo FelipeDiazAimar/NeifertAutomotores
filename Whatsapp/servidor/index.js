@@ -2,9 +2,9 @@ import express from 'express'
 import { HOST, LOGIN_CONFIGURADO, numeroLinea, ORIGENES_CRM, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
-import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
-import { claveFoto } from './src/fotos.js'
+import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, servir } from './src/archivos.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
@@ -106,9 +106,16 @@ app.post('/api/chats/:id/reaccion', ruta((req) => wa.enviarReaccion(chatId(req),
 app.post('/api/chats/:id/eliminar', ruta((req) => wa.eliminarMensaje(chatId(req), req.body?.id)))
 app.post('/api/chats/:id/destacar', ruta((req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar)))
 app.post('/api/chats/:id/presencia', ruta((req) => wa.suscribirPresencia(chatId(req))))
-app.get('/api/chats/:id/foto', ruta((req, res) =>
-  servir(req, res, claveFoto(chatId(req)), { mime: 'image/jpeg', cache: 'private, max-age=604800', faltante: 'Sin foto de perfil' }),
-))
+app.get('/api/chats/:id/foto', ruta(async (req, res) => {
+  const jid = chatId(req)
+  try {
+    await servir(req, res, claveFoto(jid), { mime: 'image/jpeg', cache: 'private, max-age=604800', faltante: 'Sin foto de perfil' })
+  } catch (err) {
+    // Figura como guardada pero no está: se vuelve a bajar y la pantalla la actualiza sola.
+    if (err.status === 404) recuperarFoto(jid)
+    throw err
+  }
+}))
 app.post('/api/chats/:id/archivo', binario, ruta(async (req) => ({
   id: await wa.enviarArchivo(chatId(req), archivoDe(req), {
     mime: req.get('content-type'),
@@ -120,9 +127,15 @@ app.post('/api/chats/:id/nota-voz', binario, ruta(async (req) => ({
   id: await wa.enviarNotaDeVoz(chatId(req), archivoDe(req), Number(req.query.segundos) || 0),
 })))
 // Sirve solo archivos ya descargados; nunca dispara una descarga (evita reintentos en loop desde la pantalla).
-app.get('/api/chats/:id/media/:msgId', ruta((req, res) => {
+app.get('/api/chats/:id/media/:msgId', ruta(async (req, res) => {
   const { clave, mime, nombre } = wa.obtenerMedia(chatId(req), req.params.msgId)
-  return servir(req, res, clave, { mime, nombre, descargar: !!req.query.descargar })
+  try {
+    await servir(req, res, clave, { mime, nombre, descargar: !!req.query.descargar })
+  } catch (err) {
+    // El mensaje decía que estaba guardado y no está: vuelve a "sin descargar" para poder bajarlo de nuevo.
+    if (err.status === 404) wa.archivoPerdido(chatId(req), req.params.msgId)
+    throw err
+  }
 }))
 app.post('/api/chats/:id/descargar-todo', ruta((req) => wa.descargarTodo(chatId(req), { reintentar: !!req.body?.reintentar })))
 app.post('/api/chats/:id/media/:msgId/descargar', ruta((req) => wa.descargarAhora(chatId(req), req.params.msgId)))
@@ -150,7 +163,15 @@ const servidor = app.listen(PUERTO, HOST, () => {
   log('info', 'Archivos (fotos, audios, videos, documentos)', DONDE)
   if (numeroLinea()) log('info', 'Solo se acepta el número de la concesionaria', `+${numeroLinea()}`)
   else log('aviso', 'WHATSAPP_NUMERO sin definir', 'Cualquiera que escanee el QR vincula su número')
-  wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message))
+  // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
+  organizarCarpetas()
+    .then((n) => n && log('ok', 'Carpetas de archivos con el nombre del contacto', `${n} renombradas`))
+    .catch((err) => log('aviso', 'No se pudieron renombrar las carpetas de archivos', err.message))
+    // Lo que se haya guardado de mensajes "para ver una vez" se borra.
+    .then(() => wa.limpiarUnaVez())
+    .then((n) => n && log('ok', 'Mensajes para ver una vez', `${n} archivos borrados; queda solo el aviso en el chat`))
+    .catch((err) => log('aviso', 'No se pudieron borrar los mensajes para ver una vez', err.message))
+    .finally(() => wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message)))
 })
 
 servidor.on('error', (err) => {

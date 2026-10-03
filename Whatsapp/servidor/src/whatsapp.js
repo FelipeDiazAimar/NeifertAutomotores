@@ -36,7 +36,8 @@ import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, numeroL
 import { emitir, log } from './eventos.js'
 import { sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
-import { configurarFotos, pedirFotos, pedirFotosDeTodos } from './fotos.js'
+import { configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
+import { borrar as borrarArchivo } from './archivos.js'
 import {
   AUTH_DIR,
   actualizarMensaje,
@@ -53,6 +54,7 @@ import {
   pnDeLid,
   registrarLid,
   claveMedia,
+  recorrerMensajes,
   setContacto,
   setGrupoNombre,
   sumarNoLeido,
@@ -309,7 +311,12 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     traerGrupos(s, 3000)
     // Las fotos van después, cuando ya se calmó la sincronización inicial.
     setTimeout(() => {
-      if (s === sock && conexion === 'conectado') pedirFotosDeTodos()
+      if (s !== sock || conexion !== 'conectado') return
+      pedirFotosDeTodos()
+      // Las que figuran guardadas pero no están (borradas, o de otro servidor con la misma base).
+      repararFotos()
+        .then((n) => n && log('info', 'Fotos de perfil faltantes', `${n} en cola para volver a bajar`))
+        .catch((err) => log('aviso', 'No se pudieron revisar las fotos de perfil', err.message))
     }, 20000)
   }
 
@@ -528,6 +535,39 @@ function interpretar(content) {
   return r
 }
 
+/*
+ * Fotos, videos y audios "para ver una vez". Quien los manda pidió que no queden
+ * guardados, así que no se baja ni se guarda el archivo (ni el mensaje crudo, que tiene la
+ * llave para bajarlo): en el chat queda solo el aviso, como en WhatsApp Web.
+ */
+function esUnaVez(message, content) {
+  if (!message) return false
+  if (message.viewOnceMessage || message.viewOnceMessageV2 || message.viewOnceMessageV2Extension) return true
+  return !!content?.[getContentType(content)]?.viewOnce
+}
+
+const QUE_ES = { imagen: 'Foto', video: 'Video', gif: 'Video', nota_voz: 'Audio', audio: 'Audio' }
+const avisoUnaVez = (tipo) => `${QUE_ES[tipo] || 'Archivo'} para ver una vez. Se abre solo en el celular.`
+
+/** Borra lo que se haya guardado de mensajes "para ver una vez" (de antes de este freno). */
+export async function limpiarUnaVez() {
+  const encontrados = []
+  recorrerMensajes((jid, m) => {
+    if (!m.media || !m.raw) return
+    try {
+      const { message } = JSON.parse(m.raw)
+      if (esUnaVez(message, normalizeMessageContent(message))) encontrados.push([jid, m])
+    } catch {
+      // Mensaje crudo ilegible: se deja como está.
+    }
+  })
+  for (const [jid, m] of encontrados) {
+    if (m.media.archivo) await borrarArchivo(claveMedia(jid, m.media.archivo)).catch(() => {})
+    actualizarMensaje(jid, m.id, { tipo: 'una_vez', texto: avisoUnaVez(m.tipo), media: null, raw: null })
+  }
+  return encontrados.length
+}
+
 /* ---------------- Eventos de mensajes ---------------- */
 
 async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
@@ -538,8 +578,11 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   if (!content) return
   // Borrados, ediciones y reacciones llegan por messages.update / messages.reaction.
   if (content.protocolMessage || content.reactionMessage) return
-  const datos = interpretar(content)
+  let datos = interpretar(content)
   if (!datos) return
+  if (datos.media && esUnaVez(m.message, content)) {
+    datos = { tipo: 'una_vez', texto: avisoUnaVez(datos.tipo), ...(datos.citado ? { citado: datos.citado } : {}) }
+  }
 
   const chatId = await jidDelChat(key)
   const deMi = !!key.fromMe
@@ -1258,6 +1301,17 @@ export function obtenerMedia(chatId, id) {
     throw Object.assign(new Error('El archivo todavía no está descargado'), { status: 404 })
   }
   return { clave: claveMedia(chatId, m.media.archivo), mime: m.media.mime, nombre: m.media.nombre }
+}
+
+/**
+ * El archivo del mensaje figuraba como guardado y no está (se borró, o lo guardó otro
+ * servidor): vuelve a "sin descargar", así la pantalla ofrece bajarlo otra vez.
+ */
+export function archivoPerdido(chatId, id) {
+  const m = buscarMensaje(chatId, id)
+  if (!m?.media?.archivo) return
+  log('aviso', 'Faltaba un archivo guardado', `${nombreDe(chatId)} · se puede volver a descargar`)
+  actualizarMensaje(chatId, id, { media: { ...m.media, archivo: null, estado: 'pendiente', error: null, fallos: 0 } })
 }
 
 /** Descarga (o reintenta) el archivo de un mensaje cuando el usuario lo pide. */

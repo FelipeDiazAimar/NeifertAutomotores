@@ -90,7 +90,7 @@ create table if not exists wa.mensajes (
   id           text not null,               -- id de WhatsApp
   ts           timestamptz not null,
   de_mi        boolean not null,
-  tipo         text not null,               -- texto, imagen, video, audio, nota_voz, documento, sticker, ubicacion, contacto, otro, desconocido
+  tipo         text not null,               -- texto, imagen, video, audio, nota_voz, documento, sticker, ubicacion, contacto, una_vez, otro, desconocido
   texto        text,
   autor_jid    text,                        -- en grupos: quién lo escribió
   enviado_por  jsonb,                       -- empleado del CRM que lo mandó: {"id": ..., "nombre": ...}

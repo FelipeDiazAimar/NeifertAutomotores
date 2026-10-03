@@ -127,6 +127,7 @@ export async function cargarTodo() {
     lids: valor.lids || {},
     meta: valor.meta || {},
     fotos: valor.fotos || {},
+    carpetas: valor.carpetas || {},
     config: valor.config || {},
     archivados: marcas.archivados || {},
     fijados: marcas.fijados || {},
@@ -256,6 +257,7 @@ const kvDe = (estado) => [
   { clave: 'lids', valor: estado.lids },
   { clave: 'meta', valor: estado.meta },
   { clave: 'fotos', valor: estado.fotos },
+  { clave: 'carpetas', valor: estado.carpetas },
   { clave: 'config', valor: estado.config },
 ]
 

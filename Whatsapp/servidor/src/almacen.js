@@ -45,6 +45,7 @@ function completarEstado() {
   estado.fijados ??= {}
   estado.meta ??= {}
   estado.fotos ??= {}
+  estado.carpetas ??= {}
   estado.silenciados ??= {}
   estado.config = { ...CONFIG_INICIAL, ...estado.config }
 }
@@ -158,6 +159,9 @@ export function setFijado(jid, ts) {
 
 export const infoFoto = (jid) => estado.fotos[jid] || null
 
+/** Chats y contactos que figuran con foto de perfil guardada. */
+export const conFotoGuardada = () => Object.keys(estado.fotos).filter((jid) => estado.fotos[jid]?.tiene)
+
 export function setFoto(jid, tiene) {
   const previo = estado.fotos[jid]
   const ts = Date.now()
@@ -231,8 +235,10 @@ export function registrarLid(lid, pn) {
     fs.appendFileSync(path.join(MSG_DIR, `${kn}.jsonl`), fs.readFileSync(archivoViejo))
     fs.rmSync(archivoViejo)
   }
-  // Los archivos del chat viejo pasan al nuevo (en R2 es copiar y borrar: va en segundo plano).
-  moverPrefijo(`media/${kv}`, `media/${kn}`).catch((err) =>
+  // Los archivos del chat viejo pasan a la carpeta del nuevo (en R2 es copiar y borrar: va en segundo plano).
+  const carpetaVieja = estado.carpetas[lid] || kv
+  delete estado.carpetas[lid]
+  moverPrefijo(`media/${carpetaVieja}`, `media/${asignarCarpeta(pn)}`).catch((err) =>
     log('aviso', 'No se pudieron mover los archivos de un chat unificado', err.message),
   )
   if (!EN_SUPABASE) {
@@ -427,6 +433,11 @@ export function recibioDespuesDe(jid, idsCorte) {
 }
 
 /** Guarda un mensaje nuevo. Si ya existía (llega dos veces por historial y en vivo), solo completa campos vacíos. */
+/** Recorre todos los mensajes guardados: fn(jid del chat, mensaje). */
+export function recorrerMensajes(fn) {
+  for (const jid of Object.keys(estado.chats)) for (const m of cargar(jid).values()) fn(jid, m)
+}
+
 export function agregarMensaje(jid, m) {
   const porId = cargar(jid)
   const previo = porId.get(m.id)
@@ -497,10 +508,65 @@ export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
 
 /* ---------------- Multimedia ---------------- */
 
-/** Clave del archivo de un mensaje: media/<chat>/<id>.<ext> (en R2 o en el disco). */
-export const claveMedia = (jid, archivo) => `media/${clave(jid)}/${path.basename(archivo)}`
+/*
+ * Cada chat guarda sus archivos en una carpeta con el nombre del contacto y su número,
+ * "Uli Avendaño (+5493406643845)", o "Grupo <asunto> (<id>)" para los grupos. El número
+ * va siempre: dos contactos pueden llamarse igual. El nombre se fija la primera vez que
+ * se guarda un archivo del chat y no cambia aunque el contacto se cambie el nombre, así
+ * nada queda en una carpeta vieja. Los chats sin carpeta asignada usan la de antes
+ * (media/<jid>), hasta que organizarCarpetas los pasa al formato nuevo.
+ */
+function nombreCarpeta(jid) {
+  // Sin barras (separan carpetas), caracteres de control ni los que Windows no acepta en
+  // un nombre de carpeta (sin R2 los archivos van al disco); espacios simples, largo acotado.
+  const limpiar = (s) =>
+    String(s || '')
+      .replace(/[\p{Cc}/\\:*?"<>|]+/gu, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .slice(0, 60)
+      .replace(/[. ]+$/, '')
+  const id = jid.split('@')[0]
+  if (esGrupo(jid)) return `Grupo ${limpiar(estado.chats[jid]?.grupoNombre) || 'sin nombre'} (${id})`
+  const numero = telefonoDe(jid) || id
+  const nombre = limpiar(nombreDe(jid))
+  return nombre && nombre !== numero ? `${nombre} (${numero})` : numero
+}
 
-export const guardarMedia = (jid, archivo, buffer, mime) => guardar(claveMedia(jid, archivo), buffer, mime)
+/** Carpeta de los archivos del chat; la asigna (y la recuerda) si todavía no tiene. */
+function asignarCarpeta(jid) {
+  if (!estado.carpetas[jid]) {
+    estado.carpetas[jid] = nombreCarpeta(jid)
+    guardarEstado()
+  }
+  return estado.carpetas[jid]
+}
+
+/** Clave del archivo de un mensaje: media/<carpeta del chat>/<id>.<ext> (en R2 o en el disco). */
+export const claveMedia = (jid, archivo) => `media/${estado.carpetas[jid] || clave(jid)}/${path.basename(archivo)}`
+
+export function guardarMedia(jid, archivo, buffer, mime) {
+  asignarCarpeta(jid)
+  return guardar(claveMedia(jid, archivo), buffer, mime)
+}
+
+/**
+ * Pasa las carpetas del formato viejo (media/<jid>) al nuevo, con el nombre del contacto.
+ * Se corre al arrancar, antes de conectar, así ningún archivo nuevo cae en la carpeta vieja.
+ */
+export async function organizarCarpetas() {
+  const existentes = new Set((await listarArchivos('media/')).map((a) => a.clave.split('/')[1]))
+  let movidas = 0
+  for (const jid of Object.keys(estado.chats)) {
+    if (estado.carpetas[jid] || !existentes.has(clave(jid))) continue
+    const nueva = nombreCarpeta(jid)
+    await moverPrefijo(`media/${clave(jid)}`, `media/${nueva}`)
+    estado.carpetas[jid] = nueva
+    movidas++
+  }
+  if (movidas) guardarEstado()
+  return movidas
+}
 
 /**
  * Si el archivo del mensaje ya está guardado. En R2 no se pregunta uno por uno (sería un

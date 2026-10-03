@@ -141,7 +141,7 @@ const FILTROS = [
 const PREVIA = {
   imagen: ['image', 'Foto'], video: ['video', 'Video'], gif: ['video', 'GIF'], nota_voz: ['mic', 'Nota de voz'],
   audio: ['mic', 'Audio'], documento: ['file', 'Documento'], sticker: ['image', 'Sticker'],
-  ubicacion: ['pin', 'Ubicación'], contacto: ['user', 'Contacto'],
+  ubicacion: ['pin', 'Ubicación'], contacto: ['user', 'Contacto'], una_vez: ['clock', 'Para ver una vez'],
 }
 
 function iniciales(c) {
@@ -629,6 +629,8 @@ function msgHtml(m, cola) {
       cuerpo += `<a class="map-link" href="https://www.google.com/maps?q=${m.ubicacion.lat},${m.ubicacion.lng}" target="_blank" rel="noopener">${ic('pin')}Ver ubicación en el mapa</a>`
     }
     if (m.tipo === 'contacto') texto = `<div class="txt">${ic('user')} Contacto: ${esc(m.texto || '')}</div>`
+    // Foto, video o audio "para ver una vez": no se guarda, queda solo el aviso.
+    else if (m.tipo === 'una_vez') texto = `<div class="txt">${ic('clock')} <i>${esc(m.texto || 'Para ver una vez')}</i></div>`
     else if (m.texto) {
       const grande = !md && m.tipo === 'texto' && soloEmojis(m.texto)
       texto = `<div class="txt ${grande ? 'emoji-grande' : ''}">${m.tipo === 'otro' ? `<i>${esc(m.texto)}</i>` : formatear(m.texto)}</div>`
