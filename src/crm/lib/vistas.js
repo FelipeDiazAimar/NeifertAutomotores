@@ -10,7 +10,6 @@ export const VISTAS = [
   { key: 'alertas', label: 'Alertas', ruta: '/crm/alertas' },
   { key: 'usuarios', label: 'Usuarios', ruta: '/crm/usuarios' },
   { key: 'roles', label: 'Roles', ruta: '/crm/roles' },
-  { key: 'whatsapp', label: 'WhatsApp', ruta: '/crm/whatsapp' },
   { key: 'leads', label: 'Carga Leads', ruta: '/admin/crm' },
   { key: 'contenido', label: 'Administración Contenido Web', ruta: '/admin/contenido' },
   { key: 'estadisticas', label: 'Estadísticas', ruta: '/admin/estadisticas' },

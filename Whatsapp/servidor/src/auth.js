@@ -4,12 +4,13 @@
  *
  *   1. El CRM abre el panel pasándole su token de Supabase (#t=... en la URL).
  *   2. El panel lo manda a POST /api/sesion. Acá se le pregunta a Supabase de quién es
- *      y se mira en crm.usuarios si está activo y tiene permiso de WhatsApp.
+ *      y se mira en crm.usuarios si está activo. Todo usuario activo del CRM entra, con
+ *      su nombre y su rol (WHATSAPP_ROLES puede limitarlo a algunos roles).
  *   3. Si todo da, se deja una cookie propia, firmada, que dura SESION_HORAS. Desde ahí
  *      cada pedido (también las fotos y el canal en vivo) viaja con esa cookie.
  *
  * La cookie guarda solo el id del usuario. En cada pedido se vuelve a mirar su ficha
- * (con 60 s de caché): si lo dan de baja o le sacan el permiso en el CRM, deja de
+ * (con 60 s de caché): si lo dan de baja en el CRM, deja de
  * entrar en menos de un minuto, sin esperar a que venza la cookie.
  */
 import crypto from 'node:crypto'
@@ -20,8 +21,7 @@ import {
   CRM_URL,
   DATA_DIR,
   LOGIN_CONFIGURADO,
-  ROLES_LINEA,
-  ROLES_SIEMPRE,
+  ROLES_WHATSAPP,
   SESION_HORAS,
   SESION_SECRETO,
   SUPABASE_ANON_KEY,
@@ -119,38 +119,25 @@ async function supabase(ruta, { token, esquema } = {}) {
   return res.json()
 }
 
-let rolesCache = { ts: 0, mapa: {} }
-async function vistasPorRol() {
-  if (Date.now() - rolesCache.ts < CACHE_MS) return rolesCache.mapa
-  const filas = await supabase('/rest/v1/roles?select=rol,vistas_default', { esquema: 'crm' })
-  rolesCache = { ts: Date.now(), mapa: Object.fromEntries(filas.map((r) => [r.rol, r.vistas_default || []])) }
-  return rolesCache.mapa
-}
-
 const fichas = new Map() // id → { ts, usuario | null }
 
 /**
- * Ficha del usuario en el CRM, con permiso resuelto. null si no existe, está inactivo
- * o no tiene acceso a WhatsApp. Misma regla que el CRM: su override de vistas, o las
- * de su rol; más los roles de ROLES_SIEMPRE.
+ * Ficha del usuario en el CRM. null si no existe, está inactivo o su rol quedó afuera
+ * de WHATSAPP_ROLES (vacío: entran todos).
  */
 async function fichaUsuario(id) {
   const guardada = fichas.get(id)
   if (guardada && Date.now() - guardada.ts < CACHE_MS) return guardada.usuario
   const [fila] = await supabase(
-    `/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}&select=id,usuario,nombre,rol,activo,vistas_override`,
+    `/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}&select=id,usuario,nombre,rol,activo`,
     { esquema: 'crm' },
   )
   let usuario = null
-  if (fila?.activo) {
-    const vistas = Array.isArray(fila.vistas_override) ? fila.vistas_override : (await vistasPorRol())[fila.rol] || []
-    if (vistas.includes('whatsapp') || ROLES_SIEMPRE.includes(fila.rol)) {
-      usuario = {
-        id: fila.id,
-        nombre: fila.nombre || fila.usuario || 'Sin nombre',
-        rol: fila.rol,
-        linea: ROLES_LINEA.includes(fila.rol),
-      }
+  if (fila?.activo && (!ROLES_WHATSAPP.length || ROLES_WHATSAPP.includes(fila.rol))) {
+    usuario = {
+      id: fila.id,
+      nombre: fila.nombre || fila.usuario || 'Sin nombre',
+      rol: fila.rol,
     }
   }
   fichas.set(id, { ts: Date.now(), usuario })
@@ -207,14 +194,6 @@ export async function exigirSesion(req, res, next) {
   contexto.run({ usuario }, next)
 }
 
-/** Puede vincular y desvincular la línea. Sin login (solo esta PC) puede cualquiera. */
-export const manejaLinea = (usuario) => !PIDE_SESION || !!usuario?.linea
-
-/** Corta el pedido si el usuario no maneja la línea. */
-export function exigirLinea(req, res, next) {
-  if (manejaLinea(req.usuario)) return next()
-  res.status(403).json({ error: 'Solo un administrador puede vincular o desvincular la línea.' })
-}
 
 /** GET /api/sesion: quién está usando el panel. */
 export const sesionActual = (req) => ({ usuario: req.usuario || null, login: PIDE_SESION })

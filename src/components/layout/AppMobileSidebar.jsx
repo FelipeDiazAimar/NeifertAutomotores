@@ -22,7 +22,8 @@ const NAV = [
   { to: '/crm/alertas', label: 'Alertas', icon: Bell, vista: 'alertas' },
   { to: '/crm/peritaje', label: 'Peritaje', icon: ClipboardCheck, vista: 'peritaje' },
   { to: '/crm/gestoria', label: 'Gestoría', icon: FileStack, vista: 'gestoria' },
-  { to: '/crm/whatsapp', label: 'WhatsApp', icon: MessageCircle, vista: 'whatsapp' },
+  // Sin vista: todo usuario del CRM entra al WhatsApp con su propio usuario.
+  { to: '/crm/whatsapp', label: 'WhatsApp', icon: MessageCircle },
   { to: '/admin/estadisticas', label: 'Estadísticas', icon: BarChart3, vista: 'estadisticas' },
   { to: '/admin/contenido', label: 'Administración Contenido Web', icon: LayoutTemplate, vista: 'contenido' },
   { to: '/admin/admin', label: 'Admin', icon: UserCog, vista: 'admin' },

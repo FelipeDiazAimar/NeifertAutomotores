@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { ExternalLink } from 'lucide-react'
 import Spinner from '@/components/common/Spinner'
 import { tokenActual } from '@/crm/services/usuarios.service'
 import { useUiStore } from '@/store/useUiStore'
@@ -70,26 +69,6 @@ export default function WhatsappPage() {
     return () => window.removeEventListener('message', alMensaje)
   }, [cargar, enviarTema])
 
-  async function abrirEnPestana() {
-    // La pestaña se abre ya, dentro del clic (si no, el navegador la bloquea); la
-    // dirección se le pone cuando llega el token.
-    const ventana = window.open('', '_blank')
-    try {
-      const token = await tokenActual()
-      if (!token) throw new Error('Tu sesión del CRM venció. Volvé a iniciar sesión.')
-      const url = `${PANEL_URL}/#t=${encodeURIComponent(token)}`
-      if (ventana) {
-        ventana.opener = null
-        ventana.location.href = url
-      } else {
-        window.location.href = url
-      }
-    } catch (e) {
-      ventana?.close()
-      setError(e.message)
-    }
-  }
-
   if (!PANEL_URL) {
     return (
       <div className="mx-auto max-w-md">
@@ -103,15 +82,7 @@ export default function WhatsappPage() {
 
   return (
     <div className="flex h-[calc(100dvh-7rem)] flex-col gap-3 md:h-[calc(100dvh-3.5rem)]">
-      <div className="flex items-center justify-between gap-3">
-        <h1 className="font-display text-xl font-bold text-ink">WhatsApp</h1>
-        <button
-          onClick={abrirEnPestana}
-          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-ink-3 transition-colors hover:text-ink"
-        >
-          <ExternalLink size={15} /> Abrir en otra pestaña
-        </button>
-      </div>
+      <h1 className="font-display text-xl font-bold text-ink">WhatsApp</h1>
 
       {error && (
         <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">

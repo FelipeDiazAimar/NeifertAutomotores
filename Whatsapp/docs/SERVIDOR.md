@@ -61,8 +61,7 @@ No hay usuarios ni contraseñas propias del WhatsApp, ni se elige "qué PC" o "q
 empleado" se es: cada uno entra con su usuario del CRM y queda identificado con él.
 
 1. En el CRM, el ítem **WhatsApp** del menú (`/crm/whatsapp`) muestra el panel embebido
-   en la misma página, pasándole el token de Supabase del usuario (`#t=...`). Arriba a la
-   derecha está **Abrir en otra pestaña**, que hace lo mismo en una pestaña aparte.
+   en la misma página, pasándole el token de Supabase del usuario (`#t=...`).
 2. El servidor le pregunta a Supabase de quién es ese token, busca el usuario en
    `crm.usuarios` y revisa que esté **activo** y tenga **permiso**.
 3. Si todo da, deja una cookie propia, firmada, que dura 12 horas (`SESION_HORAS`). El
@@ -84,24 +83,23 @@ empleado" se es: cada uno entra con su usuario del CRM y queda identificado con 
 
 ### Quién tiene permiso
 
-La misma regla de vistas que el resto del CRM:
+Todo usuario **activo** del CRM. El ítem **WhatsApp** está siempre en el menú, para todos
+los roles, y no hay que configurar nada en la base. Si lo dan de baja en el CRM, deja de
+entrar.
 
-- Tiene la vista `whatsapp` (por su rol, o marcada a mano en su usuario), **o**
-- su rol está en `WHATSAPP_ROLES_SIEMPRE` (por defecto `admin` y `dueno`).
-
-Para que admin y dueño vean el botón en el menú del CRM hay que correr una vez
-[`supabase/crm_whatsapp_vista.sql`](../../supabase/crm_whatsapp_vista.sql), o marcar la
-vista **WhatsApp** en la pantalla **Roles**. A un vendedor puntual se le puede dar desde
-**Usuarios**.
+Para limitarlo a algunos roles se usa `WHATSAPP_ROLES` en el servidor (por ejemplo
+`admin,dueno`); el resto ve el menú pero el panel le dice que no tiene acceso.
 
 ### Quién puede vincular la línea
 
-Todos ven la pestaña **Conexión**, pero el QR y el botón **Desvincular** solo le llegan a
-los roles de `WHATSAPP_ROLES_LINEA` (por defecto `admin` y `dueno`). Al resto el servidor
-ni le manda el QR.
+Cualquier usuario ve el QR en **Conexión** y lo puede escanear. Con el número de la
+concesionaria fijado (`WHATSAPP_NUMERO`), si alguien lo escanea con otro número (por
+ejemplo, su celular personal), el servidor lo desvincula al instante, no guarda nada de
+esa cuenta y la pantalla avisa qué número se rechazó. **Sin `WHATSAPP_NUMERO` se acepta
+cualquier número**: el servidor lo avisa al arrancar.
 
-Con `WHATSAPP_NUMERO` definido, además, solo se acepta ese número: si alguien escanea el
-QR con otro celular, el servidor lo desvincula solo y no guarda nada de esa cuenta.
+**Desvincular** (en **Conexión**) también lo puede hacer cualquier usuario. Corta la
+línea para todos y pide confirmación; en el registro de actividad queda quién fue.
 
 La línea se vincula únicamente con QR. Funciona igual con WhatsApp y con WhatsApp
 Business (la app del celular).
@@ -128,14 +126,16 @@ esté definido en el entorno tiene prioridad.
 | `PUERTO` / `PORT` | `3100` | Puerto del panel |
 | `WA_DATABASE_URL` | — | Conexión a la base de los mensajes (Session pooler de Supabase). También acepta `WA_SUPABASE_URL` |
 | `ALMACEN` | `supabase` si hay `WA_DATABASE_URL`, si no `local` | `local` guarda en archivos, para pruebas |
-| `DATA_DIR` | `data` | Sesión de WhatsApp y archivos (y mensajes en modo local) |
+| `DATA_DIR` | `data` | Sesión de WhatsApp, y archivos si no hay R2 (y mensajes en modo local) |
+| `WA_R2_BUCKET` | — | Bucket **privado** de R2 para los archivos. Vacío: van a `DATA_DIR` |
+| `WA_R2_ENDPOINT` | `R2_ENDPOINT` | Endpoint de la cuenta de R2 |
+| `WA_R2_ACCESS_KEY_ID` / `WA_R2_SECRET_ACCESS_KEY` | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | Token con acceso de lectura y escritura al bucket. **Solo servidor** |
 | `SUPABASE_URL` | (el de la raíz) | Proyecto de Supabase del CRM. También acepta `VITE_SUPABASE_URL` |
 | `SUPABASE_ANON_KEY` | (el de la raíz) | Para verificar el token del usuario |
-| `SUPABASE_SERVICE_ROLE_KEY` | (el de la raíz) | Para leer `crm.usuarios` y `crm.roles`. **Solo servidor** |
+| `SUPABASE_SERVICE_ROLE_KEY` | (el de la raíz) | Para leer `crm.usuarios`. **Solo servidor** |
 | `CRM_URL` | — | Dirección del CRM: el único sitio que puede embeber el panel, y adónde manda "Ir al CRM" a quien entra sin sesión |
-| `WHATSAPP_ROLES_SIEMPRE` | `admin,dueno` | Roles que entran sin tener la vista marcada |
-| `WHATSAPP_ROLES_LINEA` | `admin,dueno` | Roles que ven el QR y pueden desvincular |
-| `WHATSAPP_NUMERO` | — | Único número aceptado como línea (con código de país). Vacío: cualquiera |
+| `WHATSAPP_ROLES` | — (todos) | Limita el WhatsApp a esos roles del CRM, separados por coma |
+| `WHATSAPP_NUMERO` | — | Número de la concesionaria, con código de país. Si se escanea el QR con otro, se rechaza. Vacío: se acepta cualquiera |
 | `SESION_HORAS` | `12` | Cuánto dura la sesión del panel |
 | `SESION_SECRETO` | se genera | Firma de la cookie. Si no se define se guarda en `DATA_DIR/secreto-sesion` |
 | `WHATSAPP_LOGIN` | — | `off` apaga el login (solo con `HOST=127.0.0.1`) |
@@ -157,10 +157,35 @@ escribe los cambios en tandas cada 1,5 segundos. Si la base no responde, reinten
 | Chats (archivado, fijado, silenciado) | `wa.chats` |
 | Contactos | `wa.contactos` |
 | LIDs, preferencias, fotos de perfil conocidas | `wa.estado` |
-| Fotos, audios, documentos | `DATA_DIR/media/<chat>/` (después, Cloudflare R2) |
-| Fotos de perfil | `DATA_DIR/fotos/` |
+| Fotos, videos, audios, stickers, documentos | Cloudflare R2 `media/<chat>/` (sin R2: `DATA_DIR/media/<chat>/`) |
+| Fotos de perfil | Cloudflare R2 `fotos/` (sin R2: `DATA_DIR/fotos/`) |
 | Sesión de WhatsApp (la llave) | `DATA_DIR/sesion/` |
 | Firma de las cookies | `DATA_DIR/secreto-sesion` |
+
+### Archivos en Cloudflare R2
+
+Con `WA_R2_BUCKET` definido, todo archivo nuevo (lo que llega y lo que se manda) y las
+fotos de perfil se guardan en R2. El navegador nunca habla con R2: le pide el archivo al
+servidor, que lo trae y lo entrega solo a quien entró desde el CRM. Los videos y audios
+se pueden adelantar sin bajar todo (pedidos parciales).
+
+1. En Cloudflare → **R2** → **Create bucket**, por ejemplo `neifert-whatsapp`. Dejalo
+   **privado**: sin dominio público ni acceso por `r2.dev`. **No uses el bucket del
+   catálogo**, que es público: las fotos de perfil van por número de teléfono y
+   cualquiera con el enlace vería las conversaciones.
+2. Credenciales: si el token de R2 del CRM (`R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY`)
+   tiene acceso a todos los buckets, sirve ese. Si está limitado al bucket del catálogo,
+   creá uno en **R2 → Manage API Tokens** con *Object Read & Write* sobre el bucket nuevo
+   y ponelo en `WA_R2_ACCESS_KEY_ID` / `WA_R2_SECRET_ACCESS_KEY`.
+3. En `Whatsapp/servidor/.env`: `WA_R2_BUCKET=neifert-whatsapp`. El endpoint
+   (`R2_ENDPOINT`, el de la cuenta) se toma del `.env` del CRM si no definís
+   `WA_R2_ENDPOINT`. Reiniciá el servidor: al arrancar dice *Archivos … Cloudflare R2*.
+4. Lo que ya estaba en el disco se sigue viendo (el servidor lo busca primero ahí). Para
+   subirlo: `npm run subir-r2`. Cuando termine sin errores, `npm run subir-r2 -- --borrar`
+   lo borra del disco. Se puede correr más de una vez.
+
+Sin `WA_R2_BUCKET`, los archivos quedan en `DATA_DIR` como antes. En producción R2 evita
+depender del disco del servidor: si se cambia de host, solo hay que llevar `data/sesion`.
 
 ### Modo local, para pruebas
 
@@ -187,7 +212,7 @@ archivos.
 | Síntoma | Qué pasa |
 |---|---|
 | El panel dice "Entrá desde el CRM" | No hay sesión o venció (12 h). Abrirlo de nuevo con el botón del CRM. |
-| "Tu usuario no tiene acceso al WhatsApp" | Falta la vista `whatsapp` para ese usuario o su rol. Se da desde Roles o Usuarios. |
+| "Tu usuario no tiene acceso al WhatsApp" | El usuario está inactivo en el CRM, o su rol no está en `WHATSAPP_ROLES`. |
 | El servidor no arranca y habla de `HOST` | Está abierto a la red sin login configurado. Completar las variables de Supabase. |
 | Error 440 / "Otra conexión abrió esta misma sesión" | Hay dos servidores con la misma carpeta `data/`. Dejar uno solo. |
 | Se desvinculó solo | Pasaron más de 14 días sin abrir WhatsApp en el celular, o se cerró desde el teléfono. Escanear el QR otra vez. |

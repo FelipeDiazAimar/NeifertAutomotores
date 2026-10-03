@@ -1,17 +1,12 @@
 /*
  * Fotos de perfil. Se consultan de a una en segundo plano (WhatsApp limita las
- * consultas seguidas) y se guardan en data/fotos/. Cada foto se vuelve a
- * consultar después de 7 días; si el contacto no tiene o no la comparte, se
- * recuerda para no preguntar en cada inicio.
+ * consultas seguidas) y se guardan como fotos/<chat>.jpg (en R2 o en el disco, ver
+ * archivos.js). Cada foto se vuelve a consultar después de 7 días; si el contacto no
+ * tiene o no la comparte, se recuerda para no preguntar en cada inicio.
  */
-import fs from 'node:fs'
-import path from 'node:path'
-import { DATA_DIR } from './config.js'
 import { clave, infoFoto, listarChats, setFoto } from './almacen.js'
+import { guardar } from './archivos.js'
 import { sinUsuario } from './auth.js'
-
-export const FOTOS_DIR = path.join(DATA_DIR, 'fotos')
-fs.mkdirSync(FOTOS_DIR, { recursive: true })
 
 const VIGENCIA_MS = 7 * 24 * 3600 * 1000
 const PAUSA_MS = 1500
@@ -21,7 +16,7 @@ const enCola = new Set()
 let trabajando = false
 let obtenerSock = () => null
 
-export const rutaFoto = (jid) => path.join(FOTOS_DIR, `${clave(jid)}.jpg`)
+export const claveFoto = (jid) => `fotos/${clave(jid)}.jpg`
 
 /** Recibe una función que devuelve el socket conectado (o null si no hay conexión). */
 export function configurarFotos(getSock) {
@@ -86,9 +81,9 @@ async function bajarFoto(sock, jid) {
   try {
     const res = await fetch(url)
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    fs.writeFileSync(rutaFoto(jid), Buffer.from(await res.arrayBuffer()))
+    await guardar(claveFoto(jid), Buffer.from(await res.arrayBuffer()), 'image/jpeg')
     setFoto(jid, true)
   } catch {
-    // El enlace de la foto venció en el camino: se reintenta en otra vuelta.
+    // El enlace de la foto venció en el camino (o R2 no respondió): se reintenta en otra vuelta.
   }
 }

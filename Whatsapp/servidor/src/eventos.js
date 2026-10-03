@@ -33,14 +33,8 @@ export function suscribir(req, res) {
   })
 }
 
-/** `datos` puede ser una función (usuario) → datos, para lo que no todos pueden ver. */
 export function emitir(evento, datos) {
-  const armar = (d) => `event: ${evento}\ndata: ${JSON.stringify(d)}\n\n`
-  if (typeof datos === 'function') {
-    for (const [res, { usuario }] of clientes) res.write(armar(datos(usuario)))
-    return
-  }
-  const payload = armar(datos)
+  const payload = `event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`
   for (const res of clientes.keys()) res.write(payload)
 }
 

@@ -1,11 +1,11 @@
-import fs from 'node:fs'
 import express from 'express'
-import { HOST, LOGIN_CONFIGURADO, ORIGENES_CRM, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
+import { HOST, LOGIN_CONFIGURADO, numeroLinea, ORIGENES_CRM, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
-import { cerrarSesion, exigirCabecera, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
+import { cerrarSesion, exigirCabecera, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
-import { rutaFoto } from './src/fotos.js'
+import { claveFoto } from './src/fotos.js'
+import { DONDE, servir } from './src/archivos.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
 // podría escribir con el número de la concesionaria. En ese caso no se arranca.
@@ -75,7 +75,7 @@ app.post('/api/config', ruta((req) => {
   emitir('config', c)
   return c
 }))
-app.post('/api/desvincular', exigirLinea, ruta(async () => {
+app.post('/api/desvincular', ruta(async () => {
   await wa.desvincular()
   return { ok: true }
 }))
@@ -106,12 +106,9 @@ app.post('/api/chats/:id/reaccion', ruta((req) => wa.enviarReaccion(chatId(req),
 app.post('/api/chats/:id/eliminar', ruta((req) => wa.eliminarMensaje(chatId(req), req.body?.id)))
 app.post('/api/chats/:id/destacar', ruta((req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar)))
 app.post('/api/chats/:id/presencia', ruta((req) => wa.suscribirPresencia(chatId(req))))
-app.get('/api/chats/:id/foto', ruta((req, res) => {
-  const archivo = rutaFoto(chatId(req))
-  if (!fs.existsSync(archivo)) throw Object.assign(new Error('Sin foto de perfil'), { status: 404 })
-  res.set('Cache-Control', 'private, max-age=604800')
-  res.sendFile(archivo)
-}))
+app.get('/api/chats/:id/foto', ruta((req, res) =>
+  servir(req, res, claveFoto(chatId(req)), { mime: 'image/jpeg', cache: 'private, max-age=604800', faltante: 'Sin foto de perfil' }),
+))
 app.post('/api/chats/:id/archivo', binario, ruta(async (req) => ({
   id: await wa.enviarArchivo(chatId(req), archivoDe(req), {
     mime: req.get('content-type'),
@@ -124,10 +121,8 @@ app.post('/api/chats/:id/nota-voz', binario, ruta(async (req) => ({
 })))
 // Sirve solo archivos ya descargados; nunca dispara una descarga (evita reintentos en loop desde la pantalla).
 app.get('/api/chats/:id/media/:msgId', ruta((req, res) => {
-  const { ruta: archivo, mime, nombre } = wa.obtenerMedia(chatId(req), req.params.msgId)
-  if (mime) res.type(mime.split(';')[0])
-  if (req.query.descargar && nombre) res.attachment(nombre)
-  res.sendFile(archivo)
+  const { clave, mime, nombre } = wa.obtenerMedia(chatId(req), req.params.msgId)
+  return servir(req, res, clave, { mime, nombre, descargar: !!req.query.descargar })
 }))
 app.post('/api/chats/:id/descargar-todo', ruta((req) => wa.descargarTodo(chatId(req), { reintentar: !!req.body?.reintentar })))
 app.post('/api/chats/:id/media/:msgId/descargar', ruta((req) => wa.descargarAhora(chatId(req), req.params.msgId)))
@@ -152,6 +147,9 @@ const servidor = app.listen(PUERTO, HOST, () => {
     almacen.modo === 'supabase' ? `${almacen.chats} chats · ${almacen.mensajes} mensajes cargados` : `${almacen.chats} chats`,
   )
   if (!LOGIN_CONFIGURADO) log('aviso', 'Login con el CRM sin configurar', 'Solo se puede usar desde esta PC')
+  log('info', 'Archivos (fotos, audios, videos, documentos)', DONDE)
+  if (numeroLinea()) log('info', 'Solo se acepta el número de la concesionaria', `+${numeroLinea()}`)
+  else log('aviso', 'WHATSAPP_NUMERO sin definir', 'Cualquiera que escanee el QR vincula su número')
   wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message))
 })
 

@@ -9,6 +9,7 @@
  *  - ediciones: se guarda la versión anterior
  *  - reconexión con espera creciente en vez de reintentar cada 3 s
  */
+import fs from 'node:fs'
 import QRCode from 'qrcode'
 import pino from 'pino'
 import makeWASocket, {
@@ -31,9 +32,9 @@ import makeWASocket, {
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
-import { BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, NUMERO_LINEA } from './config.js'
+import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, numeroLinea } from './config.js'
 import { emitir, log } from './eventos.js'
-import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
+import { sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
 import { configurarFotos, pedirFotos, pedirFotosDeTodos } from './fotos.js'
 import {
@@ -51,7 +52,7 @@ import {
   nombreDe,
   pnDeLid,
   registrarLid,
-  rutaMedia,
+  claveMedia,
   setContacto,
   setGrupoNombre,
   sumarNoLeido,
@@ -102,6 +103,8 @@ let sock = null
 let conexion = 'iniciando' // iniciando | conectando | qr | conectado | desconectado
 let qrDataUrl = null
 let yo = null
+// Último intento de vincular un número que no es el de la concesionaria: { telefono, ts }.
+let rechazo = null
 let intentos = 0
 let reconectarTimer = null
 let detenido = false
@@ -124,15 +127,17 @@ configurarFotos(() => (conexion === 'conectado' ? sock : null))
 
 /* ---------------- Conexión ---------------- */
 
-/** El QR solo viaja a quien puede vincular la línea: con él se conecta cualquier celular. */
-export const estadoConexion = (usuario = usuarioActual()) => ({
+/** Cualquier usuario puede escanear el QR. Con WHATSAPP_NUMERO fijado, otro número se rechaza. */
+export const estadoConexion = () => ({
   conexion,
-  qr: manejaLinea(usuario) ? qrDataUrl : null,
+  qr: qrDataUrl,
+  numeroLinea: numeroLinea() ? `+${numeroLinea()}` : null,
+  rechazo,
   yo,
   intentos,
 })
 
-const emitirEstado = () => emitir('estado', (usuario) => estadoConexion(usuario))
+const emitirEstado = () => emitir('estado', estadoConexion())
 
 function setConexion(nuevo) {
   conexion = nuevo
@@ -142,6 +147,46 @@ function setConexion(nuevo) {
 
 // Argentina: el mismo celular puede figurar como 54… o 549…; se comparan los últimos 10 dígitos.
 const mismoNumero = (a, b) => String(a).replace(/\D/g, '').slice(-10) === String(b).replace(/\D/g, '').slice(-10)
+
+/** La línea `telefono` no es la de la concesionaria: se desvincula y se vuelve a mostrar el QR. */
+async function rechazarLinea(s, telefono, motivo) {
+  log('error', motivo, `${telefono} · se desvinculó solo`)
+  rechazo = { telefono, ts: Date.now() }
+  // Primero se suelta el socket: así ningún evento de esa cuenta llega a guardarse.
+  sock = null
+  await s.logout().catch(() => {})
+  borrarSesion()
+  setMeta({ chatsSincronizados: null })
+  yo = null
+  setConexion('conectando')
+  programar(1000)
+}
+
+/**
+ * Vigila los .env: si cambia WHATSAPP_NUMERO se toma en el momento, sin reiniciar. Si la
+ * línea conectada ya no es la configurada, se desvincula.
+ */
+let numeroVigilado = null
+function vigilarNumero() {
+  if (numeroVigilado !== null) return
+  numeroVigilado = numeroLinea()
+  for (const archivo of ARCHIVOS_ENV) {
+    fs.watchFile(archivo, { interval: 2000 }, () => {
+      const nuevo = numeroLinea()
+      if (nuevo === numeroVigilado) return
+      numeroVigilado = nuevo
+      log(
+        'info',
+        nuevo ? 'Cambió el número de la concesionaria' : 'Se sacó el número de la concesionaria',
+        nuevo ? `+${nuevo}` : 'Se acepta cualquier número',
+      )
+      emitirEstado()
+      if (nuevo && sock && conexion === 'conectado' && yo && !mismoNumero(yo.telefono, nuevo)) {
+        sinUsuario(() => rechazarLinea(sock, yo.telefono || yo.id, 'La línea conectada no es el número de la concesionaria'))
+      }
+    }).unref()
+  }
+}
 
 function programar(ms) {
   clearTimeout(reconectarTimer)
@@ -155,6 +200,7 @@ function programar(ms) {
 
 /** Arranca (o reinicia) la conexión. Nunca queda atada al empleado que la pidió. */
 export function iniciar() {
+  vigilarNumero()
   return sinUsuario(() => iniciarConexion())
 }
 
@@ -241,17 +287,12 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
   if (connection === 'open') {
     intentos = 0
     const id = jidNormalizedUser(s.user?.id)
-    if (NUMERO_LINEA && !mismoNumero(telefonoDe(id), NUMERO_LINEA)) {
-      // Escanearon el QR con otro celular. Se suelta antes de guardar nada de esa cuenta.
-      log('error', 'Se vinculó un número que no es el de la concesionaria', `${telefonoDe(id) || id} · se desvinculó solo`)
-      sock = null
-      await s.logout().catch(() => {})
-      borrarSesion()
-      yo = null
-      setConexion('conectando')
-      programar(1000)
-      return
+    const numero = numeroLinea()
+    if (numero && !mismoNumero(telefonoDe(id), numero)) {
+      // Escanearon el QR con otro celular (o la sesión guardada es de otro número).
+      return rechazarLinea(s, telefonoDe(id) || id, 'Se vinculó un número que no es el de la concesionaria')
     }
+    rechazo = null
     yo = { id, nombre: s.user?.name || s.user?.verifiedName || null, telefono: telefonoDe(id) }
     if (s.user?.lid) registrarLid(jidNormalizedUser(s.user.lid), id)
     setConexion('conectado')
@@ -529,9 +570,14 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
     const propio = mediaPropia.get(key.id)
     if (propio) {
       const archivo = `${key.id}.${extensionDe(datos.media.mime, datos.media.nombre)}`
-      guardarMedia(chatId, archivo, propio)
-      mensaje.media = { ...datos.media, archivo, tamano: propio.length, estado: 'ok' }
       mediaPropia.delete(key.id)
+      try {
+        await guardarMedia(chatId, archivo, propio, datos.media.mime)
+        mensaje.media = { ...datos.media, archivo, tamano: propio.length, estado: 'ok' }
+      } catch (err) {
+        // Queda como pendiente: se puede volver a bajar de WhatsApp con el mensaje crudo.
+        log('aviso', 'No se pudo guardar un archivo enviado', err.message)
+      }
     }
   }
 
@@ -1113,7 +1159,7 @@ async function descargarMedia(chatId, m) {
       })
     }
     const archivo = `${m.id}.${extensionDe(m.media.mime, m.media.nombre)}`
-    guardarMedia(chatId, archivo, buffer)
+    await guardarMedia(chatId, archivo, buffer, m.media.mime)
     return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0 } })
   } catch (err) {
     const error = mensajeDeError(err, huboReenvio)
@@ -1205,13 +1251,13 @@ export function descargarTodo(chatId, { reintentar = false } = {}) {
   return { encolados: n, enCola: colaMedia.length, perdidos }
 }
 
-/** Ruta del archivo ya descargado. No descarga nada: eso lo pide el usuario con descargarAhora. */
+/** Dónde está el archivo ya descargado. No descarga nada: eso lo pide el usuario con descargarAhora. */
 export function obtenerMedia(chatId, id) {
   const m = buscarMensaje(chatId, id)
   if (!m?.media?.archivo || !existeMedia(chatId, m.media.archivo)) {
     throw Object.assign(new Error('El archivo todavía no está descargado'), { status: 404 })
   }
-  return { ruta: rutaMedia(chatId, m.media.archivo).ruta, mime: m.media.mime, nombre: m.media.nombre }
+  return { clave: claveMedia(chatId, m.media.archivo), mime: m.media.mime, nombre: m.media.nombre }
 }
 
 /** Descarga (o reintenta) el archivo de un mensaje cuando el usuario lo pide. */

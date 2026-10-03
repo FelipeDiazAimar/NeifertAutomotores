@@ -8,10 +8,10 @@ import {
 } from '@/crm/lib/vistas.js'
 
 describe('vistas.js', () => {
-  it('VISTAS tiene las 14 vistas top-level en orden', () => {
+  it('VISTAS tiene las 13 vistas top-level en orden', () => {
     expect(VISTAS.map((v) => v.key)).toEqual([
       'panel', 'clientes', 'vehiculos', 'peritaje', 'gestoria', 'tareas', 'alertas', 'usuarios', 'roles',
-      'whatsapp', 'leads', 'contenido', 'estadisticas', 'admin',
+      'leads', 'contenido', 'estadisticas', 'admin',
     ])
   })
 

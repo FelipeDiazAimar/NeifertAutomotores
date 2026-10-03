@@ -14,14 +14,16 @@
  * corte de luz no puede dejar el historial corrupto y nada se borra: un mensaje
  * eliminado en WhatsApp es solo una línea "upd" más.
  *
- * En los dos modos, la sesión de WhatsApp (data/sesion) y los archivos multimedia
- * (data/media) quedan en disco. El resto del servidor no sabe en qué modo está.
+ * En los dos modos, la sesión de WhatsApp (data/sesion) queda en disco. Los archivos
+ * multimedia van a Cloudflare R2 o a data/media (ver archivos.js). El resto del
+ * servidor no sabe en qué modo está.
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ALMACEN, DATA_DIR } from './config.js'
-import { emitir } from './eventos.js'
+import { ALMACEN, ARCHIVOS_EN_R2, DATA_DIR } from './config.js'
+import { emitir, log } from './eventos.js'
 import * as nube from './nube.js'
+import { DONDE, enDisco, guardar, listarArchivos, moverPrefijo } from './archivos.js'
 
 export const EN_SUPABASE = ALMACEN === 'supabase'
 
@@ -229,13 +231,10 @@ export function registrarLid(lid, pn) {
     fs.appendFileSync(path.join(MSG_DIR, `${kn}.jsonl`), fs.readFileSync(archivoViejo))
     fs.rmSync(archivoViejo)
   }
-  const mediaVieja = path.join(MEDIA_DIR, kv)
-  if (fs.existsSync(mediaVieja)) {
-    const mediaNueva = path.join(MEDIA_DIR, kn)
-    fs.mkdirSync(mediaNueva, { recursive: true })
-    for (const f of fs.readdirSync(mediaVieja)) fs.renameSync(path.join(mediaVieja, f), path.join(mediaNueva, f))
-    fs.rmSync(mediaVieja, { recursive: true, force: true })
-  }
+  // Los archivos del chat viejo pasan al nuevo (en R2 es copiar y borrar: va en segundo plano).
+  moverPrefijo(`media/${kv}`, `media/${kn}`).catch((err) =>
+    log('aviso', 'No se pudieron mover los archivos de un chat unificado', err.message),
+  )
   if (!EN_SUPABASE) {
     cache.delete(kv)
     cache.delete(kn)
@@ -498,20 +497,17 @@ export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
 
 /* ---------------- Multimedia ---------------- */
 
-export function rutaMedia(jid, archivo) {
-  const dir = path.join(MEDIA_DIR, clave(jid))
-  const ruta = path.join(dir, path.basename(archivo))
-  return { dir, ruta }
-}
+/** Clave del archivo de un mensaje: media/<chat>/<id>.<ext> (en R2 o en el disco). */
+export const claveMedia = (jid, archivo) => `media/${clave(jid)}/${path.basename(archivo)}`
 
-export function guardarMedia(jid, archivo, buffer) {
-  const { dir, ruta } = rutaMedia(jid, archivo)
-  fs.mkdirSync(dir, { recursive: true })
-  fs.writeFileSync(ruta, buffer)
-  return ruta
-}
+export const guardarMedia = (jid, archivo, buffer, mime) => guardar(claveMedia(jid, archivo), buffer, mime)
 
-export const existeMedia = (jid, archivo) => !!archivo && fs.existsSync(rutaMedia(jid, archivo).ruta)
+/**
+ * Si el archivo del mensaje ya está guardado. En R2 no se pregunta uno por uno (sería un
+ * pedido por archivo): el mensaje solo tiene `archivo` cuando se guardó bien.
+ */
+export const existeMedia = (jid, archivo) =>
+  !!archivo && (ARCHIVOS_EN_R2 || fs.existsSync(enDisco(claveMedia(jid, archivo))))
 
 /* ---------------- Sesión y espacio usado ---------------- */
 
@@ -536,11 +532,11 @@ const CATEGORIA = {
 
 export async function usoAlmacenamiento() {
   const media = { fotos: 0, videos: 0, audios: 0, documentos: 0 }
-  recorrer(MEDIA_DIR, (p, size) => {
-    const ext = path.extname(p).slice(1).toLowerCase()
-    const cat = Object.keys(CATEGORIA).find((c) => CATEGORIA[c].includes(ext)) || 'documentos'
-    media[cat] += size
-  })
+  for (const { clave: c, tamano } of await listarArchivos('media/')) {
+    const ext = path.extname(c).slice(1).toLowerCase()
+    const cat = Object.keys(CATEGORIA).find((k) => CATEGORIA[k].includes(ext)) || 'documentos'
+    media[cat] += tamano
+  }
   let mensajesBytes = 0
   let mensajes = 0
   let eliminados = 0
@@ -563,7 +559,7 @@ export async function usoAlmacenamiento() {
     mensajes,
     eliminados,
     bytes: { mensajes: mensajesBytes, sesion: sesionBytes, media },
-    carpeta: EN_SUPABASE ? `Supabase (esquema wa) · sesión y archivos en ${DATA_DIR}` : DATA_DIR,
+    carpeta: `${EN_SUPABASE ? 'Mensajes en Supabase (esquema wa)' : `Mensajes en ${DATA_DIR}`} · archivos en ${DONDE}`,
     almacen: ALMACEN,
     pendientesDeGuardar: EN_SUPABASE ? nube.pendientesDeGuardar() : 0,
   }

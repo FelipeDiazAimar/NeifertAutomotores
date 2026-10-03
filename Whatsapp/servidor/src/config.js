@@ -1,12 +1,17 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { parseEnv } from 'node:util'
 
 const raiz = path.dirname(path.dirname(fileURLToPath(import.meta.url)))
 
 // Variables de entorno: primero las propias del servidor (servidor/.env), después las
 // del proyecto (la raíz del repo), que ya tiene las credenciales de Supabase. Lo que ya
 // está definido en el entorno nunca se pisa.
-for (const archivo of [path.join(raiz, '.env'), path.resolve(raiz, '..', '..', '.env')]) {
+export const ARCHIVOS_ENV = [path.join(raiz, '.env'), path.resolve(raiz, '..', '..', '.env')]
+// Lo que vino del entorno real, antes de leer los archivos: eso no se relee.
+const ENV_REAL = { ...process.env }
+for (const archivo of ARCHIVOS_ENV) {
   try {
     process.loadEnvFile(archivo)
   } catch {
@@ -39,27 +44,54 @@ export const WA_DATABASE_URL = env.WA_DATABASE_URL || env.WA_SUPABASE_URL || ''
 // La sesión de WhatsApp y los archivos multimedia siguen en DATA_DIR en los dos casos.
 export const ALMACEN = (env.ALMACEN || (WA_DATABASE_URL ? 'supabase' : 'local')).toLowerCase()
 
+/* ---------------- Dónde se guardan los archivos ---------------- */
+
+// Fotos, audios, videos, stickers, documentos y fotos de perfil van a Cloudflare R2 si
+// está WA_R2_BUCKET; si no, al disco (DATA_DIR). El bucket tiene que ser PRIVADO: el
+// servidor entrega cada archivo solo a quien entró desde el CRM. No usar el bucket
+// público del catálogo: ahí cualquiera con el enlace vería las conversaciones.
+// Las credenciales pueden ser propias (WA_R2_*) o las mismas del CRM (R2_*), si el token
+// tiene acceso a este bucket.
+export const R2 = {
+  bucket: env.WA_R2_BUCKET || '',
+  endpoint: env.WA_R2_ENDPOINT || env.R2_ENDPOINT || '',
+  accessKeyId: env.WA_R2_ACCESS_KEY_ID || env.R2_ACCESS_KEY_ID || '',
+  secretAccessKey: env.WA_R2_SECRET_ACCESS_KEY || env.R2_SECRET_ACCESS_KEY || '',
+}
+export const ARCHIVOS_EN_R2 = Boolean(R2.bucket && R2.endpoint && R2.accessKeyId && R2.secretAccessKey)
+
 /* ---------------- Login con el CRM ---------------- */
 
 export const SUPABASE_URL = (env.SUPABASE_URL || env.VITE_SUPABASE_URL || '').replace(/\/+$/, '')
 export const SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY || ''
-// Solo del lado del servidor: lee crm.usuarios y crm.roles sin depender de la sesión.
+// Solo del lado del servidor: lee crm.usuarios sin depender de la sesión.
 export const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY || ''
 // Adónde mandar al que entra sin sesión.
 export const CRM_URL = (env.CRM_URL || '').replace(/\/+$/, '')
-// Roles que entran siempre, aunque no tengan la vista "whatsapp" marcada.
-export const ROLES_SIEMPRE = (env.WHATSAPP_ROLES_SIEMPRE ?? 'admin,dueno')
+// Roles del CRM que pueden usar el WhatsApp. Vacío (por defecto): todo usuario activo.
+export const ROLES_WHATSAPP = (env.WHATSAPP_ROLES ?? '')
   .split(',')
   .map((r) => r.trim())
   .filter(Boolean)
-// Roles que pueden vincular y desvincular la línea (ven el QR). El resto solo usa la bandeja.
-export const ROLES_LINEA = (env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
-  .split(',')
-  .map((r) => r.trim())
-  .filter(Boolean)
-// Único número que se acepta como línea (con código de país). Si alguien escanea el QR con
-// otro celular, se desvincula solo. Vacío: se acepta cualquiera.
-export const NUMERO_LINEA = (env.WHATSAPP_NUMERO || '').replace(/\D/g, '')
+/**
+ * Único número que se acepta como línea (con código de país). Si alguien escanea el QR con
+ * otro celular, se desvincula solo. Vacío: se acepta cualquiera.
+ * Se lee en vivo de los .env (no solo al arrancar): cambiar el número no pide reiniciar.
+ */
+export function numeroLinea() {
+  if (ENV_REAL.WHATSAPP_NUMERO !== undefined) return limpiarNumero(ENV_REAL.WHATSAPP_NUMERO)
+  for (const archivo of ARCHIVOS_ENV) {
+    try {
+      const valor = parseEnv(fs.readFileSync(archivo, 'utf8')).WHATSAPP_NUMERO
+      if (valor !== undefined) return limpiarNumero(valor)
+    } catch {
+      // No existe o no se pudo leer: se prueba el siguiente.
+    }
+  }
+  return ''
+}
+// Lo que sigue a un # es comentario; del resto quedan solo los dígitos.
+const limpiarNumero = (valor) => String(valor).split('#')[0].replace(/\D/g, '')
 // Firma de la cookie de sesión. Si no se define, se genera una y se guarda en DATA_DIR.
 export const SESION_SECRETO = env.SESION_SECRETO || ''
 export const SESION_HORAS = Number(env.SESION_HORAS) || 12

@@ -231,7 +231,7 @@ function filaChat(c) {
   const sub = r.sub ? `<span class="row-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</span>` : ''
   const otros = otrosEnChat(c.id)
   const iconos = [
-    otros.length ? `<span class="agente-dot" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${esc(otros[0].nombre.charAt(0).toUpperCase())}</span>` : '',
+    otros.length ? `<span class="agente-tag" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${ic('user')}<span>${esc(nombresLista(otros))}</span></span>` : '',
     c.silenciado ? ic('mute') : '',
     c.fijado && !c.archivado ? ic('fijado') : '',
     c.noLeidos ? `<span class="unread tnum">${c.noLeidos}</span>` : '',
@@ -1760,12 +1760,10 @@ function renderPill() {
 }
 
 function renderConexion() {
-  const { conexion, qr, yo, intentos } = state.conn
+  const { conexion, qr, yo, intentos, numeroLinea, rechazo } = state.conn
   const [cls, texto] = TEXTO_CONEXION[conexion] || TEXTO_CONEXION.iniciando
-  // Vincular y desvincular es cosa de administradores; sin login (solo esta PC) puede cualquiera.
-  const manejaLinea = !sesion.login || !!sesion.usuario?.linea
   const acciones = conexion === 'conectado'
-    ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button>${manejaLinea ? `<button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>` : ''}`
+    ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button><button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>`
     : conexion === 'desconectado' ? `<button class="btn primary" data-act="reconectar">${ic('refresh')}Reconectar</button>` : ''
 
   $('#lineaCard').innerHTML = `
@@ -1784,19 +1782,22 @@ function renderConexion() {
   let cuerpo
   if (conexion === 'conectado') {
     cuerpo = `<div class="conn-ok">${ic('circle-check')}<div>La línea está vinculada.</div></div>`
-  } else if (conexion === 'qr' && !manejaLinea) {
-    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La línea no está vinculada. Pedile a un administrador que la vincule desde su usuario.</div></div>`
-  } else if (conexion === 'qr' && qr) {
-    cuerpo = `
+  } else if (conexion === 'qr' && !qr) {
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>Generando el código…</div></div>`
+  } else if (conexion === 'qr') {
+    const aviso = rechazo && Date.now() - rechazo.ts < 10 * 60 * 1000
+      ? `<div class="conn-error">${ic('unlink')}<div>Se escaneó con <b class="tnum">${esc(rechazo.telefono)}</b>, que no es el número de la concesionaria. No se vinculó.</div></div>`
+      : ''
+    cuerpo = `${aviso}
       <div class="qr-wrap">
         <div class="qr"><img class="qr-img" src="${qr}" alt="Código QR para vincular WhatsApp"></div>
         <div class="stack">
           <ol class="steps">
-            <li>Abrí <b>WhatsApp</b> en el celular que querés vincular.</li>
+            <li>Abrí <b>WhatsApp</b> en el celular ${numeroLinea ? `de la concesionaria (<b class="tnum">${esc(numeroLinea)}</b>)` : 'de la concesionaria'}.</li>
             <li>Tocá <b>⋮</b> (Android) o <b>Configuración</b> (iPhone) y entrá a <b>Dispositivos vinculados</b>.</li>
             <li>Tocá <b>Vincular un dispositivo</b> y escaneá este código.</li>
           </ol>
-          <p class="timer">El código se renueva solo cada unos segundos.</p>
+          <p class="timer">El código se renueva solo cada unos segundos.${numeroLinea ? ' Con otro número no se vincula.' : ''}</p>
         </div>
       </div>`
   } else {
