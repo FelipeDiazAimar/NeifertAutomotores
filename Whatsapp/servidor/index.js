@@ -1,5 +1,5 @@
 import express from 'express'
-import { HOST, LOGIN_CONFIGURADO, numeroLinea, ORIGENES_CRM, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
+import { HOST, LOGIN_CONFIGURADO, numeroLinea, ORIGENES_CRM, VENTANA_DIAS, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
@@ -171,8 +171,23 @@ const servidor = app.listen(PUERTO, HOST, () => {
     .then(() => wa.limpiarUnaVez())
     .then((n) => n && log('ok', 'Mensajes para ver una vez', `${n} archivos borrados; queda solo el aviso en el chat`))
     .catch((err) => log('aviso', 'No se pudieron borrar los mensajes para ver una vez', err.message))
+    .then(() => limpiarVentana())
     .finally(() => wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message)))
+  // Y después, una vez por día.
+  setInterval(limpiarVentana, 24 * 3600 * 1000)
 })
+
+/** Borra lo que quedó fuera de la ventana de días (mensajes, archivos y chats vacíos). */
+async function limpiarVentana() {
+  try {
+    const r = await wa.purgarVentana()
+    if (r.mensajes || r.chats) {
+      log('ok', `Limpieza de lo anterior a ${VENTANA_DIAS} días`, `${r.mensajes} mensajes · ${r.archivos} archivos · ${r.chats} chats vacíos`)
+    }
+  } catch (err) {
+    log('aviso', 'No se pudo hacer la limpieza diaria', err.message)
+  }
+}
 
 servidor.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {

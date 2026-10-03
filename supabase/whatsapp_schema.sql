@@ -252,15 +252,15 @@ begin
 end
 $$;
 
--- 9c. Todos los días a las 03:15 UTC (00:15 en Argentina), con pg_cron.
---     Si pg_cron no está disponible, avisa y el resto del script sigue igual:
---     se habilita en Database → Extensions y se vuelve a correr el script.
+-- 9c. La limpieza diaria la hace el servidor (WA_VENTANA_DIAS, 365 por defecto): borra
+--     los mensajes, sus archivos de R2 y los chats vacíos, todo junto. Si la base borrara
+--     mensajes por su cuenta con el servidor apagado, sus archivos quedarían huérfanos en
+--     R2, así que el trabajo de pg_cron que había antes se quita.
 do $$
 begin
-  create extension if not exists pg_cron;
-  perform cron.schedule('wa-ventana-365', '15 3 * * *', 'select * from wa.purgar_ventana();');
+  perform cron.unschedule('wa-ventana-365');
 exception when others then
-  raise notice 'No se programó la limpieza diaria (pg_cron): %. Habilitá pg_cron y volvé a correr el script.', sqlerrm;
+  null; -- no existía o pg_cron no está instalado
 end
 $$;
 

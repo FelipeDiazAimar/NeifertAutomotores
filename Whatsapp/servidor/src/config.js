@@ -44,6 +44,13 @@ export const WA_DATABASE_URL = env.WA_DATABASE_URL || env.WA_SUPABASE_URL || ''
 // La sesión de WhatsApp y los archivos multimedia siguen en DATA_DIR en los dos casos.
 export const ALMACEN = (env.ALMACEN || (WA_DATABASE_URL ? 'supabase' : 'local')).toLowerCase()
 
+/* ---------------- Cuánto tiempo se guarda ---------------- */
+
+// Se guardan los mensajes y archivos de los últimos VENTANA_DIAS días. Todos los días se
+// borra lo que quedó afuera (mensajes, y sus archivos en R2 o en el disco), y lo más viejo
+// que manda WhatsApp con el historial no se guarda.
+export const VENTANA_DIAS = Number(env.WA_VENTANA_DIAS) || 365
+
 /* ---------------- Dónde se guardan los archivos ---------------- */
 
 // Fotos, audios, videos, stickers, documentos y fotos de perfil van a Cloudflare R2 si

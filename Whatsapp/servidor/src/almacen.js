@@ -354,6 +354,7 @@ function cargarClave(k) {
         const op = JSON.parse(linea)
         if (op.op === 'add') porId.set(op.m.id, { ...porId.get(op.m.id), ...op.m })
         else if (op.op === 'upd' && porId.has(op.id)) Object.assign(porId.get(op.id), op.p)
+        else if (op.op === 'del') porId.delete(op.id) // salió de la ventana de días
       } catch {
         // Última línea incompleta por un cierre abrupto: se ignora.
       }
@@ -436,6 +437,41 @@ export function recibioDespuesDe(jid, idsCorte) {
 /** Recorre todos los mensajes guardados: fn(jid del chat, mensaje). */
 export function recorrerMensajes(fn) {
   for (const jid of Object.keys(estado.chats)) for (const m of cargar(jid).values()) fn(jid, m)
+}
+
+/**
+ * Ventana de días: saca los mensajes anteriores a `corte` (segundos) de la memoria y de
+ * la base, y los chats que quedaron vacíos sin actividad en la ventana. Devuelve los
+ * mensajes quitados, para que se borren sus archivos.
+ */
+export function quitarAnterioresA(corte) {
+  const quitados = []
+  for (const jid of Object.keys(estado.chats)) {
+    const porId = cargar(jid)
+    for (const [id, m] of porId) {
+      if ((m.ts || 0) >= corte) continue
+      porId.delete(id)
+      quitados.push({ jid, m })
+      if (!EN_SUPABASE) escribir(jid, { op: 'del', id })
+    }
+  }
+  if (EN_SUPABASE && quitados.length) nube.mensajesAnterioresBorrados(corte)
+
+  // Los grupos se quedan aunque estén vacíos: la línea sigue siendo miembro y WhatsApp
+  // los vuelve a informar en cada conexión.
+  const chatsVacios = Object.keys(estado.chats).filter(
+    (jid) => !esGrupo(jid) && (estado.chats[jid].ultimoTs || 0) < corte && !cargar(jid).size,
+  )
+  for (const jid of chatsVacios) {
+    delete estado.chats[jid]
+    cache.delete(clave(jid))
+    if (EN_SUPABASE) nube.chatBorrado(jid)
+  }
+  if (chatsVacios.length) {
+    guardarEstado()
+    emitir('chats-borrados', { ids: chatsVacios })
+  }
+  return { quitados, chats: chatsVacios.length }
 }
 
 export function agregarMensaje(jid, m) {

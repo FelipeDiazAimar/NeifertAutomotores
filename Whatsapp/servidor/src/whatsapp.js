@@ -32,12 +32,12 @@ import makeWASocket, {
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
-import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, numeroLinea } from './config.js'
+import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, VENTANA_DIAS, numeroLinea } from './config.js'
 import { emitir, log } from './eventos.js'
 import { sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
 import { configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
-import { borrar as borrarArchivo } from './archivos.js'
+import { borrar as borrarArchivo, listarArchivos } from './archivos.js'
 import {
   AUTH_DIR,
   actualizarMensaje,
@@ -54,6 +54,7 @@ import {
   pnDeLid,
   registrarLid,
   claveMedia,
+  quitarAnterioresA,
   recorrerMensajes,
   setContacto,
   setGrupoNombre,
@@ -124,6 +125,8 @@ const MAX_FALLOS_MEDIA = 2
 const ESTADOS = { 0: 'error', 1: 'pendiente', 2: 'enviado', 3: 'entregado', 4: 'leido', 5: 'reproducido' }
 const ORDEN = ['pendiente', 'enviado', 'entregado', 'leido', 'reproducido']
 const ahora = () => Math.floor(Date.now() / 1000)
+/** Lo anterior a este momento (segundos) está fuera de la ventana de días: no se guarda. */
+const corteVentana = () => ahora() - VENTANA_DIAS * 86400
 
 configurarFotos(() => (conexion === 'conectado' ? sock : null))
 
@@ -231,10 +234,13 @@ async function iniciarConexion() {
     version,
     auth: state,
     logger,
+    // Presentarse como "WhatsApp de escritorio" (Browsers.windows('Desktop')) haría que el
+    // celular mande todo el historial, pero WhatsApp corta esa conexión (error 428) y no
+    // llega a mostrar el QR. Queda como Chrome, pidiendo el historial completo al vincular.
     browser: Browsers.windows('Chrome'),
     // Si se marca "en línea", el celular deja de recibir notificaciones.
     markOnlineOnConnect: false,
-    syncFullHistory: false,
+    syncFullHistory: true,
     generateHighQualityLinkPreview: false,
     shouldIgnoreJid: ignorar,
     getMessage: async (key) => enviados.get(key.id),
@@ -317,6 +323,10 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       repararFotos()
         .then((n) => n && log('info', 'Fotos de perfil faltantes', `${n} en cola para volver a bajar`))
         .catch((err) => log('aviso', 'No se pudieron revisar las fotos de perfil', err.message))
+      // Audios, fotos, stickers, videos y documentos de la ventana que todavía no se bajaron.
+      ponerAlDiaArchivos()
+        .then((n) => n && log('info', 'Archivos sin descargar', `${n} en cola, de lo más nuevo a lo más viejo`))
+        .catch((err) => log('aviso', 'No se pudieron revisar los archivos pendientes', err.message))
     }, 20000)
   }
 
@@ -568,6 +578,67 @@ export async function limpiarUnaVez() {
   return encontrados.length
 }
 
+/* ---------------- Ventana de días y archivos pendientes ---------------- */
+
+/**
+ * Borra lo que quedó fuera de la ventana de días: mensajes (de la memoria y de la base),
+ * sus archivos (de R2 o del disco) y los chats que quedaron vacíos. Corre al arrancar y
+ * una vez por día.
+ */
+export async function purgarVentana() {
+  const { quitados, chats } = quitarAnterioresA(corteVentana())
+  let archivos = 0
+  for (const { jid, m } of quitados) {
+    if (!m.media?.archivo) continue
+    await borrarArchivo(claveMedia(jid, m.media.archivo)).catch(() => {})
+    archivos++
+  }
+  return { mensajes: quitados.length, archivos, chats }
+}
+
+const reintentados = new Set()
+
+/**
+ * Pone en la cola todo archivo de la ventana que todavía no se bajó (fotos, audios,
+ * stickers, videos, documentos), de lo más nuevo a lo más viejo. Corre al conectar: la
+ * cola vive en memoria y un reinicio o un corte la deja a medias. Lo que ya falló se
+ * reintenta una sola vez por arranque.
+ */
+export async function ponerAlDiaArchivos() {
+  // Primero, lo que figura descargado pero no está (se guardó en un disco que ya no
+  // existe, o se borró a mano): vuelve a "sin descargar". Así el panel no pide archivos
+  // que no hay (404) y entran a la cola de abajo.
+  const hay = new Set((await listarArchivos('media/')).map((a) => a.clave))
+  const perdidos = []
+  recorrerMensajes((chatId, m) => {
+    if (m.media?.estado === 'ok' && m.media.archivo && !hay.has(claveMedia(chatId, m.media.archivo))) perdidos.push([chatId, m])
+  })
+  for (const [chatId, m] of perdidos) {
+    actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo: null, estado: 'pendiente', error: null, fallos: 0 } })
+  }
+  if (perdidos.length) log('aviso', 'Archivos que figuraban guardados y no estaban', `${perdidos.length} vuelven a descargarse`)
+
+  if (!config().descargarMedia) return 0
+  const corte = corteVentana()
+  const faltan = []
+  recorrerMensajes((chatId, m) => {
+    const md = m.media
+    if (!md || !m.raw || md.estado === 'ok' || md.estado === 'grande' || (m.ts || 0) < corte) return
+    faltan.push({ chatId, m })
+  })
+  faltan.sort((a, b) => (b.m.ts || 0) - (a.m.ts || 0))
+  let n = 0
+  for (const { chatId, m } of faltan) {
+    const llave = `${chatId}|${m.id}`
+    const forzar = seDaPorPerdido(m) && !reintentados.has(llave)
+    if (forzar) reintentados.add(llave)
+    if (encolarMedia(chatId, m.id, { forzar })) n++
+  }
+  // Lo que ya estaba en la cola de antes de un corte también tiene que seguir bajando.
+  arrancarCola()
+  return n
+}
+
 /* ---------------- Eventos de mensajes ---------------- */
 
 async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
@@ -588,6 +659,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   const deMi = !!key.fromMe
   const grupo = esGrupo(chatId)
   const ts = toNumber(m.messageTimestamp) || ahora()
+  // Más viejo que la ventana de días (llega con el historial): no se guarda.
+  if (ts < corteVentana()) return
   // En un grupo el pushName es del autor: no puede pasar a ser el nombre del chat.
   if (!deMi && !grupo) actualizarPushName(chatId, m.pushName)
 

@@ -165,6 +165,7 @@ const pendientes = {
   contactos: new Set(),
   estado: false,
   borrarChats: new Set(),
+  borrarAntesDe: 0, // segundos: se borran los mensajes anteriores (ventana de días)
 }
 let leerEstado = null // lo pone el almacén: devuelve su estado y sus mensajes en memoria
 let timer = null
@@ -195,6 +196,11 @@ export function contactoCambiado(jid) {
 }
 export function estadoCambiado() {
   pendientes.estado = true
+  programar()
+}
+/** Los mensajes anteriores a `corte` (segundos) salieron de la ventana: se borran de la base. */
+export function mensajesAnterioresBorrados(corte) {
+  pendientes.borrarAntesDe = Math.max(pendientes.borrarAntesDe, corte)
   programar()
 }
 export function chatBorrado(jid) {
@@ -244,12 +250,13 @@ const SQL_ESTADO = `
 const trozos = (lista) => Array.from({ length: Math.ceil(lista.length / TANDA) }, (_, i) => lista.slice(i * TANDA, (i + 1) * TANDA))
 
 /** Escribe en tandas lo que un volcado trae (se usa al escribir y al importar). */
-async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar }, marcas) {
+async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar, borrarAntesDe = 0 }, marcas) {
   for (const t of trozos(mensajes)) await cliente.query(SQL_MENSAJES, [aJson(t)])
   for (const t of trozos(chats.map((c) => filaChat(c, marcas)))) await cliente.query(SQL_CHATS, [aJson(t)])
   for (const t of trozos(contactos)) await cliente.query(SQL_CONTACTOS, [aJson(t)])
   if (estadoKv.length) await cliente.query(SQL_ESTADO, [aJson(estadoKv)])
   if (borrar.length) await cliente.query('delete from wa.chats where jid = any($1)', [borrar])
+  if (borrarAntesDe) await cliente.query('delete from wa.mensajes where ts < to_timestamp($1)', [borrarAntesDe])
 }
 
 const kvDe = (estado) => [
@@ -284,6 +291,7 @@ export async function escribir() {
     contactos: [...pendientes.contactos].map((jid) => contactoFila(jid, estado.contactos[jid])),
     estadoKv: pendientes.estado ? kvDe(estado) : [],
     borrar: [...pendientes.borrarChats],
+    borrarAntesDe: pendientes.borrarAntesDe,
   }
   const respaldo = {
     mensajes: new Map(pendientes.mensajes),
@@ -291,14 +299,17 @@ export async function escribir() {
     contactos: new Set(pendientes.contactos),
     estado: pendientes.estado,
     borrarChats: new Set(pendientes.borrarChats),
+    borrarAntesDe: pendientes.borrarAntesDe,
   }
   pendientes.mensajes.clear()
   pendientes.chats.clear()
   pendientes.contactos.clear()
   pendientes.estado = false
   pendientes.borrarChats.clear()
+  pendientes.borrarAntesDe = 0
 
-  const hayAlgo = lote.mensajes.length || lote.chats.length || lote.contactos.length || lote.estadoKv.length || lote.borrar.length
+  const hayAlgo =
+    lote.mensajes.length || lote.chats.length || lote.contactos.length || lote.estadoKv.length || lote.borrar.length || lote.borrarAntesDe
   if (!hayAlgo) return
 
   escribiendo = (async () => {
@@ -315,6 +326,7 @@ export async function escribir() {
       for (const j of respaldo.contactos) pendientes.contactos.add(j)
       for (const j of respaldo.borrarChats) pendientes.borrarChats.add(j)
       pendientes.estado ||= respaldo.estado
+      pendientes.borrarAntesDe = Math.max(pendientes.borrarAntesDe, respaldo.borrarAntesDe)
       log('aviso', 'No se pudo guardar en Supabase, se reintenta', err.message)
       clearTimeout(timer)
       timer = setTimeout(escribir, 10000)
@@ -327,7 +339,7 @@ export async function escribir() {
   } finally {
     escribiendo = null
   }
-  if (pendientes.mensajes.size || pendientes.chats.size || pendientes.contactos.size || pendientes.estado || pendientes.borrarChats.size) {
+  if (pendientes.mensajes.size || pendientes.chats.size || pendientes.contactos.size || pendientes.estado || pendientes.borrarChats.size || pendientes.borrarAntesDe) {
     programar()
   }
 }

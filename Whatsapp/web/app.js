@@ -1997,6 +1997,11 @@ function conectarEventos() {
     pedirLista()
     if (c.id === state.activo) renderHead()
   })
+  // Chats que quedaron vacíos al pasar la ventana de días: salen de la lista.
+  es.addEventListener('chats-borrados', (e) => {
+    for (const id of JSON.parse(e.data).ids || []) state.chats.delete(id)
+    pedirLista()
+  })
   es.addEventListener('chat-migrado', (e) => {
     const { de, a } = JSON.parse(e.data)
     state.chats.delete(de)

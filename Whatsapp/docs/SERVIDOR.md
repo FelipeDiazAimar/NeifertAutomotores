@@ -153,14 +153,34 @@ escribe los cambios en tandas cada 1,5 segundos. Si la base no responde, reinten
 
 | Qué | Dónde |
 |---|---|
-| Mensajes | `wa.mensajes` (se borran solos a los 365 días) |
+| Mensajes | `wa.mensajes` (solo los últimos 365 días, ver abajo) |
 | Chats (archivado, fijado, silenciado) | `wa.chats` |
 | Contactos | `wa.contactos` |
-| LIDs, preferencias, fotos de perfil conocidas | `wa.estado` |
+| LIDs, preferencias, fotos de perfil conocidas, carpeta de cada chat | `wa.estado` |
 | Fotos, videos, audios, stickers, documentos | Cloudflare R2 `media/<carpeta>/` (sin R2: `DATA_DIR/media/<carpeta>/`) |
 | Fotos de perfil | Cloudflare R2 `fotos/` (sin R2: `DATA_DIR/fotos/`) |
 | Sesión de WhatsApp (la llave) | `DATA_DIR/sesion/` |
 | Firma de las cookies | `DATA_DIR/secreto-sesion` |
+
+### Últimos 365 días
+
+Se guarda lo de los últimos 365 días (`WA_VENTANA_DIAS`), y nada más viejo:
+
+- **Al arrancar y una vez por día**, el servidor borra lo que quedó afuera: los mensajes
+  (de la base), sus archivos (de R2 o del disco) y los chats que quedaron sin mensajes.
+  Los grupos se quedan aunque estén vacíos. Lo hace el servidor y no la base, para que
+  ningún archivo quede huérfano en R2.
+- **Lo más viejo que manda WhatsApp con el historial no se guarda.**
+- **Historial al vincular:** el servidor le pide al celular el historial completo, pero
+  se presenta como navegador (Chrome), y el celular decide cuánto manda: no siempre es
+  todo. Presentarse como WhatsApp de escritorio traería más, pero con esta versión de
+  Baileys WhatsApp corta la conexión (error 428) y no llega a mostrar el QR. El
+  historial solo llega al **vincular con QR**.
+- **Todos los archivos se bajan solos**, también los del historial: fotos, audios,
+  stickers, videos y documentos, de lo más nuevo a lo más viejo, de a uno (WhatsApp corta
+  si se le piden muchos seguidos). Lo que falta se vuelve a poner en cola cada vez que
+  el servidor conecta. Se puede apagar en **Preferencias → Descargar fotos, audios y
+  documentos al llegar**. Los de más de 50 MB y los de "ver una vez" no se bajan.
 
 ### Archivos en Cloudflare R2
 
