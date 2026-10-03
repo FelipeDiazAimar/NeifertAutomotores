@@ -52,6 +52,14 @@ export const ROLES_SIEMPRE = (env.WHATSAPP_ROLES_SIEMPRE ?? 'admin,dueno')
   .split(',')
   .map((r) => r.trim())
   .filter(Boolean)
+// Roles que pueden vincular y desvincular la línea (ven el QR). El resto solo usa la bandeja.
+export const ROLES_LINEA = (env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
+  .split(',')
+  .map((r) => r.trim())
+  .filter(Boolean)
+// Único número que se acepta como línea (con código de país). Si alguien escanea el QR con
+// otro celular, se desvincula solo. Vacío: se acepta cualquiera.
+export const NUMERO_LINEA = (env.WHATSAPP_NUMERO || '').replace(/\D/g, '')
 // Firma de la cookie de sesión. Si no se define, se genera una y se guarda en DATA_DIR.
 export const SESION_SECRETO = env.SESION_SECRETO || ''
 export const SESION_HORAS = Number(env.SESION_HORAS) || 12
@@ -61,6 +69,9 @@ export const LOGIN_CONFIGURADO =
   env.WHATSAPP_LOGIN !== 'off' && Boolean(SUPABASE_URL && SUPABASE_ANON_KEY && SUPABASE_SERVICE_ROLE_KEY)
 export const SOLO_ESTA_PC = ['127.0.0.1', 'localhost', '::1'].includes(HOST)
 
-// Modo prueba: se entra eligiendo un nombre, sin CRM, para probar varios empleados a la
-// vez. Nunca vale si el panel está abierto a otras computadoras.
-export const MODO_PRUEBA = env.WHATSAPP_PRUEBA === 'on' && SOLO_ESTA_PC
+// Sitios que pueden mostrar el panel dentro de una página (el CRM lo embebe). Sale de
+// CRM_URL; en esta PC también se acepta el CRM de desarrollo (localhost).
+export const ORIGENES_CRM = [
+  ...(CRM_URL ? [new URL(CRM_URL).origin] : []),
+  ...(SOLO_ESTA_PC ? ['http://localhost:*', 'http://127.0.0.1:*'] : []),
+]

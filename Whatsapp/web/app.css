@@ -5,7 +5,6 @@ html, body { height: 100%; overflow: hidden; }
 .shell { max-width: 1600px; margin: 0 auto; padding-inline: 16px; padding-block: 12px; height: 100vh; height: 100dvh; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
 .topbar { flex: none; }
 .topbar .brand { padding: 0; }
-.chip-local { font-size: 10.5px; font-weight: 600; letter-spacing: 0.08em; text-transform: uppercase; color: var(--amber); border: 1px dashed var(--amber-line); background: var(--amber-soft); padding: 2px 8px; border-radius: 99px; }
 .topbar-actions { margin-left: auto; display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .line-pill { margin-left: 0; }
 .dot.info { background: var(--ink-3); box-shadow: 0 0 0 3px var(--line); }
@@ -122,9 +121,6 @@ details.ediciones li { margin-top: 3px; }
 
 /* ---------- Conexión ---------- */
 .qr-img { width: 100%; height: 100%; display: block; border-radius: 6px; }
-.pair-form { display: flex; gap: 8px; flex-wrap: wrap; }
-.pair-form input { flex: 1; min-width: 180px; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--field); background: var(--solid); }
-.pair-code { font: 700 26px "Sora", sans-serif; letter-spacing: 0.12em; font-variant-numeric: tabular-nums; }
 .uso { display: flex; flex-direction: column; gap: 10px; }
 .uso-row { display: grid; grid-template-columns: 100px 1fr 80px; gap: 10px; align-items: center; font-size: 12.5px; }
 .uso-bar { height: 8px; border-radius: 99px; background: var(--line); overflow: hidden; }

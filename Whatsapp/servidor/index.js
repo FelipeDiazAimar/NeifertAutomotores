@@ -1,8 +1,8 @@
 import fs from 'node:fs'
 import express from 'express'
-import { HOST, LOGIN_CONFIGURADO, MODO_PRUEBA, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
+import { HOST, LOGIN_CONFIGURADO, ORIGENES_CRM, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
-import { cerrarSesion, exigirSesion, iniciarSesion, iniciarSesionPrueba, sesionActual } from './src/auth.js'
+import { cerrarSesion, exigirCabecera, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import { rutaFoto } from './src/fotos.js'
@@ -23,7 +23,13 @@ app.disable('x-powered-by')
 // Detrás de un proxy: así se sabe si el pedido vino por https (para la cookie).
 app.set('trust proxy', true)
 app.use(express.json({ limit: '1mb' }))
+// El panel solo se puede mostrar embebido dentro del CRM, nunca en una página ajena.
+app.use((req, res, next) => {
+  res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${ORIGENES_CRM.join(' ')}`.trim())
+  next()
+})
 app.use(express.static(WEB_DIR))
+app.use('/api', exigirCabecera)
 
 /** Envuelve un handler: devuelve JSON con lo que retorna, o { error } con el mensaje. */
 const ruta = (fn) => async (req, res) => {
@@ -50,7 +56,6 @@ function archivoDe(req) {
 /* Sesión: lo único de /api que se puede usar sin haber entrado */
 app.post('/api/sesion', iniciarSesion)
 app.post('/api/sesion/salir', cerrarSesion)
-app.post('/api/sesion/prueba', iniciarSesionPrueba)
 
 // Todo lo demás exige haber entrado desde el CRM.
 app.use('/api', exigirSesion)
@@ -70,8 +75,7 @@ app.post('/api/config', ruta((req) => {
   emitir('config', c)
   return c
 }))
-app.post('/api/vincular/codigo', ruta(async (req) => ({ codigo: await wa.pedirCodigo(req.body?.telefono) })))
-app.post('/api/desvincular', ruta(async () => {
+app.post('/api/desvincular', exigirLinea, ruta(async () => {
   await wa.desvincular()
   return { ok: true }
 }))
@@ -147,9 +151,7 @@ const servidor = app.listen(PUERTO, HOST, () => {
     almacen.modo === 'supabase' ? 'Mensajes guardados en Supabase' : 'Mensajes guardados en archivos locales (modo prueba)',
     almacen.modo === 'supabase' ? `${almacen.chats} chats · ${almacen.mensajes} mensajes cargados` : `${almacen.chats} chats`,
   )
-  if (MODO_PRUEBA) log('aviso', 'Modo prueba encendido', 'Se entra eligiendo un nombre, sin el CRM. Solo desde esta PC.')
-  else if (process.env.WHATSAPP_PRUEBA === 'on') log('aviso', 'Modo prueba ignorado', 'Solo funciona con HOST=127.0.0.1')
-  else if (!LOGIN_CONFIGURADO) log('aviso', 'Login con el CRM sin configurar', 'Solo se puede usar desde esta PC')
+  if (!LOGIN_CONFIGURADO) log('aviso', 'Login con el CRM sin configurar', 'Solo se puede usar desde esta PC')
   wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message))
 })
 

@@ -31,9 +31,9 @@ import makeWASocket, {
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
-import { BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG } from './config.js'
+import { BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, NUMERO_LINEA } from './config.js'
 import { emitir, log } from './eventos.js'
-import { sinUsuario, usuarioActual } from './auth.js'
+import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
 import { configurarFotos, pedirFotos, pedirFotosDeTodos } from './fotos.js'
 import {
@@ -124,13 +124,24 @@ configurarFotos(() => (conexion === 'conectado' ? sock : null))
 
 /* ---------------- Conexión ---------------- */
 
-export const estadoConexion = () => ({ conexion, qr: qrDataUrl, yo, intentos })
+/** El QR solo viaja a quien puede vincular la línea: con él se conecta cualquier celular. */
+export const estadoConexion = (usuario = usuarioActual()) => ({
+  conexion,
+  qr: manejaLinea(usuario) ? qrDataUrl : null,
+  yo,
+  intentos,
+})
+
+const emitirEstado = () => emitir('estado', (usuario) => estadoConexion(usuario))
 
 function setConexion(nuevo) {
   conexion = nuevo
   if (nuevo !== 'qr') qrDataUrl = null
-  emitir('estado', estadoConexion())
+  emitirEstado()
 }
+
+// Argentina: el mismo celular puede figurar como 54… o 549…; se comparan los últimos 10 dígitos.
+const mismoNumero = (a, b) => String(a).replace(/\D/g, '').slice(-10) === String(b).replace(/\D/g, '').slice(-10)
 
 function programar(ms) {
   clearTimeout(reconectarTimer)
@@ -224,12 +235,23 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, scale: 8 })
     if (conexion !== 'qr') log('info', 'Código QR listo para escanear')
     conexion = 'qr'
-    emitir('estado', estadoConexion())
+    emitirEstado()
   }
 
   if (connection === 'open') {
     intentos = 0
     const id = jidNormalizedUser(s.user?.id)
+    if (NUMERO_LINEA && !mismoNumero(telefonoDe(id), NUMERO_LINEA)) {
+      // Escanearon el QR con otro celular. Se suelta antes de guardar nada de esa cuenta.
+      log('error', 'Se vinculó un número que no es el de la concesionaria', `${telefonoDe(id) || id} · se desvinculó solo`)
+      sock = null
+      await s.logout().catch(() => {})
+      borrarSesion()
+      yo = null
+      setConexion('conectando')
+      programar(1000)
+      return
+    }
     yo = { id, nombre: s.user?.name || s.user?.verifiedName || null, telefono: telefonoDe(id) }
     if (s.user?.lid) registrarLid(jidNormalizedUser(s.user.lid), id)
     setConexion('conectado')
@@ -280,15 +302,6 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       programar(espera)
     }
   }
-}
-
-export async function pedirCodigo(telefono) {
-  const digitos = String(telefono || '').replace(/\D/g, '')
-  if (digitos.length < 10) throw new Error('Escribí el número completo con código de país, sin + ni espacios. Ej: 5493564562413')
-  if (!sock || conexion !== 'qr') throw new Error('Esperá a que aparezca el código QR y volvé a intentar.')
-  const codigo = await sock.requestPairingCode(digitos)
-  log('info', 'Código de vinculación generado', `para +${digitos}`)
-  return codigo
 }
 
 export async function desvincular() {

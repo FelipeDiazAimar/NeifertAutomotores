@@ -1,26 +1,78 @@
-import { useState } from 'react'
-import { MessageCircle, ExternalLink } from 'lucide-react'
-import Button from '@/components/common/Button'
-import GlassCard from '@/components/common/GlassCard'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { ExternalLink } from 'lucide-react'
+import Spinner from '@/components/common/Spinner'
 import { tokenActual } from '@/crm/services/usuarios.service'
+import { useUiStore } from '@/store/useUiStore'
 
 // Dirección del servidor de WhatsApp.
 const PANEL_URL = (import.meta.env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
+const PANEL_ORIGEN = PANEL_URL ? new URL(PANEL_URL).origin : ''
+// Si la sesión del panel vence, se recarga con un token nuevo; nunca más seguido que esto
+// (evita un bucle si el servidor rechaza el token una y otra vez).
+const RECARGA_MIN_MS = 30_000
+
+/** Dirección del panel con el token del usuario logueado. El ?v= cambia en cada carga:
+ *  así el iframe se recarga aunque el token sea el mismo. */
+async function direccionConToken() {
+  const token = await tokenActual()
+  if (!token) throw new Error('Tu sesión del CRM venció. Volvé a iniciar sesión.')
+  return `${PANEL_URL}/?v=${Date.now()}#t=${encodeURIComponent(token)}`
+}
 
 /**
- * Abre el panel de WhatsApp con la sesión del CRM: le pasa el token en la URL y el
- * servidor lo canjea por su propia sesión. Así no hay un segundo login.
- * Se abre desde un botón (y no solo al entrar) porque el navegador bloquea las
- * pestañas nuevas que no salen de un clic.
+ * El WhatsApp de la concesionaria dentro del CRM. El panel entra solo con el usuario
+ * logueado: se le pasa el token de Supabase en la URL (#t=...) y el servidor lo canjea
+ * por su propia sesión, con el nombre y el rol de ese usuario. No hay segundo login.
  */
 export default function WhatsappPage() {
+  const theme = useUiStore((s) => s.theme)
+  const iframeRef = useRef(null)
+  const ultimaCarga = useRef(0)
+  const [src, setSrc] = useState('')
+  const [listo, setListo] = useState(false)
   const [error, setError] = useState('')
-  const [abriendo, setAbriendo] = useState(false)
 
-  async function abrir() {
-    setError('')
-    setAbriendo(true)
-    // La pestaña se abre ya, dentro del clic; la dirección se le pone cuando llega el token.
+  /** Carga (o recarga) el panel con un token recién pedido. */
+  const cargar = useCallback(() => {
+    ultimaCarga.current = Date.now()
+    return direccionConToken().then(
+      (url) => {
+        setListo(false)
+        setError('')
+        setSrc(url)
+      },
+      (e) => setError(e.message),
+    )
+  }, [])
+
+  useEffect(() => {
+    if (PANEL_URL) cargar()
+  }, [cargar])
+
+  const enviarTema = useCallback(() => {
+    iframeRef.current?.contentWindow?.postMessage({ tipo: 'nf-wa:tema', tema: theme }, PANEL_ORIGEN)
+  }, [theme])
+
+  useEffect(enviarTema, [enviarTema])
+
+  useEffect(() => {
+    function alMensaje(e) {
+      if (e.origin !== PANEL_ORIGEN || e.data?.origen !== 'nf-wa') return
+      if (e.data.tipo === 'nf-wa:listo') {
+        setListo(true)
+        enviarTema()
+      } else if (e.data.tipo === 'nf-wa:sin-sesion') {
+        setListo(true)
+        if (e.data.vencida && Date.now() - ultimaCarga.current > RECARGA_MIN_MS) cargar()
+      }
+    }
+    window.addEventListener('message', alMensaje)
+    return () => window.removeEventListener('message', alMensaje)
+  }, [cargar, enviarTema])
+
+  async function abrirEnPestana() {
+    // La pestaña se abre ya, dentro del clic (si no, el navegador la bloquea); la
+    // dirección se le pone cuando llega el token.
     const ventana = window.open('', '_blank')
     try {
       const token = await tokenActual()
@@ -35,39 +87,56 @@ export default function WhatsappPage() {
     } catch (e) {
       ventana?.close()
       setError(e.message)
-    } finally {
-      setAbriendo(false)
     }
   }
 
+  if (!PANEL_URL) {
+    return (
+      <div className="mx-auto max-w-md">
+        <h1 className="font-display text-xl font-bold text-ink">WhatsApp</h1>
+        <p className="mt-6 rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">
+          Falta configurar la dirección del servidor de WhatsApp (VITE_WHATSAPP_PANEL_URL).
+        </p>
+      </div>
+    )
+  }
+
   return (
-    <div className="mx-auto max-w-md">
-      <h1 className="font-display text-xl font-bold text-ink">WhatsApp</h1>
-      <GlassCard className="mt-6 space-y-4 p-6">
-        <div className="flex items-center gap-3">
-          <span className="grid h-11 w-11 place-items-center rounded-2xl bg-emerald-500/15 text-emerald-600">
-            <MessageCircle size={22} />
-          </span>
-          <div>
-            <p className="font-semibold text-ink">Bandeja de la concesionaria</p>
-            <p className="text-sm text-ink-3">Se abre en otra pestaña con tu usuario del CRM.</p>
+    <div className="flex h-[calc(100dvh-7rem)] flex-col gap-3 md:h-[calc(100dvh-3.5rem)]">
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="font-display text-xl font-bold text-ink">WhatsApp</h1>
+        <button
+          onClick={abrirEnPestana}
+          className="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm text-ink-3 transition-colors hover:text-ink"
+        >
+          <ExternalLink size={15} /> Abrir en otra pestaña
+        </button>
+      </div>
+
+      {error && (
+        <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">
+          {error}
+        </p>
+      )}
+
+      <div className="glass relative min-h-0 flex-1 overflow-hidden rounded-2xl">
+        {!listo && !error && (
+          <div className="absolute inset-0 grid place-items-center">
+            <Spinner />
           </div>
-        </div>
-
-        {!PANEL_URL ? (
-          <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">
-            Falta configurar la dirección del servidor de WhatsApp (VITE_WHATSAPP_PANEL_URL).
-          </p>
-        ) : (
-          <Button onClick={abrir} disabled={abriendo} className="w-full">
-            <ExternalLink size={16} /> {abriendo ? 'Abriendo…' : 'Abrir WhatsApp'}
-          </Button>
         )}
-
-        {error && (
-          <p className="rounded-2xl border border-neifert/40 bg-neifert/10 px-3 py-2 text-sm text-neifert">{error}</p>
+        {src && (
+          <iframe
+            ref={iframeRef}
+            src={src}
+            title="WhatsApp de la concesionaria"
+            // Micrófono para las notas de voz; clipboard para copiar mensajes.
+            allow="microphone; clipboard-write"
+            className="h-full w-full border-0"
+            onLoad={enviarTema}
+          />
         )}
-      </GlassCard>
+      </div>
     </div>
   )
 }

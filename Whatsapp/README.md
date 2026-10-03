@@ -1,4 +1,4 @@
-# WhatsApp · prueba local
+# WhatsApp de la concesionaria
 
 > **Varios empleados y login con el CRM:** ver [docs/SERVIDOR.md](docs/SERVIDOR.md).
 
@@ -22,10 +22,7 @@ npm install
 npm start
 ```
 
-Abrí **http://localhost:3100**, entrá a **Conexión** y vinculá el número:
-
-- **Con QR:** en el celular, WhatsApp → Dispositivos vinculados → Vincular un dispositivo, y escaneá el código.
-- **Con código:** escribí el número con código de país (ej. `5493564562413`), tocá **Pedir código** y cargalo en el celular desde *Vincular con número de teléfono*.
+Abrí **http://localhost:3100**, entrá a **Conexión** y vinculá el número con el QR: en el celular, WhatsApp → Dispositivos vinculados → Vincular un dispositivo, y escaneá el código.
 
 Para frenar el servicio: `Ctrl + C` en la terminal. La sesión queda guardada: al volver a hacer `npm start` se conecta sola, sin escanear de nuevo.
 

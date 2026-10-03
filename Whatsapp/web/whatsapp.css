@@ -364,10 +364,5 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .sin-sesion h2 { font-size: 19px; }
 .sin-sesion p { color: var(--ink-2); margin: 0; line-height: 1.5; }
 
-/* Modo prueba */
-.prueba { display: flex; flex-direction: column; gap: 12px; width: 100%; }
-.prueba-rapida { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-.prueba-libre { display: flex; gap: 8px; }
-.prueba-libre input { flex: 1; min-width: 0; padding: 9px 12px; border-radius: 12px; border: 1px solid var(--field); background: var(--solid); font: inherit; color: inherit; }
-.prueba small { font-size: 12px; color: var(--ink-3); line-height: 1.45; }
-.tag.prueba-tag { background: var(--amber-soft); color: var(--amber); border-color: transparent; }
+/* Embebido en el CRM: el tema lo pone el CRM */
+.embebido .theme-btn { display: none; }

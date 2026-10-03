@@ -44,3 +44,5 @@ scrap/.waylog/
 
 # Supabase CLI temp
 supabase/.temp/
+
+Whatsapp/servidor/data/*

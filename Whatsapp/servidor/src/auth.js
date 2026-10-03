@@ -20,7 +20,7 @@ import {
   CRM_URL,
   DATA_DIR,
   LOGIN_CONFIGURADO,
-  MODO_PRUEBA,
+  ROLES_LINEA,
   ROLES_SIEMPRE,
   SESION_HORAS,
   SESION_SECRETO,
@@ -64,9 +64,9 @@ function secreto() {
     return nuevo
   }
 }
-const SECRETO = LOGIN_CONFIGURADO || MODO_PRUEBA ? secreto() : ''
-// Hay que identificarse para usar el panel: con el CRM, o eligiendo un nombre en modo prueba.
-const PIDE_SESION = LOGIN_CONFIGURADO || MODO_PRUEBA
+const SECRETO = LOGIN_CONFIGURADO ? secreto() : ''
+// Hay que entrar desde el CRM para usar el panel (salvo con el login apagado, solo en esta PC).
+const PIDE_SESION = LOGIN_CONFIGURADO
 
 const firmar = (texto) => crypto.createHmac('sha256', SECRETO).update(texto).digest('base64url')
 
@@ -98,9 +98,11 @@ function cookieDe(req) {
 }
 
 function ponerCookie(req, res, valor, maxAgeSeg) {
-  const partes = [`${COOKIE}=${encodeURIComponent(valor)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSeg}`]
-  // Si el pedido llega por https, la cookie viaja solo cifrada.
-  if (req.secure) partes.push('Secure')
+  const partes = [`${COOKIE}=${encodeURIComponent(valor)}`, 'Path=/', 'HttpOnly', `Max-Age=${maxAgeSeg}`]
+  // El CRM muestra el panel embebido. Por https la cookie va cifrada y marcada para viajar
+  // dentro del CRM aunque estén en dominios distintos (Partitioned: queda atada al CRM y no
+  // sirve desde otro sitio). Por http (desarrollo, CRM y panel en localhost) alcanza con Lax.
+  partes.push(...(req.secure ? ['Secure', 'SameSite=None', 'Partitioned'] : ['SameSite=Lax']))
   res.setHeader('Set-Cookie', partes.join('; '))
 }
 
@@ -133,10 +135,6 @@ const fichas = new Map() // id → { ts, usuario | null }
  * de su rol; más los roles de ROLES_SIEMPRE.
  */
 async function fichaUsuario(id) {
-  // En modo prueba los usuarios son inventados: el id lleva el nombre elegido.
-  if (id.startsWith('prueba_')) {
-    return MODO_PRUEBA ? { id, nombre: Buffer.from(id.slice(7), 'base64url').toString('utf8'), rol: 'prueba' } : null
-  }
   const guardada = fichas.get(id)
   if (guardada && Date.now() - guardada.ts < CACHE_MS) return guardada.usuario
   const [fila] = await supabase(
@@ -147,7 +145,12 @@ async function fichaUsuario(id) {
   if (fila?.activo) {
     const vistas = Array.isArray(fila.vistas_override) ? fila.vistas_override : (await vistasPorRol())[fila.rol] || []
     if (vistas.includes('whatsapp') || ROLES_SIEMPRE.includes(fila.rol)) {
-      usuario = { id: fila.id, nombre: fila.nombre || fila.usuario || 'Sin nombre', rol: fila.rol }
+      usuario = {
+        id: fila.id,
+        nombre: fila.nombre || fila.usuario || 'Sin nombre',
+        rol: fila.rol,
+        linea: ROLES_LINEA.includes(fila.rol),
+      }
     }
   }
   fichas.set(id, { ts: Date.now(), usuario })
@@ -157,21 +160,10 @@ async function fichaUsuario(id) {
 /* ---------------- Rutas y middleware ---------------- */
 
 const noAutorizado = (res, mensaje) =>
-  res.status(401).json({ error: mensaje, login: true, crmUrl: CRM_URL || null, prueba: MODO_PRUEBA })
-
-/** POST /api/sesion/prueba { nombre }: entra con un nombre inventado (solo modo prueba). */
-export function iniciarSesionPrueba(req, res) {
-  if (!MODO_PRUEBA) return res.status(404).json({ error: 'El modo prueba está apagado.' })
-  const nombre = String(req.body?.nombre || '').trim().slice(0, 40)
-  if (!nombre) return res.status(400).json({ error: 'Escribí un nombre.' })
-  const usuario = { id: `prueba_${Buffer.from(nombre).toString('base64url')}`, nombre, rol: 'prueba' }
-  ponerCookie(req, res, crearCookie(usuario.id), SESION_HORAS * 3600)
-  res.json({ usuario, login: true, prueba: true })
-}
+  res.status(401).json({ error: mensaje, login: true, crmUrl: CRM_URL || null })
 
 /** POST /api/sesion { token }: canjea el token del CRM por la cookie del panel. */
 export async function iniciarSesion(req, res) {
-  if (MODO_PRUEBA) return noAutorizado(res, 'Modo prueba: elegí con qué nombre entrar.')
   if (!LOGIN_CONFIGURADO) return res.json({ usuario: null, login: false })
   const token = String(req.body?.token || '')
   if (!token) return noAutorizado(res, 'Falta el token del CRM')
@@ -200,7 +192,7 @@ export function cerrarSesion(req, res) {
 export async function exigirSesion(req, res, next) {
   if (!PIDE_SESION) return contexto.run({ usuario: null }, next)
   const id = leerCookie(cookieDe(req))
-  if (!id) return noAutorizado(res, MODO_PRUEBA ? 'Modo prueba: elegí con qué nombre entrar.' : 'Entrá al WhatsApp desde el CRM.')
+  if (!id) return noAutorizado(res, 'Entrá al WhatsApp desde el CRM.')
   let usuario
   try {
     usuario = await fichaUsuario(id)
@@ -215,5 +207,24 @@ export async function exigirSesion(req, res, next) {
   contexto.run({ usuario }, next)
 }
 
+/** Puede vincular y desvincular la línea. Sin login (solo esta PC) puede cualquiera. */
+export const manejaLinea = (usuario) => !PIDE_SESION || !!usuario?.linea
+
+/** Corta el pedido si el usuario no maneja la línea. */
+export function exigirLinea(req, res, next) {
+  if (manejaLinea(req.usuario)) return next()
+  res.status(403).json({ error: 'Solo un administrador puede vincular o desvincular la línea.' })
+}
+
 /** GET /api/sesion: quién está usando el panel. */
-export const sesionActual = (req) => ({ usuario: req.usuario || null, login: PIDE_SESION, prueba: MODO_PRUEBA })
+export const sesionActual = (req) => ({ usuario: req.usuario || null, login: PIDE_SESION })
+
+/**
+ * Freno contra pedidos armados desde otro sitio: como la cookie también viaja dentro del
+ * CRM, todo lo que cambia algo tiene que traer esta cabecera. Un formulario o un link de
+ * otro sitio no la puede poner (el navegador pediría permiso y el servidor no lo da).
+ */
+export function exigirCabecera(req, res, next) {
+  if (req.method === 'GET' || req.method === 'HEAD' || req.get('x-nf-wa') === '1') return next()
+  res.status(403).json({ error: 'Pedido rechazado' })
+}

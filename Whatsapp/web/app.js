@@ -1,4 +1,4 @@
-/* Bandeja de WhatsApp (prueba local). Habla con el servidor en /api y recibe los cambios en vivo por /api/eventos. */
+/* Bandeja de WhatsApp de la concesionaria. Habla con el servidor en /api y recibe los cambios en vivo por /api/eventos. */
 
 const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
@@ -66,19 +66,22 @@ const state = {
   visibles: PAGINA, pegadoAbajo: true, nuevosAbajo: 0, sinLeerDesde: null, sinLeerCantidad: 0,
   presencias: new Map(), respondiendo: null, menuBoton: null, velocidades: new Map(),
   conn: { conexion: 'iniciando', qr: null, yo: null }, config: {}, logs: [],
-  grabacion: null, codigo: null, composerOff: null, revelados: new Set(), agentes: [],
+  grabacion: null, composerOff: null, revelados: new Set(), agentes: [],
 }
 const borradores = new Map(Object.entries(leerLocal('wa-borradores', {})))
 const conectado = () => state.conn.conexion === 'conectado'
 
+// Todo pedido lleva esta cabecera: el servidor rechaza los que cambian algo sin ella (ver exigirCabecera).
+const CABECERA = { 'X-NF-WA': '1' }
+
 async function api(ruta, { method = 'GET', json, body, headers } = {}) {
   const res = await fetch(ruta, {
     method,
-    headers: json ? { 'Content-Type': 'application/json' } : headers,
+    headers: { ...CABECERA, ...(json ? { 'Content-Type': 'application/json' } : headers) },
     body: json ? JSON.stringify(json) : body,
   })
   const data = await res.json().catch(() => ({}))
-  if ((res.status === 401 || res.status === 403) && data.login) pantallaSinSesion(data)
+  if ((res.status === 401 || res.status === 403) && data.login) pantallaSinSesion(data, res.status)
   if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
   return data
 }
@@ -283,7 +286,7 @@ function renderList() {
   $('#chatList').innerHTML = filaArchivados + cuerpo + res
 
   const total = todos.filter((c) => !c.archivado && !c.silenciado).reduce((s, c) => s + (c.noLeidos || 0), 0)
-  document.title = `${total ? `(${total}) ` : ''}WhatsApp Neifert · Prueba local`
+  document.title = `${total ? `(${total}) ` : ''}WhatsApp Neifert`
 }
 
 /* ---------------- Conversación ---------------- */
@@ -820,7 +823,20 @@ async function accionEnLote(accion) {
 
 // Identifica esta pestaña ante el servidor, para saber qué chat tiene abierto cada una.
 const PESTANA = Math.random().toString(36).slice(2, 12)
-const sesion = { usuario: null, login: false, prueba: false }
+const sesion = { usuario: null, login: false }
+
+// El CRM muestra el panel dentro de su página. Ahí la sesión es la del usuario del CRM:
+// no hay "Ir al CRM" ni "Cerrar sesión", y si la sesión vence se le pide al CRM una nueva.
+const EMBEBIDO = window.parent !== window
+const avisarAlCrm = (datos) => EMBEBIDO && window.parent.postMessage({ origen: 'nf-wa', ...datos }, '*')
+
+// El CRM le pasa su tema (claro/oscuro) para que el panel no desentone.
+window.addEventListener('message', (e) => {
+  if (e.source !== window.parent || e.data?.tipo !== 'nf-wa:tema') return
+  if (e.data.tema !== 'dark' && e.data.tema !== 'light') return
+  document.documentElement.dataset.theme = e.data.tema
+  syncTema()
+})
 
 /**
  * Entra al panel. El CRM abre esta página con su token en la URL (#t=...): se canjea
@@ -834,7 +850,7 @@ async function entrar() {
     history.replaceState(null, '', location.pathname + location.search)
     res = await fetch('/api/sesion', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { ...CABECERA, 'Content-Type': 'application/json' },
       body: JSON.stringify({ token: decodeURIComponent(m[1]) }),
     })
   } else {
@@ -842,59 +858,35 @@ async function entrar() {
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
-    pantallaSinSesion(data)
+    pantallaSinSesion(data, res.status)
     return false
   }
   sesion.usuario = data.usuario || null
   sesion.login = !!data.login
-  sesion.prueba = !!data.prueba
   renderYo()
+  avisarAlCrm({ tipo: 'nf-wa:listo' })
   return true
 }
 
-/** Tapa el panel y explica cómo entrar. En modo prueba, ofrece elegir un nombre. */
-function pantallaSinSesion(data = {}) {
+/**
+ * Tapa el panel y explica cómo entrar. Embebido en el CRM, si la sesión venció (401) se
+ * le avisa al CRM, que vuelve a cargar el panel con el token de su usuario.
+ */
+function pantallaSinSesion(data = {}, status = 0) {
   const pane = $('#sinSesion')
-  pane.querySelector('h2').textContent = data.prueba ? 'Modo prueba' : 'Entrá desde el CRM'
-  $('#sinSesionTxt').textContent = data.prueba ? '¿Con qué nombre entrás?' : data.error || 'Entrá al WhatsApp desde el CRM.'
+  $('#sinSesionTxt').textContent = data.error || 'Entrá al WhatsApp desde el CRM.'
   const link = $('#sinSesionLink')
-  link.hidden = !data.crmUrl || !!data.prueba
+  link.hidden = !data.crmUrl || EMBEBIDO
   if (data.crmUrl) link.href = data.crmUrl
-  $('#sinSesionPrueba').hidden = !data.prueba
   pane.hidden = false
-  if (data.prueba) $('#pruebaNombre').focus()
+  avisarAlCrm({ tipo: 'nf-wa:sin-sesion', vencida: status === 401 })
 }
-
-/** Modo prueba: entra con un nombre inventado y arranca el panel. */
-async function entrarDePrueba(nombre) {
-  const limpio = String(nombre || '').trim()
-  if (!limpio) return
-  const res = await fetch('/api/sesion/prueba', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ nombre: limpio }),
-  })
-  if (res.ok) location.reload()
-  else $('#sinSesionTxt').textContent = (await res.json().catch(() => ({}))).error || 'No se pudo entrar.'
-}
-
-document.addEventListener('click', (e) => {
-  const b = e.target.closest('[data-prueba]')
-  if (b) entrarDePrueba(b.dataset.prueba)
-})
-document.addEventListener('submit', (e) => {
-  if (e.target.id !== 'sinSesionPrueba') return
-  e.preventDefault()
-  entrarDePrueba($('#pruebaNombre').value)
-})
 
 async function salirDeSesion() {
   try {
-    await fetch('/api/sesion/salir', { method: 'POST' })
+    await fetch('/api/sesion/salir', { method: 'POST', headers: CABECERA })
   } finally {
-    // En modo prueba se vuelve a elegir nombre; con el CRM, hay que volver a entrar desde allá.
-    if (sesion.prueba) location.reload()
-    else pantallaSinSesion({ error: 'Cerraste la sesión del WhatsApp.', crmUrl: null })
+    pantallaSinSesion({ error: 'Cerraste la sesión del WhatsApp.', crmUrl: null })
   }
 }
 
@@ -911,8 +903,7 @@ function renderYo() {
     <span class="yo-nombre" title="${otros.length ? `También conectados: ${esc(otros.map((a) => a.nombre).join(', '))}` : 'Nadie más conectado'}">
       ${ic('user')}${esc(sesion.usuario.nombre)}${otros.length ? `<em class="tnum">+${otros.length}</em>` : ''}
     </span>
-    ${sesion.prueba ? '<span class="tag prueba-tag">Prueba</span>' : ''}
-    <button class="icon-btn" data-act="salir-sesion" aria-label="${sesion.prueba ? 'Cambiar de persona' : 'Cerrar sesión'}" title="${sesion.prueba ? 'Cambiar de persona' : 'Cerrar sesión'}">${ic('unlink')}</button>`
+    ${EMBEBIDO ? '' : `<button class="icon-btn" data-act="salir-sesion" aria-label="Cerrar sesión" title="Cerrar sesión">${ic('unlink')}</button>`}`
 }
 
 /** Compañeros que tienen abierto ese chat ahora mismo (sin contarme a mí). */
@@ -1771,13 +1762,15 @@ function renderPill() {
 function renderConexion() {
   const { conexion, qr, yo, intentos } = state.conn
   const [cls, texto] = TEXTO_CONEXION[conexion] || TEXTO_CONEXION.iniciando
+  // Vincular y desvincular es cosa de administradores; sin login (solo esta PC) puede cualquiera.
+  const manejaLinea = !sesion.login || !!sesion.usuario?.linea
   const acciones = conexion === 'conectado'
-    ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button><button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>`
+    ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button>${manejaLinea ? `<button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>` : ''}`
     : conexion === 'desconectado' ? `<button class="btn primary" data-act="reconectar">${ic('refresh')}Reconectar</button>` : ''
 
   $('#lineaCard').innerHTML = `
     <h2>Línea de WhatsApp</h2>
-    <p class="card-sub">El número que vincules es el que se prueba. Conviene usar uno de prueba.</p>
+    <p class="card-sub">El número de la concesionaria. Se vincula una sola vez y lo usan todos.</p>
     <div class="status-row">
       <span class="avatar">${ic('phone')}</span>
       <div>
@@ -1790,9 +1783,10 @@ function renderConexion() {
 
   let cuerpo
   if (conexion === 'conectado') {
-    cuerpo = `<div class="conn-ok">${ic('circle-check')}<div>La línea está vinculada. Para probar con otro número, desvinculá primero.</div></div>`
+    cuerpo = `<div class="conn-ok">${ic('circle-check')}<div>La línea está vinculada.</div></div>`
+  } else if (conexion === 'qr' && !manejaLinea) {
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La línea no está vinculada. Pedile a un administrador que la vincule desde su usuario.</div></div>`
   } else if (conexion === 'qr' && qr) {
-    const tel = $('#codigoTel')?.value || ''
     cuerpo = `
       <div class="qr-wrap">
         <div class="qr"><img class="qr-img" src="${qr}" alt="Código QR para vincular WhatsApp"></div>
@@ -1804,17 +1798,6 @@ function renderConexion() {
           </ol>
           <p class="timer">El código se renueva solo cada unos segundos.</p>
         </div>
-      </div>
-      <div class="stack">
-        <p class="section-label">O vinculá con el número de teléfono</p>
-        ${state.codigo
-          ? `<div class="pair-code">${esc(state.codigo.slice(0, 4))}-${esc(state.codigo.slice(4))}</div>
-             <p class="path">En el celular: Dispositivos vinculados → Vincular un dispositivo → <b>Vincular con número de teléfono</b>, y escribí este código.</p>`
-          : ''}
-        <form class="pair-form" id="formCodigo">
-          <input id="codigoTel" inputmode="tel" placeholder="5493564562413" aria-label="Número con código de país" autocomplete="off" value="${esc(tel)}">
-          <button class="btn ghost" type="submit">Pedir código</button>
-        </form>
       </div>`
   } else {
     cuerpo = `<div class="conn-ok">${ic('clock')}<div>${esc(texto)}</div></div>`
@@ -1873,7 +1856,6 @@ function onEstado(nuevo) {
   const antes = state.conn
   const habiaLinea = !!antes.yo
   state.conn = nuevo
-  if (nuevo.conexion !== 'qr') state.codigo = null
   renderPill()
 
   if (habiaLinea && !nuevo.yo) {
@@ -2382,19 +2364,6 @@ document.addEventListener('click', async (e) => {
 })
 
 document.addEventListener('submit', async (e) => {
-  if (e.target.id === 'formCodigo') {
-    e.preventDefault()
-    const btn = e.target.querySelector('button')
-    btn.disabled = true
-    try {
-      const { codigo } = await api('/api/vincular/codigo', { method: 'POST', json: { telefono: $('#codigoTel').value } })
-      state.codigo = codigo
-      renderConexion()
-    } catch (err) {
-      toast(err.message)
-      btn.disabled = false
-    }
-  }
   if (e.target.id === 'formNuevo') {
     e.preventDefault()
     const errEl = $('#nuevoErr')
@@ -2477,8 +2446,10 @@ setInterval(() => {
 }, 10000)
 
 /* ---------------- Inicio ---------------- */
-const tema = leerLocal('wa-tema', null)
+// Embebido manda el tema del CRM (llega por mensaje); suelto, el que eligió la persona.
+const tema = EMBEBIDO ? null : leerLocal('wa-tema', null)
 if (tema) document.documentElement.dataset.theme = tema
+document.documentElement.classList.toggle('embebido', EMBEBIDO)
 syncTema()
 setView('inbox')
 renderList()

@@ -57,16 +57,30 @@ Por ahora, solo en local, para probar. Dónde se va a alojar está pendiente de 
 
 ## 2. Login con el CRM
 
-No hay usuarios ni contraseñas propias del WhatsApp. Se usa la sesión del CRM:
+No hay usuarios ni contraseñas propias del WhatsApp, ni se elige "qué PC" o "qué
+empleado" se es: cada uno entra con su usuario del CRM y queda identificado con él.
 
-1. En el CRM aparece la vista **WhatsApp** en el menú. El botón **Abrir WhatsApp** abre
-   el panel en otra pestaña pasándole el token de Supabase del usuario (`#t=...`).
+1. En el CRM, el ítem **WhatsApp** del menú (`/crm/whatsapp`) muestra el panel embebido
+   en la misma página, pasándole el token de Supabase del usuario (`#t=...`). Arriba a la
+   derecha está **Abrir en otra pestaña**, que hace lo mismo en una pestaña aparte.
 2. El servidor le pregunta a Supabase de quién es ese token, busca el usuario en
    `crm.usuarios` y revisa que esté **activo** y tenga **permiso**.
 3. Si todo da, deja una cookie propia, firmada, que dura 12 horas (`SESION_HORAS`). El
-   token se borra de la barra de direcciones.
+   token se borra de la dirección. Si la sesión vence con el panel abierto, el CRM lo
+   recarga solo con un token nuevo.
 4. En cada pedido se vuelve a mirar el usuario (con 60 s de caché). Si lo dan de baja o
    le sacan el permiso en el CRM, **pierde el acceso en menos de un minuto**.
+
+### Embebido en el CRM
+
+- El panel solo se deja mostrar dentro del sitio de `CRM_URL` (cabecera
+  `frame-ancestors`). En esta PC también se acepta `localhost`, para el CRM de desarrollo.
+- Por https la cookie va `SameSite=None; Partitioned`, así funciona aunque el CRM y el
+  servidor estén en dominios distintos. Igual conviene un subdominio del mismo dominio
+  (por ejemplo `wa.` + el dominio del CRM): Safari es más estricto con las cookies de
+  otros sitios dentro de una página.
+- Todo pedido que cambia algo trae la cabecera `X-NF-WA: 1`; sin ella el servidor lo
+  rechaza. Así otro sitio no puede mandar acciones con la cookie del empleado.
 
 ### Quién tiene permiso
 
@@ -80,8 +94,17 @@ Para que admin y dueño vean el botón en el menú del CRM hay que correr una ve
 vista **WhatsApp** en la pantalla **Roles**. A un vendedor puntual se le puede dar desde
 **Usuarios**.
 
-> Quien tiene acceso al panel también ve la pestaña **Conexión**, donde se puede
-> desvincular la línea. Dénselo solo a quien corresponda.
+### Quién puede vincular la línea
+
+Todos ven la pestaña **Conexión**, pero el QR y el botón **Desvincular** solo le llegan a
+los roles de `WHATSAPP_ROLES_LINEA` (por defecto `admin` y `dueno`). Al resto el servidor
+ni le manda el QR.
+
+Con `WHATSAPP_NUMERO` definido, además, solo se acepta ese número: si alguien escanea el
+QR con otro celular, el servidor lo desvincula solo y no guarda nada de esa cuenta.
+
+La línea se vincula únicamente con QR. Funciona igual con WhatsApp y con WhatsApp
+Business (la app del celular).
 
 ### Freno de seguridad
 
@@ -109,8 +132,10 @@ esté definido en el entorno tiene prioridad.
 | `SUPABASE_URL` | (el de la raíz) | Proyecto de Supabase del CRM. También acepta `VITE_SUPABASE_URL` |
 | `SUPABASE_ANON_KEY` | (el de la raíz) | Para verificar el token del usuario |
 | `SUPABASE_SERVICE_ROLE_KEY` | (el de la raíz) | Para leer `crm.usuarios` y `crm.roles`. **Solo servidor** |
-| `CRM_URL` | — | Adónde manda el botón "Ir al CRM" a quien entra sin sesión |
+| `CRM_URL` | — | Dirección del CRM: el único sitio que puede embeber el panel, y adónde manda "Ir al CRM" a quien entra sin sesión |
 | `WHATSAPP_ROLES_SIEMPRE` | `admin,dueno` | Roles que entran sin tener la vista marcada |
+| `WHATSAPP_ROLES_LINEA` | `admin,dueno` | Roles que ven el QR y pueden desvincular |
+| `WHATSAPP_NUMERO` | — | Único número aceptado como línea (con código de país). Vacío: cualquiera |
 | `SESION_HORAS` | `12` | Cuánto dura la sesión del panel |
 | `SESION_SECRETO` | se genera | Firma de la cookie. Si no se define se guarda en `DATA_DIR/secreto-sesion` |
 | `WHATSAPP_LOGIN` | — | `off` apaga el login (solo con `HOST=127.0.0.1`) |
