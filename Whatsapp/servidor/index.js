@@ -17,7 +17,7 @@ import {
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
-import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, servir } from './src/archivos.js'
@@ -143,9 +143,16 @@ app.post('/api/sincronizar-grupos', exigirEscritura, accion('sincronizar_grupos'
 /* Chats y mensajes */
 app.get('/api/chats', ruta(() => listarChats()))
 // Búsqueda de texto. Sin `chat` busca en todas las conversaciones.
-app.get('/api/buscar', ruta((req) => buscarMensajes(req.query.q, { jid: req.query.chat || null })))
+app.get('/api/buscar', ruta((req) => buscarMensajes(req.query.q, { jid: req.query.chat || null, desde: req.query.desde, limite: req.query.limite })))
 app.post('/api/chats', exigirEscritura, accion('abrir_chat', async (req) => ({ id: await wa.abrirChat(req.body?.telefono) }), (req, r) => ({ chat: r.id })))
-app.get('/api/chats/:id/mensajes', ruta((req) => listarMensajes(chatId(req)).map(vistaMensaje)))
+// Por páginas: los últimos `limite` (400), o los anteriores al mensaje `antes`.
+app.get('/api/chats/:id/mensajes', ruta((req) => paginaDeMensajes(chatId(req), { limite: req.query.limite, antes: req.query.antes || null })))
+// Un mensaje suelto (por ejemplo, el citado en una respuesta que no está en la página).
+app.get('/api/chats/:id/mensajes/:msgId', ruta((req) => {
+  const m = buscarMensaje(chatId(req), req.params.msgId)
+  if (!m) throw Object.assign(new Error('El mensaje no está guardado'), { status: 404 })
+  return vistaMensaje(m)
+}))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))

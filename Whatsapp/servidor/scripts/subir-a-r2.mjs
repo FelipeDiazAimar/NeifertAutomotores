@@ -14,6 +14,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
 import { ARCHIVOS_EN_R2, DATA_DIR, R2 } from '../src/config.js'
+import { mimeDe } from '../src/tipos.js'
 
 if (!ARCHIVOS_EN_R2) {
   console.error('R2 no está configurado. Falta WA_R2_BUCKET (y R2_ENDPOINT, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY). Ver docs/SERVIDOR.md.')
@@ -27,12 +28,6 @@ const cliente = new S3Client({
   credentials: { accessKeyId: R2.accessKeyId, secretAccessKey: R2.secretAccessKey },
 })
 
-const TIPOS = {
-  jpg: 'image/jpeg', jpeg: 'image/jpeg', png: 'image/png', webp: 'image/webp', gif: 'image/gif',
-  mp4: 'video/mp4', '3gp': 'video/3gpp', mov: 'video/quicktime', webm: 'video/webm',
-  ogg: 'audio/ogg', opus: 'audio/ogg', mp3: 'audio/mpeg', m4a: 'audio/mp4', aac: 'audio/aac', wav: 'audio/wav',
-  pdf: 'application/pdf',
-}
 
 function archivosDe(carpeta) {
   const todos = []
@@ -72,12 +67,11 @@ for (const ruta of archivos) {
     const tamano = fs.statSync(ruta).size
     if ((await tamanoEnR2(clave)) === tamano) yaEstaban++
     else {
-      const ext = path.extname(ruta).slice(1).toLowerCase()
       await cliente.send(new PutObjectCommand({
         Bucket: R2.bucket,
         Key: clave,
         Body: fs.readFileSync(ruta),
-        ContentType: TIPOS[ext] || 'application/octet-stream',
+        ContentType: mimeDe(ruta),
       }))
       subidos++
     }

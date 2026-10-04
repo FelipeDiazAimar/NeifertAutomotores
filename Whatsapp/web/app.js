@@ -12,6 +12,10 @@ const enc = encodeURIComponent
 
 // Mensajes que se dibujan de a tandas: al subir en la conversación se agregan los anteriores.
 const PAGINA = 60
+// Techo de burbujas en pantalla: más arriba de esto, se sacan las más nuevas de abajo.
+const MAX_DIBUJADOS = 500
+// Mensajes que se piden al servidor por vez (al abrir un chat y al subir más allá).
+const PAGINA_SERVIDOR = 400
 const REACCIONES = ['👍', '❤️', '😂', '😮', '😢', '🙏']
 const VELOCIDADES = [1, 1.5, 2]
 
@@ -65,7 +69,7 @@ function horaLista(ts) {
 
 const state = {
   view: 'inbox', filter: 'todos', q: '', verArchivados: false,
-  chats: new Map(), activo: null, mensajes: new Map(),
+  chats: new Map(), activo: null, mensajes: new Map(), citados: new Map(), hayAnteriores: false, recorte: 0,
   visibles: PAGINA, pegadoAbajo: true, nuevosAbajo: 0, sinLeerDesde: null, sinLeerCantidad: 0,
   presencias: new Map(), respondiendo: null, menuBoton: null, velocidades: new Map(),
   conn: { conexion: 'iniciando', qr: null, yo: null }, config: {}, logs: [],
@@ -298,7 +302,9 @@ function renderList() {
   const cuerpo = filas.length ? filas.map(filaChat).join('') : q && res ? '' : `<div class="empty">${vacio}</div>`
   $('#chatList').innerHTML = filaArchivados + cuerpo + res
 
-  const total = todos.filter((c) => !c.archivado && !c.silenciado).reduce((s, c) => s + (c.noLeidos || 0), 0)
+  // Para una bandeja de trabajo no se esconde nada: el total de la pestaña cuenta también
+  // los chats silenciados (silenciar solo apaga los avisos), igual que el filtro "No leídos".
+  const total = todos.filter((c) => !c.archivado).reduce((s, c) => s + (c.noLeidos || 0), 0)
   document.title = `${total ? `(${total}) ` : ''}WhatsApp Neifert`
 }
 
@@ -309,6 +315,9 @@ async function abrirChat(id) {
   if (state.activo !== id) avisarViendo(id)
   state.activo = id
   state.mensajes = new Map()
+  state.citados = new Map()
+  state.hayAnteriores = false
+  state.recorte = 0
   state.revelados.clear()
   cerrarInfo()
   if (seleccion.activa) salirSeleccion()
@@ -333,9 +342,11 @@ async function abrirChat(id) {
     .then((p) => p && state.activo === id && onPresencia({ chatId: id, ...p }))
     .catch(() => {})
   try {
-    const lista = await api(`/api/chats/${enc(id)}/mensajes`)
+    // Solo la última página: lo anterior se pide al subir (cargarAnteriores).
+    const pagina = await api(`/api/chats/${enc(id)}/mensajes?limite=${PAGINA_SERVIDOR}`)
     if (state.activo !== id) return
-    for (const m of lista) state.mensajes.set(m.id, m)
+    for (const m of pagina.mensajes) state.mensajes.set(m.id, m)
+    state.hayAnteriores = pagina.hayAnteriores
     prepararSinLeer()
     renderMensajes()
     marcarLeido(id)
@@ -353,7 +364,7 @@ function prepararSinLeer() {
   if (!primero) return
   state.sinLeerDesde = primero.id
   const indice = todos.indexOf(primero)
-  state.visibles = Math.max(PAGINA, todos.length - indice + 10)
+  state.visibles = Math.min(MAX_DIBUJADOS, Math.max(PAGINA, todos.length - indice + 10))
 }
 
 function marcarLeido(id) {
@@ -416,16 +427,37 @@ function vacioHtml() {
   return 'Todavía no hay mensajes en este chat. Escribí el primero.'
 }
 
+/**
+ * Mensajes dibujados: una ventana de como mucho MAX_DIBUJADOS. `state.visibles` es su
+ * tamaño y `state.recorte` cuántos de los más nuevos quedan afuera por abajo (al subir
+ * mucho). Así la pantalla nunca tiene miles de burbujas, aunque el chat sí.
+ */
+function ventanaDibujada() {
+  const todos = ordenados()
+  const hasta = Math.max(0, todos.length - (state.recorte || 0))
+  const desde = Math.max(0, hasta - state.visibles)
+  return { todos, desde, hasta }
+}
+
+/** El primer mensaje que se ve y a qué altura: para no mover la vista al redibujar. */
+function anclaDeVista() {
+  const box = $('#messages')
+  for (const el of $('#msgList').children) {
+    if (el.dataset.id && el.offsetTop + el.offsetHeight > box.scrollTop) return { id: el.dataset.id, delta: el.offsetTop - box.scrollTop }
+  }
+  return null
+}
+
 function renderMensajes({ mantenerPosicion = false } = {}) {
   const box = $('#messages')
   const lista = $('#msgList')
-  const todos = ordenados()
-  const desde = Math.max(0, todos.length - state.visibles)
-  const visibles = todos.slice(desde)
+  const { todos, desde, hasta } = ventanaDibujada()
+  const visibles = todos.slice(desde, hasta)
+  const ancla = mantenerPosicion ? anclaDeVista() : null
   const distanciaAlFinal = box.scrollHeight - box.scrollTop
 
   const partes = []
-  if (desde > 0) partes.push('<div class="mas-antiguos">Subí para ver mensajes anteriores</div>')
+  if (desde > 0 || state.hayAnteriores) partes.push('<div class="mas-antiguos">Subí para ver mensajes anteriores</div>')
   let dia = null
   let lado = null
   for (const m of visibles) {
@@ -443,12 +475,19 @@ function renderMensajes({ mantenerPosicion = false } = {}) {
     partes.push(msgHtml(m, ladoActual !== lado))
     lado = ladoActual
   }
+  if (hasta < todos.length) {
+    partes.push(`<button class="mas-recientes" data-act="bajar">${ic('down')}Ver los mensajes más recientes</button>`)
+  }
   lista.innerHTML = partes.length ? partes.join('') : `<div class="sys" data-vacio>${vacioHtml()}</div>`
   visibles.filter(esAudio).forEach((m) => actualizarVoz(m.id))
+  cargarCitadosFaltantes(visibles)
 
   const separador = lista.querySelector('.sin-leer')
   if (mantenerPosicion) {
-    box.scrollTop = box.scrollHeight - distanciaAlFinal
+    // Se deja quieto el mensaje que se estaba mirando (sirve tanto si se agregaron
+    // mensajes arriba como si se sacaron de abajo por el techo de la pantalla).
+    const el = ancla && document.getElementById(domId(ancla.id))
+    box.scrollTop = el ? el.offsetTop - ancla.delta : box.scrollHeight - distanciaAlFinal
   } else if (separador && box.scrollHeight > box.clientHeight) {
     // Como WhatsApp: abre mostrando desde el primer mensaje no leído.
     box.scrollTop += separador.getBoundingClientRect().top - box.getBoundingClientRect().top - 40
@@ -475,22 +514,84 @@ function actualizarBajar() {
   cnt.textContent = state.nuevosAbajo
 }
 
+/**
+ * Trae del servidor la página de mensajes anterior a la más vieja que hay cargada.
+ * Devuelve true si llegó algo.
+ */
+async function cargarAnteriores() {
+  const chat = state.activo
+  const masViejo = ordenados()[0]
+  if (!chat || !state.hayAnteriores || !masViejo) return false
+  const r = await api(`/api/chats/${enc(chat)}/mensajes?antes=${enc(masViejo.id)}&limite=${PAGINA_SERVIDOR}`).catch(() => null)
+  if (!r || state.activo !== chat) return false
+  for (const m of r.mensajes) state.mensajes.set(m.id, m)
+  state.hayAnteriores = r.hayAnteriores
+  return r.mensajes.length > 0
+}
+
+/** Vuelve a los mensajes más nuevos (con techo: se dibuja la última tanda, no todo). */
+function irAlFinal() {
+  if (state.recorte) {
+    state.recorte = 0
+    state.visibles = PAGINA
+    renderMensajes()
+  }
+  irAbajo()
+}
+
 let cargandoAnteriores = false
 $('#messages').addEventListener('scroll', () => {
   const box = $('#messages')
   cerrarMenu()
-  state.pegadoAbajo = box.scrollHeight - box.scrollTop - box.clientHeight < 80
+  state.pegadoAbajo = !state.recorte && box.scrollHeight - box.scrollTop - box.clientHeight < 80
   if (state.pegadoAbajo) state.nuevosAbajo = 0
   actualizarBajar()
-  if (box.scrollTop < 200 && state.visibles < state.mensajes.size && !cargandoAnteriores) {
+  if (cargandoAnteriores) return
+  const { desde } = ventanaDibujada()
+  if (box.scrollTop < 200 && (desde > 0 || state.hayAnteriores)) {
+    // Arriba: se agregan mensajes anteriores. Si ya hay MAX_DIBUJADOS en pantalla, se
+    // sacan los más nuevos de abajo (la ventana se corre). Si no quedan más cargados,
+    // se pide la página anterior al servidor.
+    cargandoAnteriores = true
+    ;(async () => {
+      if (desde === 0) await cargarAnteriores()
+      if (state.visibles + PAGINA > MAX_DIBUJADOS) state.recorte = (state.recorte || 0) + PAGINA
+      else state.visibles += PAGINA
+      renderMensajes({ mantenerPosicion: true })
+      cargandoAnteriores = false
+    })()
+  } else if (state.recorte && box.scrollHeight - box.scrollTop - box.clientHeight < 200) {
+    // Abajo, con mensajes nuevos fuera de la pantalla: la ventana se corre hacia abajo.
     cargandoAnteriores = true
     requestAnimationFrame(() => {
-      state.visibles += PAGINA
+      state.recorte = Math.max(0, state.recorte - PAGINA)
       renderMensajes({ mantenerPosicion: true })
       cargandoAnteriores = false
     })
   }
 }, { passive: true })
+
+/** Respuestas a mensajes que no están en la página cargada: se traen sueltos. */
+const citadosPedidos = new Set()
+function cargarCitadosFaltantes(visibles) {
+  const chat = state.activo
+  for (const m of visibles) {
+    if (!m.citado || state.mensajes.has(m.citado) || state.citados.has(m.citado) || citadosPedidos.has(`${chat}|${m.citado}`)) continue
+    citadosPedidos.add(`${chat}|${m.citado}`)
+    api(`/api/chats/${enc(chat)}/mensajes/${enc(m.citado)}`)
+      .then((q) => {
+        state.citados.set(q.id, q)
+        if (state.activo !== chat) return
+        // Se redibujan las burbujas que lo citan, ahora con el original.
+        for (const v of state.mensajes.values()) {
+          if (v.citado !== q.id) continue
+          const el = document.getElementById(domId(v.id))
+          if (el) el.outerHTML = msgHtml(v, el.classList.contains('cola'))
+        }
+      })
+      .catch(() => {})
+  }
+}
 
 // Si la conversación está pegada abajo, sigue abajo aunque cambie de alto (fotos que terminan de cargar, ventana más chica).
 const seguirAbajo = new ResizeObserver(() => {
@@ -517,12 +618,30 @@ function onMensaje({ chatId, mensaje }) {
 
   if (ordenados().at(-1)?.id !== mensaje.id) {
     // Llegó un mensaje más viejo (historial): se redibuja en orden sin mover la vista.
-    state.visibles++
+    state.visibles = Math.min(MAX_DIBUJADOS, state.visibles + 1)
     renderMensajes({ mantenerPosicion: !state.pegadoAbajo })
     return
   }
 
+  if (state.recorte) {
+    // Se está leyendo más arriba (los más nuevos están fuera de la pantalla): no se dibuja,
+    // se cuenta en el botón de bajar.
+    state.recorte++
+    if (mensaje.deMi) irAlFinal()
+    else {
+      state.nuevosAbajo++
+      actualizarBajar()
+    }
+    return
+  }
+
   state.visibles++
+  if (state.visibles > MAX_DIBUJADOS) {
+    // Techo de la pantalla: sale el más viejo dibujado.
+    state.visibles = MAX_DIBUJADOS
+    const primero = $('#msgList').querySelector('.msg, .sys.aviso-grupo')
+    primero?.remove()
+  }
   const lista = $('#msgList')
   lista.querySelector('[data-vacio]')?.remove()
   const d = diaDe(mensaje.ts)
@@ -637,7 +756,7 @@ function msgHtml(m, cola) {
   let cuerpo = ''
 
   if (m.citado) {
-    const q = state.mensajes.get(m.citado)
+    const q = state.mensajes.get(m.citado) || state.citados.get(m.citado)
     cuerpo += q ? citaHtml(q) : '<div class="cita de-contacto"><b>Mensaje citado</b><span class="cita-txt">No está guardado en el respaldo.</span></div>'
   }
   if (m.tipo === 'desconocido') {
@@ -676,7 +795,7 @@ function msgHtml(m, cola) {
   // con cuántos y quiénes al pasar el mouse.
   const reacciones = m.reacciones ? Object.entries(m.reacciones).filter(([, e]) => e) : []
   const porEmoji = new Map()
-  for (const [quien, emoji] of reacciones) porEmoji.set(emoji, [...(porEmoji.get(emoji) || []), nombreQuienReacciono(quien)])
+  for (const [quien, emoji] of reacciones) porEmoji.set(emoji, [...(porEmoji.get(emoji) || []), nombreQuienReacciono(quien, m)])
   const reacts = porEmoji.size
     ? `<div class="reacts" aria-label="Reacciones">${[...porEmoji].map(([emoji, quienes]) => `<span title="${esc(quienes.join(', '))}">${esc(emoji)}${quienes.length > 1 ? `<small class="tnum">${quienes.length}</small>` : ''}</span>`).join('')}</div>`
     : ''
@@ -713,23 +832,33 @@ function msgHtml(m, cola) {
     reacciones.length && 'has-reacts',
     m.tipo === 'desconocido' && 'desconocido',
   ].filter(Boolean).join(' ')
-  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${salida}${reacts}</div>`
+  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${salida}${meta}${reacts}</div>`
 }
 
 /** Nombre de quien reaccionó: 'yo' es la línea; 'contacto', el del chat; si no, un integrante. */
-function nombreQuienReacciono(quien) {
+function nombreQuienReacciono(quien, m) {
   if (quien === 'yo') return 'Vos'
   if (quien === 'contacto') return state.chats.get(state.activo)?.nombre || 'Contacto'
-  return state.nombresIntegrantes?.get(quien) || `+${String(quien).split('@')[0]}`
+  return m?.reactores?.[quien] || state.nombresIntegrantes?.get(quien) || `+${String(quien).split('@')[0]}`
 }
 
 /** Lleva al mensaje citado: si todavía no está dibujado, agranda la tanda hasta incluirlo. */
-function irAMensaje(id) {
+async function irAMensaje(id) {
+  // Si es más viejo que lo cargado, se piden páginas hacia atrás hasta encontrarlo.
+  const chat = state.activo
+  while (!state.mensajes.has(id) && state.hayAnteriores) {
+    if (!(await cargarAnteriores()) || state.activo !== chat) break
+  }
   if (!state.mensajes.has(id)) return toast('Ese mensaje no está guardado en el respaldo.')
   let el = document.getElementById(domId(id))
   if (!el) {
+    // Se dibuja una ventana alrededor del mensaje (respetando el techo de la pantalla).
     const todos = ordenados()
-    state.visibles = todos.length - todos.findIndex((m) => m.id === id) + 5
+    const i = todos.findIndex((m) => m.id === id)
+    // 20 mensajes de contexto antes y después del buscado.
+    const hasta = Math.min(todos.length, i + 20)
+    state.recorte = todos.length - hasta
+    state.visibles = Math.min(MAX_DIBUJADOS, hasta - Math.max(0, i - 20))
     state.pegadoAbajo = false
     renderMensajes({ mantenerPosicion: true })
     el = document.getElementById(domId(id))
@@ -1032,8 +1161,11 @@ function resaltar(texto, q) {
   return recorte
 }
 
-/** Pide los mensajes que coinciden. Se descartan las respuestas viejas que llegan tarde. */
-async function buscarEnMensajes() {
+/**
+ * Pide los mensajes que coinciden, de a 80. Con `mas`, la página siguiente se suma a la que
+ * ya se ve ("Ver más resultados"). Se descartan las respuestas viejas que llegan tarde.
+ */
+async function buscarEnMensajes({ mas = false } = {}) {
   const q = busqueda.q.trim()
   if (q.length < 2) {
     busqueda.resultados = []
@@ -1046,9 +1178,10 @@ async function buscarEnMensajes() {
   try {
     const params = new URLSearchParams({ q })
     if (busqueda.enChat) params.set('chat', busqueda.enChat)
+    if (mas) params.set('desde', String(busqueda.resultados.length))
     const r = await api(`/api/buscar?${params}`)
     if (mio !== busqueda.pedido) return
-    busqueda.resultados = r.resultados
+    busqueda.resultados = mas ? [...busqueda.resultados, ...r.resultados] : r.resultados
     busqueda.total = r.total
   } catch {
     if (mio === busqueda.pedido) busqueda.resultados = []
@@ -1095,7 +1228,7 @@ function resultadosHtml() {
     })
     .join('')
   const mas = busqueda.total > busqueda.resultados.length
-    ? `<div class="empty">Se muestran ${fmtNum(busqueda.resultados.length)} de ${fmtNum(busqueda.total)} coincidencias. Afiná la búsqueda para ver el resto.</div>`
+    ? `<button class="res-mas" data-act="buscar-mas" ${busqueda.cargando ? 'disabled' : ''}>Ver más resultados <span class="tnum">(${fmtNum(busqueda.resultados.length)} de ${fmtNum(busqueda.total)})</span></button>`
     : ''
   return `<div class="res-titulo">${titulo} <span class="tnum">${fmtNum(busqueda.total)}</span></div>${filas}${mas}`
 }
@@ -1135,6 +1268,7 @@ async function irAResultado(chatId, msgId) {
 /* ---------------- Ficha del chat ---------------- */
 
 const fechaLarga = (ms) => new Date(ms).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
+const fechaHora = (ms) => new Date(ms).toLocaleString('es-AR', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 
 const SECCIONES_MEDIA = [
   ['fotos', 'image', 'Fotos'],
@@ -2027,16 +2161,28 @@ async function cargarUso() {
       ['Documentos', u.bytes.media.documentos], ['Mensajes', u.bytes.mensajes], ['Sesión', u.bytes.sesion],
     ]
     const max = Math.max(1, ...filas.map((f) => f[1]))
-    const total = filas.reduce((s, f) => s + f[1], 0)
+    // Total = lo que ocupa la base (mensajes) + todo lo del bucket de R2 (archivos,
+    // miniaturas, fotos de perfil y respaldo). Sin R2, los archivos del disco.
+    const archivos = u.bytes.r2 ?? Object.values(u.bytes.media).reduce((s, b) => s + b, 0)
+    const total = u.bytes.mensajes + archivos
+    const r = u.respaldo
+    const respaldo = !r
+      ? '<span class="aviso-txt">Apagado: definí WA_BACKUP_CLAVE para poder restaurar la línea sin QR.</span>'
+      : r.error && (!r.ts || r.errorTs > r.ts)
+        ? `<span class="aviso-txt">Falló: ${esc(r.error)}</span>`
+        : `Último: ${fechaHora(r.ts)} · ${fmtBytes(r.bytes)} cifrados`
     $('#usoCard').innerHTML = `
       <div class="facts">
         <div class="fact"><span>Chats</span><b>${fmtNum(u.chats)}</b></div>
         <div class="fact"><span>Mensajes</span><b>${fmtNum(u.mensajes)}</b></div>
         <div class="fact"><span>Eliminados conservados</span><b>${fmtNum(u.eliminados)}</b></div>
-        <div class="fact"><span>Total en disco</span><b>${fmtBytes(total)}</b></div>
+        <div class="fact"><span>Total (base + archivos)</span><b>${fmtBytes(total)}</b></div>
       </div>
       <div class="uso" style="margin-top:14px">${filas.map(([n, b]) => `<div class="uso-row"><span>${n}</span><div class="uso-bar"><i style="width:${((b / max) * 100).toFixed(1)}%"></i></div><b>${fmtBytes(b)}</b></div>`).join('')}</div>
-      <p class="path" style="margin-top:12px">Carpeta: ${esc(u.carpeta)}</p>`
+      ${u.bytes.r2 != null ? `<p class="path" style="margin-top:12px">Bucket de R2 en total (archivos, miniaturas, fotos de perfil y respaldo): <b>${fmtBytes(u.bytes.r2)}</b></p>` : ''}
+      <p class="path">Respaldo de la sesión: ${respaldo}</p>
+      ${u.pendientesDeGuardar ? `<p class="path">Pendientes de guardar en Supabase: ${fmtNum(u.pendientesDeGuardar)}</p>` : ''}
+      <p class="path">Dónde: ${esc(u.carpeta)}</p>`
   } catch (err) {
     $('#usoCard').innerHTML = `<p class="path">${esc(err.message)}</p>`
   }
@@ -2573,7 +2719,8 @@ document.addEventListener('click', async (e) => {
       renderList()
       $('#chatList').scrollTop = 0
       break
-    case 'bajar': irAbajo(); break
+    case 'bajar': irAlFinal(); break
+    case 'buscar-mas': buscarEnMensajes({ mas: true }); break
     case 'nuevo-chat':
       $('#nuevoErr').hidden = true
       $('#dlgNuevo').showModal()

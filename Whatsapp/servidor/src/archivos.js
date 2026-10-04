@@ -25,6 +25,7 @@ import {
   S3Client,
 } from '@aws-sdk/client-s3'
 import { ARCHIVOS_EN_R2, DATA_DIR, R2 } from './config.js'
+import { mimeDe } from './tipos.js'
 
 const cliente = ARCHIVOS_EN_R2
   ? new S3Client({
@@ -99,7 +100,7 @@ export async function servir(req, res, clave, { mime, nombre, descargar = false,
   }
   res.status(obj.ContentRange ? 206 : 200)
   res.set({
-    'Content-Type': (mime || obj.ContentType || 'application/octet-stream').split(';')[0],
+    'Content-Type': (mime || obj.ContentType || mimeDe(clave)).split(';')[0],
     'Accept-Ranges': 'bytes',
     ...(obj.ContentLength != null ? { 'Content-Length': String(obj.ContentLength) } : {}),
     ...(obj.ContentRange ? { 'Content-Range': obj.ContentRange } : {}),

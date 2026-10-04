@@ -194,6 +194,43 @@ Se guarda lo de los últimos 365 días (`WA_VENTANA_DIAS`), y nada más viejo:
   el servidor conecta. Se puede apagar en **Preferencias → Descargar fotos, audios y
   documentos al llegar**. Los de más de 50 MB y los de "ver una vez" no se bajan.
 
+### Grupos
+
+- **Menciones (@):** al escribir "@" en un grupo aparece la lista de integrantes; al
+  elegir uno queda "@número" en el texto y el mensaje sale con la mención real (le llega
+  el aviso al mencionado). Las menciones recibidas se ven como "@Nombre". Un "@número"
+  escrito a mano también menciona si es de un integrante.
+- **Avisos del grupo:** altas, bajas, salidas, admins, cambio de asunto, foto y
+  descripción quedan como una línea centrada en el chat ("Seba agregó a Juli"). No suman
+  "no leídos".
+- **Reacciones por persona:** cada integrante tiene la suya; se muestran agrupadas por
+  emoji con la cantidad y, al pasar el mouse, quiénes fueron.
+- **"Fulano está escribiendo…":** con el nombre de quien escribe o graba.
+
+### Multimedia
+
+- **Un solo límite** de tamaño para todo (`WA_MEDIA_MAX_MB`, 64 MB): lo que se baja solo, lo
+  que se puede mandar y lo que acepta el panel. Lo más grande queda como "grande".
+- **Miniaturas:** al bajar o mandar una foto o un video se guarda una vista previa de
+  480 px en `miniaturas/` (R2). La lista muestra esa; el archivo completo baja solo al
+  abrirlo. Si todavía no se bajó, se usa la miniatura chiquita que trae el mensaje.
+- **Tipos:** extensión ↔ MIME completo en `src/tipos.js` (webm, mkv, heic, wav, docx, xlsx,
+  zip, etc.); ya nada cae como `.bin` salvo lo realmente desconocido.
+- **Forma de onda real:** las notas de voz del celular traen la suya; para las demás (y
+  las que se mandan desde el panel) la calcula el servidor con ffmpeg. Las notas de voz
+  que se mandan salen como nota de voz de WhatsApp (ogg/opus, PTT) con su onda.
+
+### Rendimiento del panel
+
+- Al abrir un chat se traen los últimos 400 mensajes; al subir, se piden de a 400 hacia
+  atrás (`GET /api/chats/:id/mensajes?antes=<id>`).
+- En pantalla nunca hay más de 500 burbujas: si se sube más, se sacan las más nuevas de
+  abajo y aparece "Ver los mensajes más recientes".
+- Una respuesta que cita un mensaje viejo (fuera de lo cargado) trae el original suelto.
+- La búsqueda devuelve de a 80 resultados con "Ver más resultados".
+- Probado con un chat de 1.200 mensajes en Chrome: 400 al abrir, todo al subir, nunca más
+  de 480 burbujas en pantalla.
+
 ### Sin pérdida ante un corte (diario local)
 
 Los cambios van a Supabase en tandas cada 1,5 s. Para que un corte (luz, Windows Update,

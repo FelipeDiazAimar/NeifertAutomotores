@@ -47,6 +47,7 @@ import {
 import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
+import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
@@ -673,19 +674,6 @@ function actualizarPushName(chatId, nombre) {
 
 /* ---------------- Interpretación de mensajes ---------------- */
 
-const MIME_EXT = {
-  'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp', 'image/gif': 'gif',
-  'video/mp4': 'mp4', 'video/3gpp': '3gp', 'video/quicktime': 'mov',
-  'audio/ogg': 'ogg', 'audio/mpeg': 'mp3', 'audio/mp4': 'm4a', 'audio/aac': 'aac', 'audio/amr': 'amr',
-  'application/pdf': 'pdf',
-}
-
-function extensionDe(mime = '', nombre = '') {
-  const deNombre = /\.([a-z0-9]{1,5})$/i.exec(nombre || '')?.[1]
-  if (deNombre) return deNombre.toLowerCase()
-  const base = mime.split(';')[0].trim().toLowerCase()
-  return MIME_EXT[base] || base.split('/')[1]?.replace(/[^a-z0-9]/g, '').slice(0, 5) || 'bin'
-}
 
 function textoDe(c) {
   if (!c) return ''
@@ -1036,11 +1024,14 @@ async function procesarReaccion({ key, reaction }) {
   // pisaba la del otro). En un chat 1 a 1 alcanza con "yo" y "contacto".
   let quien = reaction.key?.fromMe ? 'yo' : 'contacto'
   const participante = reaction.key?.participant || reaction.key?.participantAlt
+  const cambios = {}
   if (quien === 'contacto' && esGrupo(chatId) && participante) {
     const jid = jidNormalizedUser(participante)
     quien = (isLidUser(jid) && pnDeLid(jid)) || jid
+    // El nombre de quien reaccionó, para mostrarlo al pasar el mouse.
+    cambios.reactores = { ...m.reactores, [quien]: nombreParticipante(jid) }
   }
-  actualizarMensaje(chatId, key.id, { reacciones: { ...m.reacciones, [quien]: reaction.text || null } })
+  actualizarMensaje(chatId, key.id, { reacciones: { ...m.reacciones, [quien]: reaction.text || null }, ...cambios })
 }
 
 /* ---------------- Avisos de grupo ("X agregó a Y") ---------------- */

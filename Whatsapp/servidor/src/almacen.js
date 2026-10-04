@@ -25,6 +25,7 @@ import { emitir, log } from './eventos.js'
 import * as nube from './nube.js'
 import * as diario from './diario.js'
 import { DONDE, enDisco, guardar, listarArchivos, moverPrefijo } from './archivos.js'
+import { categoriaDe } from './tipos.js'
 
 export const EN_SUPABASE = ALMACEN === 'supabase'
 
@@ -443,6 +444,22 @@ export function listarMensajes(jid) {
   return [...cargar(jid).values()].sort((a, b) => a.ts - b.ts)
 }
 
+/**
+ * Una página de mensajes de un chat, en orden: los últimos `limite`, o los `limite`
+ * anteriores al mensaje `antes` (id). Así el panel no baja un chat de miles de mensajes de
+ * una vez: trae lo último y va pidiendo hacia atrás a medida que se sube.
+ */
+export function paginaDeMensajes(jid, { limite = 400, antes = null } = {}) {
+  const todos = listarMensajes(jid)
+  let fin = todos.length
+  if (antes) {
+    const i = todos.findIndex((m) => m.id === antes)
+    if (i >= 0) fin = i
+  }
+  const inicio = Math.max(0, fin - Math.min(Math.max(Number(limite) || 400, 1), 2000))
+  return { mensajes: todos.slice(inicio, fin).map(vistaMensaje), hayAnteriores: inicio > 0, total: todos.length }
+}
+
 export const buscarMensaje = (jid, id) => cargar(jid).get(id) || null
 
 /**
@@ -593,7 +610,7 @@ const normalizar = (t) =>
  * Leer todos los chats los dejaría cargados en memoria para siempre, así que el cache
  * se devuelve como estaba: solo sobreviven los que ya estaban abiertos.
  */
-export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
+export function buscarMensajes(consulta, { jid = null, limite = 80, desde = 0 } = {}) {
   const q = normalizar(consulta)
   if (q.length < 2) return { resultados: [], truncado: false }
 
@@ -614,7 +631,10 @@ export function buscarMensajes(consulta, { jid = null, limite = 80 } = {}) {
   }
 
   resultados.sort((a, b) => b.ts - a.ts)
-  return { resultados: resultados.slice(0, limite), truncado: resultados.length > limite, total: resultados.length }
+  // Paginada: `desde` resultados ya mostrados, y `limite` más. truncado = hay más para pedir.
+  const inicio = Math.max(0, Number(desde) || 0)
+  const fin = inicio + Math.min(Math.max(Number(limite) || 80, 1), 500)
+  return { resultados: resultados.slice(inicio, fin), truncado: resultados.length > fin, total: resultados.length, desde: inicio }
 }
 
 /* ---------------- Multimedia ---------------- */
@@ -715,19 +735,12 @@ function recorrer(dir, alArchivo) {
   }
 }
 
-const CATEGORIA = {
-  fotos: ['jpg', 'jpeg', 'png', 'webp', 'gif', 'heic'],
-  videos: ['mp4', '3gp', 'mov', 'mkv', 'webm'],
-  audios: ['ogg', 'opus', 'mp3', 'm4a', 'aac', 'wav', 'amr'],
-}
-
 export async function usoAlmacenamiento() {
   const media = { fotos: 0, videos: 0, audios: 0, documentos: 0 }
-  for (const { clave: c, tamano } of await listarArchivos('media/')) {
-    const ext = path.extname(c).slice(1).toLowerCase()
-    const cat = Object.keys(CATEGORIA).find((k) => CATEGORIA[k].includes(ext)) || 'documentos'
-    media[cat] += tamano
-  }
+  for (const { clave: c, tamano } of await listarArchivos('media/')) media[categoriaDe(c)] += tamano
+  // Lo que ocupa R2 en total (lo de los mensajes + miniaturas + fotos de perfil + respaldo).
+  let r2Bytes = 0
+  for (const prefijo of ['media/', 'miniaturas/', 'fotos/', 'respaldo/']) for (const a of await listarArchivos(prefijo)) r2Bytes += a.tamano
   let mensajesBytes = 0
   let mensajes = 0
   let eliminados = 0
@@ -749,7 +762,8 @@ export async function usoAlmacenamiento() {
     chats: Object.keys(estado.chats).length,
     mensajes,
     eliminados,
-    bytes: { mensajes: mensajesBytes, sesion: sesionBytes, media },
+    // r2: todo lo que ocupa el bucket (archivos, miniaturas, fotos de perfil y respaldo).
+    bytes: { mensajes: mensajesBytes, sesion: sesionBytes, media, r2: r2Bytes },
     carpeta: `${EN_SUPABASE ? 'Mensajes en Supabase (esquema wa)' : `Mensajes en ${DATA_DIR}`} · archivos en ${DONDE}`,
     almacen: ALMACEN,
     pendientesDeGuardar: EN_SUPABASE ? nube.pendientesDeGuardar() : 0,
