@@ -6,16 +6,17 @@
 -- Se puede correr más de una vez.
 --
 -- Qué hay:
---   1. Configuración (ventana de días, desarchivar al recibir)
---   2. Sesión de WhatsApp (lo que hoy es la carpeta data/sesion)
+--   1. Configuración (desarchivar al recibir)
 --   3. Contactos
 --   4. Chats (con archivado, fijado, silenciado, no leídos y último mensaje)
---   5. Mensajes: una fila por mensaje, con el mensaje completo en JSON (datos)
---   6. Archivos multimedia (el archivo en sí va a R2; acá solo la referencia)
---   7. Cola de archivos para borrar de R2
+--   5. Mensajes: una fila por mensaje, con el mensaje completo en JSON (datos);
+--      el archivo de cada mensaje va a R2 y su clave vive en datos.media
 --   8. Automatismos: crear el chat, actualizar la lista, desarchivar
---   9. Ventana de 365 días: vista de lo vigente + limpieza diaria
+--   9. Estado del servidor y auditoría
 --  10. Seguridad
+--
+-- La sesión de WhatsApp vive en la PC titular (data/sesion) y se respalda cifrada en
+-- R2; la ventana de 365 días y el borrado de archivos los hace el servidor.
 --  11. Datos de ejemplo y consultas para probar (opcional, al final)
 -- =============================================================================
 
@@ -35,17 +36,6 @@ create table if not exists wa.config (
   actualizado_en         timestamptz not null default now()
 );
 insert into wa.config (id) values (true) on conflict (id) do nothing;
-
--- -----------------------------------------------------------------------------
--- 2. Sesión de WhatsApp (Baileys)
--- Reemplaza la carpeta data/sesion: 'creds' y una fila por cada clave de cifrado.
--- Con esto el servidor no necesita disco propio.
--- -----------------------------------------------------------------------------
-create table if not exists wa.sesion (
-  clave          text primary key,          -- 'creds', 'pre-key-12', 'session-549...', ...
-  valor          jsonb not null,
-  actualizado_en timestamptz not null default now()
-);
 
 -- -----------------------------------------------------------------------------
 -- 3. Contactos
@@ -105,36 +95,6 @@ create index if not exists mensajes_ts_idx on wa.mensajes (ts);
 create index if not exists mensajes_texto_idx on wa.mensajes using gin (texto extensions.gin_trgm_ops);
 
 -- -----------------------------------------------------------------------------
--- 6. Archivos multimedia
--- El archivo vive en R2 (Cloudflare); acá se guarda dónde está y su estado.
--- -----------------------------------------------------------------------------
-create table if not exists wa.archivos (
-  chat_jid   text not null,
-  mensaje_id text not null,
-  r2_clave   text unique,                   -- ej: media/5493564000001/3EB0ABC.jpg (null hasta descargarlo)
-  mime       text,
-  nombre     text,                          -- nombre original (documentos)
-  bytes      bigint,
-  segundos   integer,                       -- audios y videos
-  estado     text not null default 'pendiente' check (estado in ('pendiente', 'ok', 'error', 'grande')),
-  fallos     integer not null default 0,
-  creado_en  timestamptz not null default now(),
-  primary key (chat_jid, mensaje_id),
-  foreign key (chat_jid, mensaje_id) references wa.mensajes (chat_jid, id) on delete cascade
-);
-
--- -----------------------------------------------------------------------------
--- 7. Cola de archivos para borrar de R2
--- La base no puede hablar con R2. Cuando se borra un mensaje (por la ventana de
--- 365 días), la clave de su archivo queda acá y el servidor lo borra de R2.
--- -----------------------------------------------------------------------------
-create table if not exists wa.r2_por_borrar (
-  r2_clave    text primary key,
-  motivo      text not null default 'ventana',
-  encolado_en timestamptz not null default now()
-);
-
--- -----------------------------------------------------------------------------
 -- 8. Automatismos
 -- -----------------------------------------------------------------------------
 
@@ -180,7 +140,7 @@ begin
    where ch.jid = new.chat_jid
      and (ch.ultimo_ts is null or new.ts >= ch.ultimo_ts);
 
-  if new.origen = 'vivo' and not new.de_mi and new.tipo <> 'desconocido' then
+  if new.origen = 'vivo' and not new.de_mi and new.tipo not in ('desconocido', 'sistema') then
     update wa.chats ch
        set no_leidos = ch.no_leidos + 1,
            archivado = case when ch.archivado and desarchivar then false else ch.archivado end,
@@ -196,76 +156,8 @@ create or replace trigger mensajes_actualizar_chat
   after insert on wa.mensajes
   for each row execute function wa.al_insertar_mensaje();
 
--- 8c. Al borrarse un archivo (por ejemplo, junto con su mensaje), su clave de R2
---     queda en la cola para que el servidor lo borre de Cloudflare.
-create or replace function wa.encolar_borrado_r2()
-returns trigger
-language plpgsql
-set search_path = ''
-as $$
-begin
-  if old.r2_clave is not null then
-    insert into wa.r2_por_borrar (r2_clave) values (old.r2_clave) on conflict (r2_clave) do nothing;
-  end if;
-  return old;
-end
-$$;
-
-create or replace trigger archivos_encolar_r2
-  after delete on wa.archivos
-  for each row execute function wa.encolar_borrado_r2();
-
 -- -----------------------------------------------------------------------------
--- 9. Ventana de 365 días
--- -----------------------------------------------------------------------------
-
--- 9a. Lo que ve el panel: solo mensajes dentro de la ventana. Aunque la limpieza
---     corra una vez por día, en pantalla nunca aparece nada más viejo.
-create or replace view wa.mensajes_vigentes
-with (security_invoker = true)
-as
-select m.*
-  from wa.mensajes m
-  join wa.config c on c.id
- where m.ts >= now() - make_interval(days => c.ventana_dias);
-
--- 9b. Limpieza: borra lo que salió de la ventana. Sus archivos pasan solos a la
---     cola de R2 (por el borrado en cascada y el automatismo 8c).
-create or replace function wa.purgar_ventana()
-returns table (mensajes_borrados bigint, archivos_para_r2 bigint)
-language plpgsql
-set search_path = ''
-as $$
-declare
-  dias integer;
-  n_mensajes bigint;
-  en_cola_antes bigint;
-begin
-  select c.ventana_dias into dias from wa.config c where c.id;
-  select count(*) into en_cola_antes from wa.r2_por_borrar;
-
-  delete from wa.mensajes m where m.ts < now() - make_interval(days => dias);
-  get diagnostics n_mensajes = row_count;
-
-  return query
-    select n_mensajes, (select count(*) from wa.r2_por_borrar) - en_cola_antes;
-end
-$$;
-
--- 9c. La limpieza diaria la hace el servidor (WA_VENTANA_DIAS, 365 por defecto): borra
---     los mensajes, sus archivos de R2 y los chats vacíos, todo junto. Si la base borrara
---     mensajes por su cuenta con el servidor apagado, sus archivos quedarían huérfanos en
---     R2, así que el trabajo de pg_cron que había antes se quita.
-do $$
-begin
-  perform cron.unschedule('wa-ventana-365');
-exception when others then
-  null; -- no existía o pg_cron no está instalado
-end
-$$;
-
--- -----------------------------------------------------------------------------
--- 9d. Estado del servidor
+-- 9. Estado del servidor
 -- Lo que el servidor necesita recordar y no es un mensaje ni un chat: marcas de
 -- archivado/fijado/silenciado, mapa LID → teléfono, fotos consultadas, preferencias.
 -- Y en cada chat, "datos" con la ficha completa tal como la maneja el servidor.
@@ -277,19 +169,49 @@ create table if not exists wa.estado (
 );
 alter table wa.chats add column if not exists datos jsonb;
 
+-- Registro de auditoría: quién hizo qué en el panel (lo escribe solo el servidor).
+create table if not exists wa.auditoria (
+  id             bigint generated always as identity primary key,
+  ts             timestamptz not null default now(),
+  usuario_id     text,
+  usuario_nombre text,
+  rol            text,
+  accion         text not null,
+  resultado      text not null default 'ok' check (resultado in ('ok', 'denegado', 'error')),
+  chat_jid       text,
+  detalle        jsonb not null default '{}'::jsonb,
+  ip             text
+);
+create index if not exists auditoria_ts_idx on wa.auditoria (ts desc);
+create index if not exists auditoria_usuario_idx on wa.auditoria (usuario_id, ts desc);
+create index if not exists auditoria_accion_idx on wa.auditoria (accion, ts desc);
+
+-- Lo que había antes de que estas tareas pasaran al servidor (idempotente).
+drop table if exists wa.archivos cascade;
+drop table if exists wa.r2_por_borrar cascade;
+drop table if exists wa.sesion cascade;
+drop view if exists wa.mensajes_vigentes;
+drop function if exists wa.purgar_ventana();
+drop function if exists wa.encolar_borrado_r2();
+do $
+begin
+  perform cron.unschedule('wa-ventana-365');
+exception when others then
+  null;
+end
+$;
+
 -- -----------------------------------------------------------------------------
 -- 10. Seguridad
 -- Todo con RLS y sin políticas: desde el navegador (anon / usuarios logueados) no
 -- se puede leer ni escribir nada. Solo el servidor, con la service role key.
 -- -----------------------------------------------------------------------------
 alter table wa.config        enable row level security;
-alter table wa.sesion        enable row level security;
 alter table wa.contactos     enable row level security;
 alter table wa.chats         enable row level security;
 alter table wa.mensajes      enable row level security;
-alter table wa.archivos      enable row level security;
-alter table wa.r2_por_borrar enable row level security;
 alter table wa.estado        enable row level security;
+alter table wa.auditoria     enable row level security;
 
 grant usage on schema wa to service_role;
 grant all on all tables in schema wa to service_role;
@@ -315,7 +237,7 @@ on conflict (jid) do nothing;
 
 -- Mensajes del cliente
 insert into wa.mensajes (chat_jid, id, ts, de_mi, tipo, texto, origen, estado, enviado_por, datos) values
-  -- Uno de hace 400 días: queda fuera de la ventana y se va en la próxima limpieza
+  -- Uno de hace 400 días: queda fuera de la ventana y el servidor lo borra al arrancar
   ('5493564000001@s.whatsapp.net', 'VIEJO1', now() - interval '400 days', false, 'texto',
    'Consulta de hace más de un año', 'historial', null, null,
    '{"texto": "Consulta de hace más de un año"}'),
@@ -335,10 +257,6 @@ insert into wa.mensajes (chat_jid, id, ts, de_mi, tipo, texto, origen, estado, e
    '¿Cuánto sale en efectivo?', 'vivo', null, null,
    '{"texto": "¿Cuánto sale en efectivo?", "ediciones": [{"texto": "¿Cuánto sale?", "ts": 1790000000}], "reacciones": {"yo": "👍"}}')
 on conflict (chat_jid, id) do nothing;
-
-insert into wa.archivos (chat_jid, mensaje_id, r2_clave, mime, bytes, estado) values
-  ('5493564000001@s.whatsapp.net', 'C3', 'media/5493564000001/C3.jpg', 'image/jpeg', 184320, 'ok')
-on conflict (chat_jid, mensaje_id) do nothing;
 
 -- Mensajes del grupo (con autor) y uno eliminado para todos: se marca, no se borra
 insert into wa.mensajes (chat_jid, id, ts, de_mi, tipo, texto, autor_jid, origen, eliminado_en, datos) values
@@ -367,27 +285,20 @@ on conflict (chat_jid, id) do nothing;
 --   select jid, coalesce(nombre_grupo, jid) as chat, archivado, no_leidos, ultimo_ts, ultimo
 --     from wa.chats order by archivado, ultimo_ts desc nulls last;
 
--- Los últimos 50 mensajes de un chat, solo dentro de la ventana de 365 días:
+-- Los últimos 50 mensajes de un chat:
 --   select ts, de_mi, tipo, texto, enviado_por ->> 'nombre' as empleado, datos
---     from wa.mensajes_vigentes
+--     from wa.mensajes
 --    where chat_jid = '5493564000001@s.whatsapp.net'
 --    order by ts desc limit 50;
 
 -- Buscar en todos los chats (usa el índice de texto):
---   select chat_jid, ts, texto from wa.mensajes_vigentes where texto ilike '%amarok%' order by ts desc;
+--   select chat_jid, ts, texto from wa.mensajes where texto ilike '%amarok%' order by ts desc;
 
 -- Quién respondió cada mensaje enviado:
 --   select ts, texto, enviado_por ->> 'nombre' as empleado from wa.mensajes where de_mi order by ts;
 
--- Ver la limpieza en acción: borra el mensaje de hace 400 días.
---   select * from wa.purgar_ventana();
-
--- Borrar el chat del cliente: la foto C3 pasa sola a la cola de R2.
---   delete from wa.chats where jid = '5493564000001@s.whatsapp.net';
---   select * from wa.r2_por_borrar;
-
--- La tarea diaria programada:
---   select jobid, jobname, schedule, command from cron.job where jobname = 'wa-ventana-365';
+-- Últimas acciones del panel (auditoría):
+--   select ts, usuario_nombre, rol, accion, resultado, chat_jid, ip from wa.auditoria order by ts desc limit 50;
 
 
 -- =============================================================================

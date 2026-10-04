@@ -117,7 +117,7 @@ async function listar(prefijo) {
     const r = await cliente.send(
       new ListObjectsV2Command({ Bucket: R2.bucket, Prefix: prefijo, ContinuationToken: token }),
     )
-    for (const o of r.Contents || []) todas.push({ clave: o.Key, tamano: o.Size || 0 })
+    for (const o of r.Contents || []) todas.push({ clave: o.Key, tamano: o.Size || 0, fecha: o.LastModified?.getTime() || 0 })
     token = r.IsTruncated ? r.NextContinuationToken : undefined
   } while (token)
   return todas
@@ -130,7 +130,10 @@ function listarDisco(prefijo) {
     for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
       const p = path.join(dir, e.name)
       if (e.isDirectory()) recorrer(p)
-      else todas.push({ clave: path.relative(DATA_DIR, p).split(path.sep).join('/'), tamano: fs.statSync(p).size })
+      else {
+        const st = fs.statSync(p)
+        todas.push({ clave: path.relative(DATA_DIR, p).split(path.sep).join('/'), tamano: st.size, fecha: st.mtimeMs })
+      }
     }
   }
   recorrer(enDisco(prefijo))
@@ -147,7 +150,19 @@ export async function listarArchivos(prefijo) {
   return [...porClave.values()]
 }
 
-/** Mueve todo lo de un prefijo a otro (por ejemplo, cuando dos chats se unen en uno). */
+/**
+ * CopySource de S3: "bucket/clave" con cada tramo de la clave codificado y las barras tal
+ * cual. Codificar también las barras (%2F) funciona en R2 de casualidad, pero no es lo que
+ * pide la especificación.
+ */
+export const fuenteCopia = (clave) => `${R2.bucket}/${clave.split('/').map(encodeURIComponent).join('/')}`
+
+/**
+ * Mueve todo lo de un prefijo a otro (por ejemplo, cuando dos chats se unen en uno). En R2
+ * no hay "mover": primero se copia TODO, se verifica que cada copia esté con el mismo
+ * tamaño y recién ahí se borran los originales. Si algo falla en el medio, los originales
+ * quedan y se puede reintentar (las copias ya hechas se pisan sin problema).
+ */
 export async function moverPrefijo(desde, hacia) {
   const viejo = enDisco(desde)
   if (fs.existsSync(viejo)) {
@@ -157,11 +172,14 @@ export async function moverPrefijo(desde, hacia) {
     fs.rmSync(viejo, { recursive: true, force: true })
   }
   if (!cliente) return
-  for (const { clave } of await listar(`${desde}/`)) {
-    const destino = `${hacia}/${clave.slice(desde.length + 1)}`
-    await cliente.send(
-      new CopyObjectCommand({ Bucket: R2.bucket, Key: destino, CopySource: `${R2.bucket}/${encodeURIComponent(clave)}` }),
-    )
-    await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: clave }))
+  const originales = await listar(`${desde}/`)
+  if (!originales.length) return
+  const destinoDe = (clave) => `${hacia}/${clave.slice(desde.length + 1)}`
+  for (const { clave } of originales) {
+    await cliente.send(new CopyObjectCommand({ Bucket: R2.bucket, Key: destinoDe(clave), CopySource: fuenteCopia(clave) }))
   }
+  const copiados = new Map((await listar(`${hacia}/`)).map((a) => [a.clave, a.tamano]))
+  const faltan = originales.filter((o) => copiados.get(destinoDe(o.clave)) !== o.tamano)
+  if (faltan.length) throw new Error(`${faltan.length} archivos no se copiaron bien a ${hacia}: los originales quedan en ${desde}`)
+  for (const { clave } of originales) await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: clave }))
 }

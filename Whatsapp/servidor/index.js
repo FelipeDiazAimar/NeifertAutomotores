@@ -1,5 +1,7 @@
 import express from 'express'
 import {
+  CONSERVAR_EDICIONES,
+  CONSERVAR_ELIMINADOS,
   DETRAS_DE_PROXY,
   HOST,
   LOGIN_CONFIGURADO,
@@ -114,12 +116,16 @@ app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))
-app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: { ...config(), mediaMaxMb: MEDIA_MAX_MB } })))
+// Lo que el panel necesita saber de la configuración del servidor (límite de archivos y
+// la definición de privacidad: si se conservan los eliminados y las ediciones).
+const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS })
+app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: configPublica() })))
 app.get('/api/log', ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
 app.post('/api/config', exigirLinea, accion('preferencias', (req) => {
-  const c = { ...setConfig(req.body || {}), mediaMaxMb: MEDIA_MAX_MB }
+  setConfig(req.body || {})
+  const c = configPublica()
   emitir('config', c)
   return c
 }, (req) => ({ cambios: req.body })))
@@ -144,12 +150,19 @@ app.get('/api/chats/:id/mensajes', ruta((req) => listarMensajes(chatId(req)).map
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))
 app.post('/api/chats/:id/salir', exigirLinea, accion('salir_grupo', (req) => wa.salirDelGrupo(chatId(req))))
+// Borra el chat del respaldo (mensajes, archivos en R2, foto). En el celular sigue estando.
+app.post('/api/chats/:id/borrar', exigirLinea, accion('borrar_chat', (req) => wa.borrarChat(chatId(req)), (req, r) => r))
 app.post('/api/chats/:id/marca', exigirEscritura, accion('marca', (req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null), (req) => ({ marca: req.body?.accion, valor: req.body?.valor ?? null })))
 app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
-app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', async (req) => ({ id: await wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId) }), (req, r) => ({ mensaje: r.id, largo: String(req.body?.texto || '').length })))
+// Los envíos devuelven { id, enCola }: sin conexión el mensaje queda en la bandeja de salida.
+app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', (req) => wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId, req.body?.menciones), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, largo: String(req.body?.texto || '').length })))
+app.post('/api/chats/:id/salida/:msgId/reintentar', exigirEscritura, accion('reintentar_envio', (req) => wa.reintentarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
+app.post('/api/chats/:id/salida/:msgId/descartar', exigirEscritura, accion('descartar_envio', (req) => wa.descartarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
+// Integrantes de un grupo, para el "@" del cuadro de texto.
+app.get('/api/chats/:id/integrantes', ruta((req) => wa.integrantesDe(chatId(req))))
 app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))
 app.post('/api/chats/:id/eliminar', exigirEscritura, accion('eliminar_mensaje', (req) => wa.eliminarMensaje(chatId(req), req.body?.id), (req) => ({ mensaje: req.body?.id })))
 app.post('/api/chats/:id/destacar', exigirEscritura, accion('destacar', (req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar), (req) => ({ mensaje: req.body?.id })))
@@ -164,16 +177,20 @@ app.get('/api/chats/:id/foto', ruta(async (req, res) => {
     throw err
   }
 }))
-app.post('/api/chats/:id/archivo', exigirEscritura, binario, accion('enviar_archivo', async (req) => ({
-  id: await wa.enviarArchivo(chatId(req), archivoDe(req), {
-    mime: req.get('content-type'),
-    nombre: req.query.nombre,
-    caption: req.query.texto,
-  }),
-}), (req, r) => ({ mensaje: r.id, tipo: req.get('content-type'), bytes: req.body?.length || 0 })))
-app.post('/api/chats/:id/nota-voz', exigirEscritura, binario, accion('enviar_nota_voz', async (req) => ({
-  id: await wa.enviarNotaDeVoz(chatId(req), archivoDe(req), Number(req.query.segundos) || 0),
-}), (req, r) => ({ mensaje: r.id, segundos: Number(req.query.segundos) || 0 })))
+app.post('/api/chats/:id/archivo', exigirEscritura, binario, accion('enviar_archivo', (req) => wa.enviarArchivo(chatId(req), archivoDe(req), {
+  mime: req.get('content-type'),
+  nombre: req.query.nombre,
+  caption: req.query.texto,
+}), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, tipo: req.get('content-type'), bytes: req.body?.length || 0 })))
+app.post('/api/chats/:id/nota-voz', exigirEscritura, binario, accion('enviar_nota_voz', (req) =>
+  wa.enviarNotaDeVoz(chatId(req), archivoDe(req), Number(req.query.segundos) || 0),
+(req, r) => ({ mensaje: r.id, enCola: !!r.enCola, segundos: Number(req.query.segundos) || 0 })))
+// Vista previa liviana de fotos y videos (480 px, o la que trae el mensaje si todavía no se bajó).
+app.get('/api/chats/:id/media/:msgId/miniatura', ruta(async (req, res) => {
+  const jpg = await wa.obtenerMiniatura(chatId(req), req.params.msgId)
+  if (!jpg) throw Object.assign(new Error('Sin miniatura'), { status: 404 })
+  res.set('Cache-Control', 'private, max-age=86400').type('image/jpeg').send(jpg)
+}))
 // Sirve solo archivos ya descargados; nunca dispara una descarga (evita reintentos en loop desde la pantalla).
 app.get('/api/chats/:id/media/:msgId', ruta(async (req, res) => {
   const { clave, mime, nombre } = wa.obtenerMedia(chatId(req), req.params.msgId)
@@ -207,6 +224,7 @@ const servidor = app.listen(PUERTO, HOST, () => {
     almacen.modo === 'supabase' ? 'Mensajes guardados en Supabase' : 'Mensajes guardados en archivos locales (modo prueba)',
     almacen.modo === 'supabase' ? `${almacen.chats} chats · ${almacen.mensajes} mensajes cargados` : `${almacen.chats} chats`,
   )
+  if (almacen.recuperadas) log('aviso', 'Se recuperó lo que había quedado sin guardar', `${almacen.recuperadas} cambios del diario local (el servicio se había cortado)`)
   if (!LOGIN_CONFIGURADO) log('aviso', 'Login con el CRM sin configurar', 'Solo se puede usar desde esta PC')
   log('info', 'Archivos (fotos, audios, videos, documentos)', DONDE)
   if (numeroLinea()) log('info', 'Solo se acepta el número de la concesionaria', `+${numeroLinea()}`)
@@ -225,7 +243,10 @@ const servidor = app.listen(PUERTO, HOST, () => {
   setInterval(limpiarVentana, 24 * 3600 * 1000)
 })
 
-/** Borra lo que quedó fuera de la ventana de días (mensajes, archivos y chats vacíos). */
+/**
+ * Limpieza diaria: lo que quedó fuera de la ventana de días (mensajes, archivos y chats
+ * vacíos) y después la conciliación de R2 (archivos que ya no usa ningún mensaje).
+ */
 async function limpiarVentana() {
   try {
     const r = await wa.purgarVentana()
@@ -234,6 +255,12 @@ async function limpiarVentana() {
     }
   } catch (err) {
     log('aviso', 'No se pudo hacer la limpieza diaria', err.message)
+  }
+  try {
+    const c = await wa.reconciliarArchivos()
+    if (c.borrados) log('ok', 'Archivos huérfanos borrados de R2', `${c.borrados} archivos · ${Math.round(c.bytes / 1024)} KB`)
+  } catch (err) {
+    log('aviso', 'No se pudo conciliar los archivos de R2', err.message)
   }
 }
 

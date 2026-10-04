@@ -194,6 +194,45 @@ Se guarda lo de los últimos 365 días (`WA_VENTANA_DIAS`), y nada más viejo:
   el servidor conecta. Se puede apagar en **Preferencias → Descargar fotos, audios y
   documentos al llegar**. Los de más de 50 MB y los de "ver una vez" no se bajan.
 
+### Sin pérdida ante un corte (diario local)
+
+Los cambios van a Supabase en tandas cada 1,5 s. Para que un corte (luz, Windows Update,
+un proceso que se mata) en ese lapso no pierda nada, cada mensaje y cada chat que cambia
+se anota **antes** en `data/diario/` (src/diario.js). Lo que llega en vivo se fuerza al
+disco en el momento; lo del historial, cada 200 ms. Cuando Supabase confirma la tanda, lo
+anotado se borra. Al arrancar, lo que quedó en el diario se vuelve a cargar y a mandar
+(el registro dice "Se recuperó lo que había quedado sin guardar").
+
+Prueba (B-05): cargar 100 mensajes, matar el proceso con `kill -9` antes de la tanda y
+volver a arrancar → los 100 están en Supabase. Se probó el 04/10/2026: 0 faltantes.
+
+### Bandeja de salida
+
+Si se manda algo (texto, archivo o nota de voz) con WhatsApp desconectado, o se corta
+justo al mandar, no se pierde: queda en el chat con un reloj, "En cola", guardado como
+cualquier mensaje (diario + Supabase, y su archivo en R2). Cuando vuelve la conexión sale
+solo, en orden, firmado por quien lo escribió, y el borrador se reemplaza por el mensaje
+real. Además, la cola se revisa cada minuto. Si falla por otra cosa (5 intentos) queda en
+"No se pudo mandar" con **Reintentar** y **Descartar**. La caja de texto nunca se
+deshabilita por falta de conexión.
+
+### Conciliación de R2 y borrar un chat
+
+- **Una vez por día**, después de la limpieza de la ventana, el servidor compara lo que hay
+  en el bucket (`media/`, `miniaturas/`, `fotos/`) con lo que referencian los mensajes y
+  borra lo que no usa nadie. Con freno: no toca archivos de menos de un día, ni carpetas
+  con una mudanza pendiente, y si sobra más del 30 % no borra nada y avisa.
+- **Borrar chat del respaldo** (ficha del chat, solo `WHATSAPP_ROLES_LINEA`): borra sus
+  mensajes, su carpeta entera en R2 y su foto. En el celular el chat sigue. Queda en la
+  auditoría.
+- **Mudar archivos** (cuando WhatsApp une dos chats en uno): primero se copia todo, se
+  verifica cada copia y recién ahí se borran los originales. Si falla a la mitad, queda
+  anotado y se reintenta al arrancar.
+
+La base solo tiene las tablas que se usan: `config`, `contactos`, `chats`, `mensajes`,
+`estado` y `auditoria` (`supabase/whatsapp_v3_limpieza.sql` sacó `archivos`,
+`r2_por_borrar` y `sesion`, que nunca se usaron).
+
 ### Archivos en Cloudflare R2
 
 Con `WA_R2_BUCKET` definido, todo archivo nuevo (lo que llega y lo que se manda) y las

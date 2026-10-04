@@ -100,10 +100,17 @@ function toast(texto, ms = 3200) {
 
 /* ---------------- Formato de WhatsApp ---------------- */
 
-/** *negrita*, _cursiva_, ~tachado~, ```monoespaciado``` y links, sobre texto ya escapado. */
-function formatear(texto) {
+/**
+ * *negrita*, _cursiva_, ~tachado~, ```monoespaciado```, links y menciones, sobre texto ya
+ * escapado. `menciones` ({ "549...": "Nombre" }) cambia cada "@número" por "@Nombre".
+ */
+function formatear(texto, menciones = null) {
   const links = []
-  let html = esc(texto).replace(/\b(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?]|www\.[^\s<]+[^\s<.,:;"')\]!?])/gi, (url) => {
+  let html = esc(texto)
+  if (menciones) {
+    html = html.replace(/@(\d{6,15})/g, (todo, digitos) => (menciones[digitos] ? `<b class="mencion">@${esc(menciones[digitos])}</b>` : todo))
+  }
+  html = html.replace(/\b(https?:\/\/[^\s<]+[^\s<.,:;"')\]!?]|www\.[^\s<]+[^\s<.,:;"')\]!?])/gi, (url) => {
     links.push(url)
     return `\u0000${links.length - 1}\u0000`
   })
@@ -161,7 +168,8 @@ function tickHtml(estado) {
   if (estado === 'leido' || estado === 'reproducido') return `<span class="tick read">${ic('checks')}</span>`
   if (estado === 'entregado') return `<span class="tick">${ic('checks')}</span>`
   if (estado === 'enviado') return `<span class="tick">${ic('check')}</span>`
-  if (estado === 'pendiente') return `<span class="tick">${ic('clock')}</span>`
+  if (['pendiente', 'en_cola', 'enviando'].includes(estado)) return `<span class="tick">${ic('clock')}</span>`
+  if (estado === 'error') return `<span class="tick err">${ic('alert')}</span>`
   return ''
 }
 
@@ -169,8 +177,10 @@ function tickHtml(estado) {
 function actividadDe(chatId) {
   const p = state.presencias.get(chatId)
   if (!p || Date.now() - p.recibido > 25000) return null
-  if (p.estado === 'composing') return 'escribiendo…'
-  if (p.estado === 'recording') return 'grabando audio…'
+  // En un grupo, con el nombre de quien escribe ("Seba está escribiendo…").
+  const quien = p.quien ? `${p.quien} está ` : ''
+  if (p.estado === 'composing') return `${quien}escribiendo…`
+  if (p.estado === 'recording') return `${quien}grabando audio…`
   return null
 }
 
@@ -536,6 +546,8 @@ function onMensaje({ chatId, mensaje }) {
 function iconoEstado(e) {
   switch (e) {
     case 'pendiente': return `<span title="Enviando">${ic('clock')}</span>`
+    case 'en_cola': return `<span title="En la bandeja de salida: se manda cuando vuelva la conexión">${ic('clock')}</span>`
+    case 'enviando': return `<span title="Enviando">${ic('clock')}</span>`
     case 'enviado': return `<span title="Enviado">${ic('check')}</span>`
     case 'entregado': return `<span title="Entregado">${ic('checks')}</span>`
     case 'leido': return `<span class="read" title="Leído">${ic('checks')}</span>`
@@ -572,10 +584,12 @@ function mediaHtml(m) {
   if (!md) return ''
   if (md.estado !== 'ok') return mediaPendienteHtml(m)
   const url = urlMedia(m)
+  // Con miniatura (480 px), la lista muestra esa y el archivo completo baja solo al abrirlo.
+  const mini = md.miniatura ? `/api/chats/${enc(state.activo)}/media/${enc(m.id)}/miniatura` : null
   switch (m.tipo) {
-    case 'imagen': return `<button class="media-img" data-ver="${url}" aria-label="Ampliar foto"><img src="${url}" alt="Foto" loading="lazy"></button>`
+    case 'imagen': return `<button class="media-img" data-ver="${url}" aria-label="Ampliar foto"><img src="${mini || url}" alt="Foto" loading="lazy"></button>`
     case 'sticker': return `<img class="sticker" src="${url}" alt="Sticker" loading="lazy">`
-    case 'video': return `<video class="media-video" src="${url}" controls preload="metadata"></video>`
+    case 'video': return `<video class="media-video" src="${url}" controls preload="${mini ? 'none' : 'metadata'}"${mini ? ` poster="${mini}"` : ''}></video>`
     case 'gif': return `<video class="media-video" src="${url}" autoplay loop muted playsinline></video>`
     case 'nota_voz':
     case 'audio': return vozHtml(m)
@@ -610,6 +624,8 @@ function citaHtml(q, { boton = true } = {}) {
 }
 
 function msgHtml(m, cola) {
+  // Aviso de grupo ("Seba agregó a Juli"): una línea centrada, como en WhatsApp.
+  if (m.tipo === 'sistema') return `<div class="sys aviso-grupo" id="${domId(m.id)}" data-id="${esc(m.id)}">${esc(m.texto)}</div>`
   const md = m.media
   // Un mensaje eliminado arranca tapado: ni el texto ni el archivo se dibujan, igual que
   // en WhatsApp. El original sigue guardado y se destapa con un clic en el aviso.
@@ -636,7 +652,7 @@ function msgHtml(m, cola) {
     else if (m.tipo === 'una_vez') texto = `<div class="txt">${ic('clock')} <i>${esc(m.texto || 'Para ver una vez')}</i></div>`
     else if (m.texto) {
       const grande = !md && m.tipo === 'texto' && soloEmojis(m.texto)
-      texto = `<div class="txt ${grande ? 'emoji-grande' : ''}">${m.tipo === 'otro' ? `<i>${esc(m.texto)}</i>` : formatear(m.texto)}</div>`
+      texto = `<div class="txt ${grande ? 'emoji-grande' : ''}">${['otro', 'sistema'].includes(m.tipo) ? `<i>${esc(m.texto)}</i>` : formatear(m.texto, m.menciones)}</div>`
     }
   }
 
@@ -656,8 +672,22 @@ function msgHtml(m, cola) {
         .map((e) => `<li>${esc(e.texto) || '<i>(vacío)</i>'} <span class="tnum">· cambiado a las ${hora(e.ts)}</span></li>`)
         .join('')}</ul></details>`
     : ''
-  const reacciones = m.reacciones ? Object.values(m.reacciones).filter(Boolean) : []
-  const reacts = reacciones.length ? `<div class="reacts" aria-label="Reacciones">${reacciones.map(esc).join('')}</div>` : ''
+  // Reacciones por persona (en un grupo pueden reaccionar varios): cada emoji una vez,
+  // con cuántos y quiénes al pasar el mouse.
+  const reacciones = m.reacciones ? Object.entries(m.reacciones).filter(([, e]) => e) : []
+  const porEmoji = new Map()
+  for (const [quien, emoji] of reacciones) porEmoji.set(emoji, [...(porEmoji.get(emoji) || []), nombreQuienReacciono(quien)])
+  const reacts = porEmoji.size
+    ? `<div class="reacts" aria-label="Reacciones">${[...porEmoji].map(([emoji, quienes]) => `<span title="${esc(quienes.join(', '))}">${esc(emoji)}${quienes.length > 1 ? `<small class="tnum">${quienes.length}</small>` : ''}</span>`).join('')}</div>`
+    : ''
+  // Bandeja de salida: el mensaje todavía no salió.
+  const salida = m.salida && ['en_cola', 'enviando', 'error'].includes(m.estado)
+    ? `<div class="salida-nota ${m.estado === 'error' ? 'is-error' : ''}">${ic(m.estado === 'error' ? 'alert' : 'clock')}<span>${
+        m.estado === 'enviando' ? 'Enviando…' : m.estado === 'error' ? `No se pudo mandar: ${esc(m.salida.error || 'error')}` : 'En cola: se manda solo cuando vuelva la conexión'
+      }</span>${m.estado !== 'enviando' && puede.escribir()
+        ? `${m.estado === 'error' ? `<button class="link-btn" data-salida-act="reintentar" data-id="${esc(m.id)}">Reintentar</button>` : ''}<button class="link-btn" data-salida-act="descartar" data-id="${esc(m.id)}">Descartar</button>`
+        : ''}</div>`
+    : ''
   const meta = `<div class="meta">${m.destacado ? `<span class="star" title="Destacado">${ic('fijado')}</span>` : ''}${m.ediciones?.length ? '<span class="edited">editado</span>' : ''}<span class="tnum">${hora(m.ts)}</span>${m.deMi ? iconoEstado(m.estado) : ''}</div>`
   const opciones = m.tipo === 'desconocido' ? '' : `<button class="opciones" data-opciones="${esc(m.id)}" aria-label="Opciones del mensaje" aria-haspopup="menu" aria-expanded="false">${ic('down')}</button>`
   // En un grupo, quién habló va arriba de la burbuja y solo cuando cambia de persona.
@@ -683,7 +713,14 @@ function msgHtml(m, cola) {
     reacciones.length && 'has-reacts',
     m.tipo === 'desconocido' && 'desconocido',
   ].filter(Boolean).join(' ')
-  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${reacts}</div>`
+  return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${meta}${salida}${reacts}</div>`
+}
+
+/** Nombre de quien reaccionó: 'yo' es la línea; 'contacto', el del chat; si no, un integrante. */
+function nombreQuienReacciono(quien) {
+  if (quien === 'yo') return 'Vos'
+  if (quien === 'contacto') return state.chats.get(state.activo)?.nombre || 'Contacto'
+  return state.nombresIntegrantes?.get(quien) || `+${String(quien).split('@')[0]}`
 }
 
 /** Lleva al mensaje citado: si todavía no está dibujado, agranda la tanda hasta incluirlo. */
@@ -1191,6 +1228,14 @@ function vistaFicha(f) {
     }
   </div>`)
 
+  // Solo quien maneja la línea: borra el chat del respaldo (mensajes, archivos y foto). En
+  // el celular sigue estando; queda en la auditoría.
+  if (puede.linea() && !f.sinChat) {
+    partes.push(`<div class="info-bloque info-filas">
+      <button class="info-fila peligro" data-chat-act="borrar-respaldo">${ic('unlink')}<span>Borrar chat del respaldo</span></button>
+    </div>`)
+  }
+
   if (f.esGrupo) {
     partes.push(`<div class="info-bloque">
       <h4>${ps.length ? `${fmtNum(ps.length)} integrantes` : 'Integrantes'}</h4>
@@ -1506,6 +1551,17 @@ async function accionChat(id, accion, valor) {
   if (!id) return
   const c = state.chats.get(id)
   if (!c) return
+  if (accion === 'borrar-respaldo') {
+    const pregunta = `¿Borrar "${c.nombre}" del respaldo?\n\nSe borran sus mensajes, fotos, audios y documentos guardados (también en Cloudflare). En el celular el chat sigue igual. No se puede deshacer.`
+    if (!confirm(pregunta)) return
+    try {
+      const r = await api(`/api/chats/${enc(id)}/borrar`, { method: 'POST' })
+      toast(`Chat borrado del respaldo: ${r.mensajes} mensajes y ${r.archivos} archivos.`, 5000)
+    } catch (err) {
+      toast(err.message)
+    }
+    return
+  }
   const cuerpo = { accion, valor: valor ?? null }
   if (accion === 'archivar') cuerpo.valor = !c.archivado
   else if (accion === 'fijar') cuerpo.valor = !c.fijado
@@ -1576,7 +1632,21 @@ function renderRespuesta() {
 
 const audios = new Map()
 
+/**
+ * Barras de la nota de voz. Si el mensaje trae su forma de onda real (las del celular la
+ * traen; las demás la calcula el servidor al bajar el audio) se usa esa, reducida a 34
+ * barras. Si no, una de relleno estable por id, para que no quede vacía.
+ */
 function onda(id) {
+  const reales = state.mensajes.get(id)?.media?.ondas
+  if (Array.isArray(reales) && reales.length) {
+    const n = 34
+    const paso = reales.length / n
+    return Array.from({ length: n }, (_, i) => {
+      const tramo = reales.slice(Math.floor(i * paso), Math.max(Math.floor(i * paso) + 1, Math.floor((i + 1) * paso)))
+      return 12 + (Math.max(...tramo) / 100) * 88
+    })
+  }
   let h = 0
   for (const ch of String(id)) h = (h * 31 + ch.charCodeAt(0)) >>> 0
   return Array.from({ length: 34 }, (_, i) => {
@@ -1650,8 +1720,11 @@ function autoAlto(ta) {
 
 function renderComposer() {
   const el = $('#composer')
-  const off = !conectado()
-  state.composerOff = off
+  // Sin conexión se puede escribir igual: el mensaje queda en la bandeja de salida y se
+  // manda solo cuando vuelve. Solo cambia el aviso del cuadro de texto.
+  const sinConexion = !conectado()
+  const off = false
+  state.composerOff = sinConexion
   if (state.grabacion) {
     el.innerHTML = `<div class="recording"><span class="pulse"></span><span class="tnum" id="recT">0:00</span> Grabando nota de voz<button class="cancel" data-act="rec-cancelar">Cancelar</button></div>
       <button class="send" data-act="rec-enviar" aria-label="Enviar nota de voz">${ic('send')}</button>`
@@ -1660,8 +1733,9 @@ function renderComposer() {
   el.innerHTML = `
     <button class="icon-btn" id="emojiBtn" data-act="emojis" aria-label="Emojis" title="Emojis" aria-haspopup="dialog" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('smile')}</button>
     <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar foto, video o documento" title="Adjuntar" ${off ? 'disabled' : ''}>${ic('clip')}</button>
-    <div class="field"><textarea id="msgInput" rows="1" placeholder="${off ? 'WhatsApp no está conectado' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
-    <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>`
+    <div class="field"><textarea id="msgInput" rows="1" placeholder="${sinConexion ? 'Sin conexión: lo que mandes sale cuando vuelva' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
+    <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>
+    <div class="mencion-panel" id="mencionPanel" role="listbox" aria-label="Mencionar a un integrante" hidden></div>`
   const ta = $('#msgInput')
   ta.value = borradores.get(state.activo) || ''
   autoAlto(ta)
@@ -1670,6 +1744,62 @@ function renderComposer() {
 
 function actualizarComposer() {
   if (state.activo && !state.grabacion && state.composerOff !== !conectado()) renderComposer()
+}
+
+/* ---------------- Menciones (@) en grupos ---------------- */
+
+// Integrantes del grupo abierto ({ jid, telefono, nombre }) y los mencionados del borrador.
+let integrantesChat = { chat: null, lista: [] }
+const mencionesBorrador = new Map() // jid → nombre
+
+async function cargarIntegrantes(chat) {
+  if (integrantesChat.chat === chat) return integrantesChat.lista
+  const lista = await api(`/api/chats/${enc(chat)}/integrantes`).catch(() => [])
+  integrantesChat = { chat, lista }
+  state.nombresIntegrantes = new Map(lista.map((p) => [p.jid, p.nombre]))
+  return lista
+}
+
+/** Con "@algo" justo antes del cursor, en un grupo, muestra a quién mencionar. */
+async function revisarMencion() {
+  const ta = $('#msgInput')
+  const panel = $('#mencionPanel')
+  if (!ta || !panel) return
+  const antes = ta.value.slice(0, ta.selectionStart)
+  const m = /(^|\s)@([^\s@]{0,30})$/.exec(antes)
+  if (!esGrupoActivo() || !m) {
+    panel.hidden = true
+    return
+  }
+  const chat = state.activo
+  const lista = await cargarIntegrantes(chat)
+  if (state.activo !== chat) return
+  const q = m[2].toLowerCase()
+  const opciones = lista.filter((p) => !q || p.nombre.toLowerCase().includes(q) || (p.telefono || '').includes(q)).slice(0, 8)
+  if (!opciones.length) {
+    panel.hidden = true
+    return
+  }
+  panel.innerHTML = opciones
+    .map((p) => `<button type="button" role="option" data-mencion="${esc(p.jid)}" data-nombre="${esc(p.nombre)}">${ic('user')}<span>${esc(p.nombre)}</span>${p.telefono && p.telefono !== p.nombre ? `<small class="tnum">${esc(p.telefono)}</small>` : ''}</button>`)
+    .join('')
+  panel.hidden = false
+}
+
+/** Cambia el "@algo" que se está escribiendo por "@número" y lo anota como mención. */
+function ponerMencion(jid, nombre) {
+  const ta = $('#msgInput')
+  if (!ta) return
+  const antes = ta.value.slice(0, ta.selectionStart)
+  const despues = ta.value.slice(ta.selectionStart)
+  const numero = jid.split('@')[0]
+  const nuevoAntes = antes.replace(/@([^\s@]{0,30})$/, `@${numero} `)
+  ta.value = nuevoAntes + despues
+  ta.selectionStart = ta.selectionEnd = nuevoAntes.length
+  mencionesBorrador.set(jid, nombre)
+  $('#mencionPanel').hidden = true
+  ta.focus()
+  syncSendBtn()
 }
 
 function syncSendBtn() {
@@ -1697,8 +1827,13 @@ async function enviarTexto() {
   renderRespuesta()
   state.sinLeerDesde = null
   $('#msgList .sin-leer')?.remove()
+  // Solo las menciones que siguen en el texto (se pudieron borrar después de elegirlas).
+  const menciones = [...mencionesBorrador.keys()].filter((jid) => texto.includes(`@${jid.split('@')[0]}`))
+  mencionesBorrador.clear()
+  if ($('#mencionPanel')) $('#mencionPanel').hidden = true
   try {
-    await api(`/api/chats/${enc(chat)}/texto`, { method: 'POST', json: { texto, citadoId } })
+    const r = await api(`/api/chats/${enc(chat)}/texto`, { method: 'POST', json: { texto, citadoId, menciones } })
+    if (r?.enCola) toast('Sin conexión: el mensaje quedó en la bandeja de salida y se manda solo cuando vuelva.', 5000)
   } catch (err) {
     if (state.activo === chat) {
       input.value = texto
@@ -1721,7 +1856,7 @@ async function enviarArchivo(file) {
   if (texto) params.set('texto', texto)
   toast(`Enviando ${file.name}…`, 60000)
   try {
-    await api(`/api/chats/${enc(state.activo)}/archivo?${params}`, {
+    const r = await api(`/api/chats/${enc(state.activo)}/archivo?${params}`, {
       method: 'POST', body: file, headers: { 'Content-Type': file.type || 'application/octet-stream' },
     })
     if (input) {
@@ -1730,7 +1865,7 @@ async function enviarArchivo(file) {
       guardarBorrador(state.activo, '')
       syncSendBtn()
     }
-    toast('Archivo enviado.')
+    toast(r?.enCola ? 'Sin conexión: el archivo quedó en la bandeja de salida y se manda solo cuando vuelva.' : 'Archivo enviado.', r?.enCola ? 5000 : 3200)
   } catch (err) {
     toast(`No se pudo enviar: ${err.message}`)
   }
@@ -1759,8 +1894,8 @@ async function empezarGrabacion() {
     if (segundos < 1 || blob.size < 1000) return toast('La grabación es demasiado corta.')
     toast('Enviando nota de voz…', 60000)
     try {
-      await api(`/api/chats/${enc(g.chat)}/nota-voz?segundos=${segundos}`, { method: 'POST', body: blob, headers: { 'Content-Type': blob.type } })
-      toast('Nota de voz enviada.')
+      const r = await api(`/api/chats/${enc(g.chat)}/nota-voz?segundos=${segundos}`, { method: 'POST', body: blob, headers: { 'Content-Type': blob.type } })
+      toast(r?.enCola ? 'Sin conexión: la nota de voz quedó en la bandeja de salida y se manda sola cuando vuelva.' : 'Nota de voz enviada.', r?.enCola ? 5000 : 3200)
     } catch (err) {
       toast(`No se pudo enviar: ${err.message}`)
     }
@@ -2002,9 +2137,26 @@ function setView(view) {
     renderLog()
     renderPrefs()
     cargarUso()
+    renderPrivacidad()
     if (puede.linea()) cargarAuditoria()
   }
   renderPill()
+}
+
+/**
+ * Lo que guarda el respaldo, según la definición de privacidad del servidor
+ * (WA_CONSERVAR_ELIMINADOS / WA_CONSERVAR_EDICIONES, ver docs/PRIVACIDAD.md).
+ */
+function renderPrivacidad() {
+  const c = state.config || {}
+  const filas = [
+    ['Mensajes eliminados para todos', c.conservarEliminados !== false ? 'Se conservan en el respaldo, marcados como eliminados.' : 'Se borran también del respaldo (como en el celular).'],
+    ['Mensajes editados', c.conservarEdiciones !== false ? 'Se guarda la versión anterior.' : 'Se guarda solo la última versión.'],
+    ['Fotos, videos y audios "para ver una vez"', 'No se guardan nunca: queda solo el aviso.'],
+    ['Cuánto tiempo', `Los últimos ${c.ventanaDias || 365} días; lo anterior se borra solo cada día.`],
+  ]
+  $('#privacidadCard').innerHTML = `<ul class="priv">${filas.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
+    <p class="card-sub">Lo define la concesionaria en la configuración del servidor. Todo lo que se hace desde el panel queda registrado con el nombre de quien lo hizo.</p>`
 }
 
 const ACCIONES_AUDITORIA = {
@@ -2082,10 +2234,18 @@ function conectarEventos() {
     pedirLista()
     if (c.id === state.activo) renderHead()
   })
-  // Chats que quedaron vacíos al pasar la ventana de días: salen de la lista.
+  // Chats que quedaron vacíos al pasar la ventana de días, o que se borraron del respaldo.
   es.addEventListener('chats-borrados', (e) => {
-    for (const id of JSON.parse(e.data).ids || []) state.chats.delete(id)
+    const ids = JSON.parse(e.data).ids || []
+    for (const id of ids) state.chats.delete(id)
+    if (ids.includes(state.activo)) cerrarChat()
     pedirLista()
+  })
+  // Un mensaje que se quita (el borrador de la bandeja de salida cuando ya salió el real).
+  es.addEventListener('mensaje-quitado', (e) => {
+    const { chatId, id } = JSON.parse(e.data)
+    if (chatId !== state.activo || !state.mensajes.delete(id)) return
+    document.getElementById(domId(id))?.remove()
   })
   es.addEventListener('chat-migrado', (e) => {
     const { de, a } = JSON.parse(e.data)
@@ -2138,9 +2298,25 @@ document.addEventListener('click', async (e) => {
   if (!e.target.closest('#emojiPanel, #emojiBtn')) cerrarEmojis()
   const emo = e.target.closest('[data-emoji]')
   if (emo) return ponerEmoji(emo.dataset.emoji)
-  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar]')
+  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion]')
   if (!t) {
     if (e.target.id === 'lightbox') $('#lightbox').hidden = true
+    return
+  }
+  if (t.dataset.mencion) return ponerMencion(t.dataset.mencion, t.dataset.nombre)
+  if (t.dataset.salidaAct) {
+    // Bandeja de salida: reintentar un mensaje que falló, o descartarlo.
+    const chat = state.activo
+    const accion = t.dataset.salidaAct
+    if (accion === 'descartar' && !confirm('¿Descartar este mensaje? No se va a mandar.')) return
+    t.disabled = true
+    try {
+      const r = await api(`/api/chats/${enc(chat)}/salida/${enc(t.dataset.id)}/${accion}`, { method: 'POST' })
+      if (accion === 'reintentar' && r?.id && state.activo === chat) onMensaje({ chatId: chat, mensaje: r })
+    } catch (err) {
+      toast(err.message)
+      t.disabled = false
+    }
     return
   }
   if (t.dataset.opciones) {
@@ -2404,8 +2580,9 @@ document.addEventListener('click', async (e) => {
       break
     case 'cerrar-dlg': $('#dlgNuevo').close(); break
     case 'volver':
-      $('#viewInbox').classList.remove('open')
-      avisarViendo(null)
+      // En el celular "Volver" cierra el chat de verdad: si no, seguía contando como abierto
+      // (marcaba leído lo que llegaba y les decía a los demás que había alguien mirando).
+      cerrarChat()
       break
     case 'salir-sesion':
       await salirDeSesion()
@@ -2485,10 +2662,19 @@ document.addEventListener('input', (e) => {
     autoAlto(e.target)
     syncSendBtn()
     guardarBorrador(state.activo, e.target.value)
+    revisarMencion()
   }
 })
 
 document.addEventListener('keydown', (e) => {
+  // Con el selector de menciones abierto, Enter elige el primero.
+  if (e.key === 'Enter' && e.target.id === 'msgInput' && !$('#mencionPanel')?.hidden) {
+    const primero = $('#mencionPanel [data-mencion]')
+    if (primero) {
+      e.preventDefault()
+      return ponerMencion(primero.dataset.mencion, primero.dataset.nombre)
+    }
+  }
   // Enter envía; Shift+Enter hace un salto de línea, como en WhatsApp Web.
   if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'msgInput' && !e.isComposing) {
     e.preventDefault()

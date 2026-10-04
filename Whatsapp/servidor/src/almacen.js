@@ -23,6 +23,7 @@ import path from 'node:path'
 import { ALMACEN, ARCHIVOS_EN_R2, DATA_DIR } from './config.js'
 import { emitir, log } from './eventos.js'
 import * as nube from './nube.js'
+import * as diario from './diario.js'
 import { DONDE, enDisco, guardar, listarArchivos, moverPrefijo } from './archivos.js'
 
 export const EN_SUPABASE = ALMACEN === 'supabase'
@@ -67,7 +68,25 @@ export async function iniciarAlmacen() {
     total += porId.size
   }
   nube.conectarAlmacen(() => ({ estado, mensajes: (jid) => cache.get(clave(jid)) }))
-  return { modo: 'supabase', chats: Object.keys(estado.chats).length, mensajes: total }
+
+  // Lo que quedó en el diario local sin confirmar (el proceso murió antes de la tanda):
+  // se vuelve a cargar y a mandar a Supabase.
+  const recuperadas = diario.recuperar()
+  for (const e of recuperadas) {
+    if (e.chat) {
+      estado.chats[e.chat] = { ...estado.chats[e.chat], ...e.c }
+      nube.chatCambiado(e.chat)
+    } else if (e.borrar) {
+      cargar(e.jid).delete(e.id)
+      nube.mensajeBorrado(e.jid, e.id)
+    } else if (e.jid && e.m?.id) {
+      if (!estado.chats[e.jid]) estado.chats[e.jid] = { id: e.jid, noLeidos: 0, ultimoTs: e.m.ts || 0, ultimo: resumen(e.m) }
+      cargar(e.jid).set(e.m.id, e.m)
+      nube.mensajeCambiado(e.jid, e.m.id)
+      nube.chatCambiado(e.jid)
+    }
+  }
+  return { modo: 'supabase', chats: Object.keys(estado.chats).length, mensajes: total, recuperadas: recuperadas.length }
 }
 
 /** Escribe lo pendiente antes de apagar (solo modo supabase). */
@@ -238,9 +257,13 @@ export function registrarLid(lid, pn) {
   // Los archivos del chat viejo pasan a la carpeta del nuevo (en R2 es copiar y borrar: va en segundo plano).
   const carpetaVieja = estado.carpetas[lid] || kv
   delete estado.carpetas[lid]
-  moverPrefijo(`media/${carpetaVieja}`, `media/${asignarCarpeta(pn)}`).catch((err) =>
-    log('aviso', 'No se pudieron mover los archivos de un chat unificado', err.message),
-  )
+  const mudanza = { desde: `media/${carpetaVieja}`, hacia: `media/${asignarCarpeta(pn)}` }
+  moverPrefijo(mudanza.desde, mudanza.hacia).catch((err) => {
+    // Queda anotada y se reintenta al arrancar (organizarCarpetas): los originales siguen ahí.
+    estado.meta.mudanzasPendientes = [...(estado.meta.mudanzasPendientes || []), mudanza]
+    guardarEstado()
+    log('aviso', 'No se pudieron mover los archivos de un chat unificado', `${err.message} · se reintenta al arrancar`)
+  })
   if (!EN_SUPABASE) {
     cache.delete(kv)
     cache.delete(kn)
@@ -322,9 +345,29 @@ export function upsertChat(jid, patch = {}) {
   const chat = { ...previo, ...patch, id: jid }
   estado.chats[jid] = chat
   guardarEstado()
-  if (EN_SUPABASE) nube.chatCambiado(jid)
+  if (EN_SUPABASE) {
+    diario.anotar({ chat: jid, c: chat })
+    nube.chatCambiado(jid)
+  }
   emitir('chat', vistaChat(chat))
   return chat
+}
+
+/**
+ * Quita un mensaje suelto (el borrador de la bandeja de salida cuando ya salió el real).
+ * Si era el último del chat, la vista previa pasa al anterior.
+ */
+export function quitarMensaje(jid, id) {
+  const porId = cargar(jid)
+  if (!porId.delete(id)) return false
+  escribir(jid, { op: 'del', id })
+  const chat = estado.chats[jid]
+  if (chat?.ultimo?.id === id) {
+    const anterior = [...porId.values()].sort((a, b) => (a.ts || 0) - (b.ts || 0)).at(-1)
+    upsertChat(jid, { ultimo: anterior ? resumen(anterior) : null })
+  }
+  emitir('mensaje-quitado', { chatId: jid, id })
+  return true
 }
 
 export function sumarNoLeido(jid) {
@@ -365,7 +408,17 @@ function cargarClave(k) {
 }
 
 function escribir(jid, op) {
-  if (EN_SUPABASE) return nube.mensajeCambiado(jid, op.m?.id ?? op.id)
+  if (EN_SUPABASE) {
+    // Primero al diario local (diario.js): si el proceso muere antes de la tanda, no se pierde.
+    const id = op.m?.id ?? op.id
+    if (op.op === 'del') {
+      diario.anotar({ jid, id, borrar: true })
+      return nube.mensajeBorrado(jid, id)
+    }
+    const m = cargar(jid).get(id)
+    if (m) diario.anotar({ jid, m }, { urgente: m.origen !== 'historial' })
+    return nube.mensajeCambiado(jid, id)
+  }
   fs.appendFileSync(path.join(MSG_DIR, `${clave(jid)}.jsonl`), `${JSON.stringify(op)}\n`)
 }
 
@@ -435,6 +488,27 @@ export function recibioDespuesDe(jid, idsCorte) {
 }
 
 /** Guarda un mensaje nuevo. Si ya existía (llega dos veces por historial y en vivo), solo completa campos vacíos. */
+/**
+ * Borra un chat entero del respaldo: el chat, sus mensajes (en la base se van solos con
+ * el chat) y sus marcas. Devuelve { mensajes, carpeta } para que se borren sus archivos.
+ */
+export function borrarChatEntero(jid) {
+  if (!estado.chats[jid]) throw Object.assign(new Error('El chat no existe'), { status: 404 })
+  const mensajes = [...cargar(jid).values()]
+  const carpeta = estado.carpetas[jid] || clave(jid)
+  delete estado.chats[jid]
+  delete estado.carpetas[jid]
+  delete estado.archivados[jid]
+  delete estado.fijados[jid]
+  delete estado.silenciados[jid]
+  cache.delete(clave(jid))
+  if (EN_SUPABASE) nube.chatBorrado(jid)
+  else fs.rmSync(path.join(MSG_DIR, `${clave(jid)}.jsonl`), { force: true })
+  guardarEstado()
+  emitir('chats-borrados', { ids: [jid] })
+  return { mensajes, carpeta }
+}
+
 /** Recorre todos los mensajes guardados: fn(jid del chat, mensaje). */
 export function recorrerMensajes(fn) {
   for (const jid of Object.keys(estado.chats)) for (const m of cargar(jid).values()) fn(jid, m)
@@ -592,6 +666,20 @@ export function guardarMedia(jid, archivo, buffer, mime) {
  * Se corre al arrancar, antes de conectar, así ningún archivo nuevo cae en la carpeta vieja.
  */
 export async function organizarCarpetas() {
+  // Primero, las mudanzas de chats unificados que quedaron a medias.
+  const pendientes = estado.meta.mudanzasPendientes || []
+  if (pendientes.length) {
+    const quedan = []
+    for (const m of pendientes) {
+      try {
+        await moverPrefijo(m.desde, m.hacia)
+      } catch {
+        quedan.push(m)
+      }
+    }
+    estado.meta.mudanzasPendientes = quedan
+    guardarEstado()
+  }
   const existentes = new Set((await listarArchivos('media/')).map((a) => a.clave.split('/')[1]))
   let movidas = 0
   for (const jid of Object.keys(estado.chats)) {

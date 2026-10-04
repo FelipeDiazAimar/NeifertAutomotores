@@ -377,3 +377,33 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .solo-lectura [data-act="sincronizar-chats"], .solo-lectura [data-act="sincronizar-grupos"] { display: none; }
 .sin-linea .solo-linea { display: none; }
 .sin-linea [data-pref] { pointer-events: none; opacity: 0.5; }
+
+/* Bandeja de salida: el mensaje todavía no salió. */
+.salida-nota { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; font-size: 12px; color: var(--ink-3); }
+.salida-nota svg.i { width: 14px; height: 14px; flex: none; }
+.salida-nota.is-error { color: var(--red); }
+.salida-nota .link-btn { font-size: 12px; }
+.tick.err svg.i, .meta .err svg.i { color: var(--red); }
+
+/* Menciones (@) en grupos */
+.txt .mencion { color: var(--wa); font-weight: 600; }
+.composer { position: relative; }
+.mencion-panel { position: absolute; left: 10px; right: 10px; bottom: calc(100% + 6px); z-index: 20; max-height: 280px; overflow-y: auto; display: flex; flex-direction: column; padding: 6px; border-radius: 14px; background: var(--solid); border: 1px solid var(--line); box-shadow: 0 8px 30px rgb(0 0 0 / 0.18); }
+.mencion-panel[hidden] { display: none; }
+.mencion-panel button { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px; text-align: left; font: inherit; color: inherit; }
+.mencion-panel button:hover, .mencion-panel button:focus-visible { background: var(--wa-soft); }
+.mencion-panel button span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mencion-panel small { color: var(--ink-3); font-size: 11.5px; }
+.mencion-panel svg.i { width: 16px; height: 16px; color: var(--ink-3); flex: none; }
+
+/* Reacciones por persona: el número cuando reaccionaron varios con el mismo emoji. */
+.reacts span { display: inline-flex; align-items: center; gap: 2px; }
+.reacts small { font-size: 10.5px; color: var(--ink-3); }
+
+/* Privacidad (pestaña Conexión) */
+.priv { list-style: none; margin: 0 0 10px; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.priv li { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+.priv li span { color: var(--ink-3); }
+
+/* Acción destructiva en la ficha del chat */
+.info-fila.peligro, .info-fila.peligro svg.i { color: var(--red); }

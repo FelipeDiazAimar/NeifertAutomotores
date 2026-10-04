@@ -9,6 +9,7 @@
  *  - ediciones: se guarda la versión anterior
  *  - reconexión con espera creciente en vez de reintentar cada 3 s
  */
+import crypto from 'node:crypto'
 import fs from 'node:fs'
 import QRCode from 'qrcode'
 import pino from 'pino'
@@ -32,16 +33,26 @@ import makeWASocket, {
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
-import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, VENTANA_DIAS, VERSION_WA, numeroLinea } from './config.js'
+import {
+  ARCHIVOS_ENV,
+  BAILEYS_LOG,
+  CONSERVAR_EDICIONES,
+  CONSERVAR_ELIMINADOS,
+  MEDIA_MAX_BYTES,
+  MEDIA_RECIENTE_SEG,
+  VENTANA_DIAS,
+  VERSION_WA,
+  numeroLinea,
+} from './config.js'
 import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
-import { aNotaDeVoz } from './audio.js'
-import { configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
-import { borrar as borrarArchivo, listarArchivos } from './archivos.js'
+import { aNotaDeVoz, formaDeOnda, miniatura } from './audio.js'
+import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
+import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos } from './archivos.js'
 import {
   AUTH_DIR,
   actualizarMensaje,
@@ -58,6 +69,9 @@ import {
   pnDeLid,
   registrarLid,
   claveMedia,
+  quitarMensaje,
+  borrarChatEntero,
+  conFotoGuardada,
   quitarAnterioresA,
   recorrerMensajes,
   setContacto,
@@ -399,6 +413,9 @@ async function iniciarConexion() {
   s.ev.on('groups.upsert', seguro('grupos', (gs) => procesarGrupos(gs, { crear: true })))
   // update: cambios sueltos (asunto, descripción) sobre grupos que ya están.
   s.ev.on('groups.update', seguro('grupos', (gs) => procesarGrupos(gs)))
+  // Altas, bajas y cambios de admin: el aviso en el chat llega como mensaje (stub); acá
+  // solo se descarta la lista de integrantes guardada, para mencionar con la actualizada.
+  s.ev.on('group-participants.update', seguro('integrantes', ({ id }) => integrantes.delete(id)))
 }
 
 async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
@@ -419,7 +436,7 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       return rechazarLinea(s, telefonoDe(id) || id, 'Se vinculó un número que no es el de la concesionaria')
     }
     rechazo = null
-    yo = { id, nombre: s.user?.name || s.user?.verifiedName || null, telefono: telefonoDe(id) }
+    yo = { id, lid: s.user?.lid ? jidNormalizedUser(s.user.lid) : null, nombre: s.user?.name || s.user?.verifiedName || null, telefono: telefonoDe(id) }
     if (s.user?.lid) registrarLid(jidNormalizedUser(s.user.lid), id)
     setConexion('conectado')
     log('ok', 'WhatsApp conectado', yo.telefono || id)
@@ -428,6 +445,11 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     if (!meta().ultimaSenalCelular) senalDelCelular()
     // La sesión cambió (o es nueva): se respalda cifrada en R2.
     programarRespaldo(30_000)
+    // Lo que quedó en la bandeja de salida mientras no había conexión sale ahora.
+    arrancarSalidaPeriodica()
+    setTimeout(() => {
+      if (s === sock && conexion === 'conectado') sinUsuario(() => procesarSalida().catch((err) => log('aviso', 'Bandeja de salida', err.message)))
+    }, 5000)
     // Una vez por sesión vinculada: trae del celular qué chats están archivados o fijados.
     if (!meta().chatsSincronizados) {
       setTimeout(() => {
@@ -681,7 +703,7 @@ function interpretar(content) {
     case 'extendedTextMessage': r = { tipo: 'texto', texto: c.text }; break
     case 'imageMessage': r = { tipo: 'imagen', texto: c.caption, media: medio(c) }; break
     case 'videoMessage': r = { tipo: c.gifPlayback ? 'gif' : 'video', texto: c.caption, media: medio(c, { segundos: c.seconds }) }; break
-    case 'audioMessage': r = { tipo: c.ptt ? 'nota_voz' : 'audio', media: medio(c, { segundos: c.seconds }) }; break
+    case 'audioMessage': r = { tipo: c.ptt ? 'nota_voz' : 'audio', media: medio(c, { segundos: c.seconds, ...(c.waveform?.length ? { ondas: [...c.waveform] } : {}) }) }; break
     case 'documentMessage': r = { tipo: 'documento', texto: c.caption, media: medio(c, { nombre: c.fileName }) }; break
     case 'stickerMessage': r = { tipo: 'sticker', media: medio(c) }; break
     case 'locationMessage':
@@ -698,6 +720,7 @@ function interpretar(content) {
       r = tipoWa ? { tipo: 'otro', texto: `Mensaje no soportado (${tipoWa})` } : null
   }
   if (r && c?.contextInfo?.stanzaId) r.citado = c.contextInfo.stanzaId
+  if (r && c?.contextInfo?.mentionedJid?.length) r.mencionados = c.contextInfo.mentionedJid
   return r
 }
 
@@ -742,6 +765,60 @@ export async function limpiarUnaVez() {
  * una vez por día.
  */
 export async function purgarVentana() {
+  return purgarVentanaAhora()
+}
+
+/** Claves de archivo que algún mensaje o foto de perfil necesita (todo lo demás sobra). */
+function archivosEnUso() {
+  const usados = new Set()
+  recorrerMensajes((jid, m) => {
+    if (m.media?.archivo) usados.add(claveMedia(jid, m.media.archivo))
+    if (m.media?.miniatura) usados.add(m.media.miniatura)
+  })
+  for (const jid of conFotoGuardada()) usados.add(claveFoto(jid))
+  return usados
+}
+
+/**
+ * Conciliación de R2 contra lo que referencian los mensajes: borra los archivos que no usa
+ * nadie (quedaron de un chat borrado, de una descarga cortada, etc.). Con freno: no toca
+ * nada de menos de un día, ni carpetas con una mudanza pendiente, y si sobra demasiado
+ * (señal de que algo no cargó bien) no borra y avisa.
+ */
+export async function reconciliarArchivos({ simular = false } = {}) {
+  const usados = archivosEnUso()
+  const enMudanza = (meta().mudanzasPendientes || []).map((m) => `${m.desde}/`)
+  const unDia = Date.now() - 86400e3
+  const todos = []
+  for (const prefijo of ['media/', 'miniaturas/', 'fotos/']) todos.push(...(await listarArchivos(prefijo)))
+  const huerfanos = todos.filter((a) => !usados.has(a.clave) && a.fecha < unDia && !enMudanza.some((p) => a.clave.startsWith(p)))
+  const bytes = huerfanos.reduce((t, a) => t + a.tamano, 0)
+  if (huerfanos.length > 50 && huerfanos.length > todos.length * 0.3) {
+    alertar('Conciliación de archivos frenada', `${huerfanos.length} de ${todos.length} archivos parecen huérfanos: es demasiado, no se borró nada. Revisá que los mensajes hayan cargado bien.`, { clave: 'conciliacion', nivel: 'aviso' })
+    return { huerfanos: huerfanos.length, borrados: 0, bytes, frenada: true }
+  }
+  if (!simular) for (const a of huerfanos) await borrarArchivo(a.clave).catch(() => {})
+  return { huerfanos: huerfanos.length, borrados: simular ? 0 : huerfanos.length, bytes, total: todos.length }
+}
+
+/**
+ * Borra un chat del respaldo: mensajes, archivos (su carpeta entera en R2), foto de
+ * perfil y el chat en sí. No toca WhatsApp: en el celular el chat sigue estando.
+ */
+export async function borrarChat(chatId) {
+  const { mensajes, carpeta } = borrarChatEntero(chatId)
+  let archivos = 0
+  for (const a of await listarArchivos(`media/${carpeta}/`)) {
+    await borrarArchivo(a.clave).catch(() => {})
+    archivos++
+  }
+  for (const m of mensajes) if (m.media?.miniatura) await borrarArchivo(m.media.miniatura).catch(() => {})
+  await borrarArchivo(claveFoto(chatId)).catch(() => {})
+  log('aviso', 'Chat borrado del respaldo', `${nombreDe(chatId)} · ${mensajes.length} mensajes · ${archivos} archivos`)
+  return { mensajes: mensajes.length, archivos }
+}
+
+async function purgarVentanaAhora() {
   const { quitados, chats } = quitarAnterioresA(corteVentana())
   let archivos = 0
   for (const { jid, m } of quitados) {
@@ -805,8 +882,12 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   const key = m.key
   if (!key?.remoteJid || ignorar(key.remoteJid)) return
   const content = normalizeMessageContent(m.message)
-  // Sin contenido: avisos del sistema o mensajes que no se pudieron descifrar.
-  if (!content) return
+  // Sin contenido: avisos de grupo (se guardan como aviso), otros avisos del sistema o
+  // mensajes que no se pudieron descifrar.
+  if (!content) {
+    if (m.messageStubType && esGrupo(key.remoteJid)) await procesarAvisoGrupo(m, origen)
+    return
+  }
   // Borrados, ediciones y reacciones llegan por messages.update / messages.reaction.
   if (content.protocolMessage || content.reactionMessage) return
   let datos = interpretar(content)
@@ -824,7 +905,10 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   // En un grupo el pushName es del autor: no puede pasar a ser el nombre del chat.
   if (!deMi && !grupo) actualizarPushName(chatId, m.pushName)
 
-  const mensaje = { id: key.id, deMi, ts, ...datos, origen }
+  const { mencionados, ...resto } = datos
+  const mensaje = { id: key.id, deMi, ts, ...resto, origen }
+  // Menciones (@): qué nombre mostrar en lugar de cada "@número" del texto.
+  if (mencionados?.length) mensaje.menciones = nombresDeMenciones(mencionados)
   if (deMi) mensaje.estado = ESTADOS[m.status] || 'enviado'
   // Un mensaje propio que no salió del panel lo mandaron desde el celular: está activo.
   if (deMi && origen === 'vivo' && !idsDelPanel.has(key.id)) senalDelCelular()
@@ -851,7 +935,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
       mediaPropia.delete(key.id)
       try {
         await guardarMedia(chatId, archivo, propio, datos.media.mime)
-        mensaje.media = { ...datos.media, archivo, tamano: propio.length, estado: 'ok' }
+        const extras = await extrasDeArchivo(chatId, { id: key.id, tipo: datos.tipo, media: datos.media }, propio)
+        mensaje.media = { ...datos.media, archivo, tamano: propio.length, estado: 'ok', ...extras }
       } catch (err) {
         // Queda como pendiente: se puede volver a bajar de WhatsApp con el mensaje crudo.
         log('aviso', 'No se pudo guardar un archivo enviado', err.message)
@@ -901,27 +986,44 @@ async function procesarActualizacion({ key, update }) {
   }
 }
 
+/**
+ * Alguien eliminó un mensaje para todos. Con el anti-borrado encendido
+ * (WA_CONSERVAR_ELIMINADOS, por defecto) se marca y el original queda guardado. Apagado,
+ * se hace como en el celular: el mensaje pierde el texto y el archivo, queda solo el aviso.
+ */
 function marcarEliminado(chatId, id, claveRevoke) {
   const por = claveRevoke?.fromMe ? 'yo' : 'contacto'
   const eliminado = { ts: ahora(), por }
   const m = buscarMensaje(chatId, id)
   if (m) {
     if (m.eliminado) return
-    actualizarMensaje(chatId, id, { eliminado })
-    log('aviso', por === 'yo' ? 'Se eliminó un mensaje enviado por la línea' : 'Un contacto eliminó un mensaje', `${nombreDe(chatId)} · el original quedó guardado`)
+    if (CONSERVAR_ELIMINADOS) {
+      actualizarMensaje(chatId, id, { eliminado })
+    } else {
+      if (m.media?.archivo) borrarArchivo(claveMedia(chatId, m.media.archivo)).catch(() => {})
+      if (m.media?.miniatura) borrarArchivo(m.media.miniatura).catch(() => {})
+      actualizarMensaje(chatId, id, { eliminado, texto: '', media: null, raw: null, ediciones: null, ubicacion: null })
+    }
+    const que = por === 'yo' ? 'Se eliminó un mensaje enviado por la línea' : 'Un contacto eliminó un mensaje'
+    log('aviso', que, `${nombreDe(chatId)} · ${CONSERVAR_ELIMINADOS ? 'el original quedó guardado' : 'se borró también del respaldo'}`)
   } else {
     agregarMensaje(chatId, { id, deMi: por === 'yo', ts: eliminado.ts, tipo: 'desconocido', texto: '', eliminado, origen: 'vivo' })
     log('aviso', 'Se eliminó un mensaje que no estaba guardado', `${nombreDe(chatId)} · había llegado antes de conectar el sistema`)
   }
 }
 
+/** Un mensaje editado. Con WA_CONSERVAR_EDICIONES (por defecto) se guarda la versión anterior. */
 function marcarEditado(chatId, id, contenido, ts) {
   const m = buscarMensaje(chatId, id)
   const texto = textoDe(contenido)
   if (!m || texto === m.texto) return
-  const ediciones = [...(m.ediciones || []), { texto: m.texto || '', ts: ts || ahora() }]
-  actualizarMensaje(chatId, id, { texto, ediciones })
-  log('info', 'Se editó un mensaje', `${nombreDe(chatId)} · la versión anterior quedó guardada`)
+  if (CONSERVAR_EDICIONES) {
+    const ediciones = [...(m.ediciones || []), { texto: m.texto || '', ts: ts || ahora() }]
+    actualizarMensaje(chatId, id, { texto, ediciones, editado: ts || ahora() })
+  } else {
+    actualizarMensaje(chatId, id, { texto, ediciones: null, editado: ts || ahora() })
+  }
+  log('info', 'Se editó un mensaje', `${nombreDe(chatId)} · ${CONSERVAR_EDICIONES ? 'la versión anterior quedó guardada' : 'se reemplazó el texto'}`)
 }
 
 async function procesarReaccion({ key, reaction }) {
@@ -930,8 +1032,66 @@ async function procesarReaccion({ key, reaction }) {
   const chatId = await jidDelChat(claveChat)
   const m = buscarMensaje(chatId, key.id)
   if (!m) return
-  const quien = reaction.key?.fromMe ? 'yo' : 'contacto'
+  // Una reacción por persona: en un grupo cada integrante tiene la suya (si no, la de uno
+  // pisaba la del otro). En un chat 1 a 1 alcanza con "yo" y "contacto".
+  let quien = reaction.key?.fromMe ? 'yo' : 'contacto'
+  const participante = reaction.key?.participant || reaction.key?.participantAlt
+  if (quien === 'contacto' && esGrupo(chatId) && participante) {
+    const jid = jidNormalizedUser(participante)
+    quien = (isLidUser(jid) && pnDeLid(jid)) || jid
+  }
   actualizarMensaje(chatId, key.id, { reacciones: { ...m.reacciones, [quien]: reaction.text || null } })
+}
+
+/* ---------------- Avisos de grupo ("X agregó a Y") ---------------- */
+
+const AVISOS_GRUPO = {
+  [WAMessageStubType.GROUP_CREATE]: (a, ps, p) => `${a} creó el grupo${p[0] ? ` "${p[0]}"` : ''}`,
+  [WAMessageStubType.GROUP_CHANGE_SUBJECT]: (a, ps, p) => `${a} cambió el asunto a "${p[0] || ''}"`,
+  [WAMessageStubType.GROUP_CHANGE_ICON]: (a) => `${a} cambió la foto del grupo`,
+  [WAMessageStubType.GROUP_CHANGE_DESCRIPTION]: (a) => `${a} cambió la descripción del grupo`,
+  [WAMessageStubType.GROUP_CHANGE_ANNOUNCE]: (a, ps, p) => (p[0] === 'on' ? `${a} hizo que solo los admins puedan escribir` : `${a} permitió que todos escriban`),
+  [WAMessageStubType.GROUP_CHANGE_RESTRICT]: (a, ps, p) => (p[0] === 'on' ? `${a} hizo que solo los admins editen la info del grupo` : `${a} permitió que todos editen la info del grupo`),
+  [WAMessageStubType.GROUP_PARTICIPANT_ADD]: (a, ps, p, mismo) => (mismo ? `${ps} se unió` : `${a} agregó a ${ps}`),
+  [WAMessageStubType.GROUP_PARTICIPANT_REMOVE]: (a, ps, p, mismo) => (mismo ? `${ps} salió del grupo` : `${a} sacó a ${ps}`),
+  [WAMessageStubType.GROUP_PARTICIPANT_LEAVE]: (a, ps) => `${ps} salió del grupo`,
+  [WAMessageStubType.GROUP_PARTICIPANT_INVITE]: (a, ps) => `${ps} se unió con el enlace de invitación`,
+  [WAMessageStubType.GROUP_PARTICIPANT_ACCEPT]: (a, ps) => `${ps} se unió al grupo`,
+  [WAMessageStubType.GROUP_PARTICIPANT_PROMOTE]: (a, ps) => `${a} hizo admin a ${ps}`,
+  [WAMessageStubType.GROUP_PARTICIPANT_DEMOTE]: (a, ps) => `${ps} ya no es admin`,
+  [WAMessageStubType.GROUP_PARTICIPANT_CHANGE_NUMBER]: (a) => `${a} cambió su número`,
+}
+
+/** Nombre para mostrar de un jid de grupo (teléfono o LID); la línea es "Vos". */
+function nombreParticipante(crudo) {
+  if (!crudo) return 'Alguien'
+  const jid = jidNormalizedUser(crudo)
+  const pn = isLidUser(jid) ? pnDeLid(jid) : jid
+  if (yo && (jid === yo.id || jid === yo.lid || pn === yo.id)) return 'Vos'
+  return nombreDe(pn || jid)
+}
+
+/**
+ * Los cambios de un grupo llegan como "mensajes de sistema" sin contenido (stubs): se
+ * guardan como un aviso en el chat, como en WhatsApp. Además, la lista de integrantes del
+ * grupo deja de servir: se vuelve a pedir la próxima vez.
+ */
+async function procesarAvisoGrupo(m, origen) {
+  const armar = AVISOS_GRUPO[m.messageStubType]
+  if (!armar) return
+  const chatId = m.key.remoteJid
+  const ts = toNumber(m.messageTimestamp) || ahora()
+  if (ts < corteVentana()) return
+  const autorJid = m.key.participant || m.participant || null
+  const params = (m.messageStubParameters || []).map(String)
+  const esJid = (p) => /@(s\.whatsapp\.net|lid)$/.test(p)
+  const personas = params.filter(esJid)
+  const lista = personas.map(nombreParticipante).join(', ') || 'alguien'
+  const mismo = personas.length === 1 && autorJid && jidNormalizedUser(personas[0]) === jidNormalizedUser(autorJid)
+  const texto = armar(nombreParticipante(autorJid), lista, params.filter((p) => !esJid(p)), mismo)
+  if (m.messageStubType === WAMessageStubType.GROUP_CHANGE_SUBJECT && params[0]) setGrupoNombre(chatId, params[0])
+  integrantes.delete(chatId)
+  agregarMensaje(chatId, { id: m.key.id, deMi: !!m.key.fromMe, ts, tipo: 'sistema', texto, origen })
 }
 
 async function alHistorial({ chats = [], contacts = [], messages = [], lidPnMappings = [] }) {
@@ -1047,9 +1207,20 @@ const presencias = new Map() // chatId → { estado, visto, ts }
 
 async function procesarPresencia({ id, presences }) {
   if (!id || ignorar(id)) return
+  const chatId = await jidDelChat({ remoteJid: id })
+  if (esGrupo(chatId)) {
+    // En un grupo la presencia viene por integrante: se avisa quién escribe o graba
+    // ("Seba está escribiendo…"), como en WhatsApp.
+    const activo = Object.entries(presences || {}).find(([, d]) => ['composing', 'recording'].includes(d?.lastKnownPresence))
+    const p = activo
+      ? { estado: activo[1].lastKnownPresence, quien: nombreParticipante(activo[0]), visto: null, ts: ahora() }
+      : { estado: 'available', quien: null, visto: null, ts: ahora() }
+    presencias.set(chatId, p)
+    emitir('presencia', { chatId, ...p })
+    return
+  }
   const datos = Object.values(presences || {})[0]
   if (!datos) return
-  const chatId = await jidDelChat({ remoteJid: id })
   const p = { estado: datos.lastKnownPresence, visto: datos.lastSeen || null, ts: ahora() }
   presencias.set(chatId, p)
   emitir('presencia', { chatId, ...p })
@@ -1156,6 +1327,67 @@ const GRUPOS_MEDIA = {
 const RE_ENLACE = /https?:\/\/[^\s]+|www\.[^\s]+/gi
 
 /** Resuelve el nombre de un participante, que puede venir identificado con LID. */
+/* ---------------- Integrantes de grupos y menciones (@) ---------------- */
+
+// chatId → [{ jid (como lo usa el grupo: teléfono o LID), telefono, nombre }]. Se llena al
+// abrir la ficha o pedir los integrantes, y con los avisos de altas y bajas.
+const integrantes = new Map()
+
+function guardarIntegrantes(chatId, g) {
+  const lista = (g?.participants || [])
+    .map((p) => {
+      const crudo = p?.id || p?.jid
+      if (!crudo) return null
+      const jid = jidNormalizedUser(crudo)
+      const pn = isLidUser(jid) ? (p.phoneNumber && jidNormalizedUser(p.phoneNumber)) || pnDeLid(jid) || null : jid
+      return { jid, telefono: pn ? telefonoDe(pn) : null, nombre: nombreDe(pn || jid) }
+    })
+    .filter(Boolean)
+  integrantes.set(chatId, lista)
+  return lista
+}
+
+/** Integrantes de un grupo para mencionar con @ (los pide a WhatsApp si no están). */
+export async function integrantesDe(chatId) {
+  if (!esGrupo(chatId)) return []
+  if (!integrantes.has(chatId) && sock && conexion === 'conectado') {
+    try {
+      guardarIntegrantes(chatId, await sock.groupMetadata(chatId))
+    } catch {
+      // Grupo del que ya no se forma parte: sin integrantes para mencionar.
+    }
+  }
+  const yoJid = yo?.id
+  return (integrantes.get(chatId) || []).filter((p) => p.jid !== yoJid && p.jid !== yo?.lid)
+}
+
+/**
+ * A quién menciona un mensaje de grupo: los que eligió el panel (`explicitas`) y cada
+ * "@número" del texto que sea de un integrante. WhatsApp necesita la lista aparte del
+ * texto para que la mención le avise al mencionado.
+ */
+function mencionesDe(chatId, texto, explicitas = []) {
+  if (!esGrupo(chatId)) return null
+  const lista = integrantes.get(chatId) || []
+  const set = new Set((Array.isArray(explicitas) ? explicitas : []).filter((j) => typeof j === 'string' && /^\d+@(s\.whatsapp\.net|lid)$/.test(j)))
+  for (const [, digitos] of String(texto).matchAll(/@(\d{6,15})/g)) {
+    const p = lista.find((x) => x.jid.startsWith(`${digitos}@`) || (x.telefono || '').replace(/\D/g, '') === digitos)
+    set.add(p ? p.jid : `${digitos}@s.whatsapp.net`)
+  }
+  return set.size ? [...set] : null
+}
+
+/** "@número" → nombre, para mostrar las menciones de un mensaje recibido. */
+function nombresDeMenciones(jids = []) {
+  const mapa = {}
+  for (const crudo of jids) {
+    const jid = jidNormalizedUser(crudo)
+    const pn = isLidUser(jid) ? pnDeLid(jid) : jid
+    mapa[jid.split('@')[0]] = yo && (jid === yo.id || pn === yo.id) ? 'Vos' : nombreDe(pn || jid)
+  }
+  return mapa
+}
+
 function fichaParticipante(p, yoJid) {
   const crudo = p?.id || p?.jid
   if (!crudo) return null
@@ -1239,6 +1471,7 @@ export async function fichaChat(chatId) {
   try {
     asegurarConectado()
     const g = await sock.groupMetadata(chatId)
+    guardarIntegrantes(chatId, g)
     const yoJid = yo?.id
     const participantes = (g.participants || []).map((p) => fichaParticipante(p, yoJid)).filter(Boolean)
     ficha.grupo = {
@@ -1445,7 +1678,8 @@ async function descargarMedia(chatId, m) {
     }
     const archivo = `${m.id}.${extensionDe(m.media.mime, m.media.nombre)}`
     await guardarMedia(chatId, archivo, buffer, m.media.mime)
-    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0 } })
+    const extras = await extrasDeArchivo(chatId, m, buffer)
+    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0, ...extras } })
   } catch (err) {
     const error = mensajeDeError(err, huboReenvio)
     const actual = buscarMensaje(chatId, m.id)
@@ -1537,6 +1771,52 @@ export function descargarTodo(chatId, { reintentar = false } = {}) {
 }
 
 /** Dónde está el archivo ya descargado. No descarga nada: eso lo pide el usuario con descargarAhora. */
+/**
+ * Lo que se arma una vez que el archivo está bajado: la miniatura de fotos y videos (480 px,
+ * en miniaturas/, para que la lista no baje fotos de varios MB) y la forma de onda real de
+ * los audios que no la traen. Si falla, el archivo se guarda igual.
+ */
+async function extrasDeArchivo(chatId, m, buffer) {
+  const extras = {}
+  const mime = String(m.media?.mime || '')
+  if (['imagen', 'video', 'gif'].includes(m.tipo) && /^(image\/(jpeg|png|webp|gif|heic|heif)|video\/)/.test(mime)) {
+    try {
+      const clave = claveMedia(chatId, `${m.id}.jpg`).replace(/^media\//, 'miniaturas/')
+      await guardarArchivo(clave, await miniatura(buffer, mime), 'image/jpeg')
+      extras.miniatura = clave
+    } catch {
+      // Sin miniatura: el panel muestra el archivo completo, como antes.
+    }
+  }
+  if (['nota_voz', 'audio'].includes(m.tipo) && !m.media?.ondas?.length) {
+    const ondas = await formaDeOnda(buffer).catch(() => null)
+    if (ondas) extras.ondas = ondas
+  }
+  return extras
+}
+
+/**
+ * Miniatura de una foto o video: la que se armó al bajarlo (480 px) o, si todavía no está
+ * bajado, la chiquita que manda WhatsApp adentro del mensaje. null si no hay ninguna.
+ */
+export async function obtenerMiniatura(chatId, id) {
+  const m = buscarMensaje(chatId, id)
+  if (!m?.media) return null
+  if (m.media.miniatura) {
+    const b = await leerArchivo(m.media.miniatura).catch(() => null)
+    if (b) return b
+  }
+  if (!m.raw) return null
+  try {
+    const crudo = JSON.parse(m.raw, BufferJSON.reviver)
+    const c = normalizeMessageContent(crudo.message)
+    const thumb = c?.[getContentType(c)]?.jpegThumbnail
+    return thumb?.length ? Buffer.from(thumb) : null
+  } catch {
+    return null
+  }
+}
+
 export function obtenerMedia(chatId, id) {
   const m = buscarMensaje(chatId, id)
   if (!m?.media?.archivo || !existeMedia(chatId, m.media.archivo)) {
@@ -1572,7 +1852,8 @@ function asegurarConectado() {
   if (!sock || conexion !== 'conectado') throw new Error('WhatsApp no está conectado. Vinculá la línea en la pestaña Conexión.')
 }
 
-async function enviar(chatId, contenido, buffer, quoted) {
+/** Manda un mensaje. `firmante` ({ id, nombre }): quién lo escribió, si no es el usuario del pedido. */
+async function enviar(chatId, contenido, buffer, quoted, firmante) {
   asegurarConectado()
   const messageId = generateMessageIDV2(sock.user?.id)
   idsDelPanel.add(messageId)
@@ -1586,7 +1867,7 @@ async function enviar(chatId, contenido, buffer, quoted) {
     }
     // Normalmente ya lo guardó messages.upsert; esto cubre el caso en que no llegue.
     if (enviado && !buscarMensaje(chatId, enviado.key.id)) await procesarEntrante(enviado, 'append')
-    if (enviado) firmarEnviado(chatId, enviado.key.id)
+    if (enviado) firmarEnviado(chatId, enviado.key.id, firmante)
     return enviado?.key?.id
   } finally {
     setTimeout(() => mediaPropia.delete(messageId), 60000)
@@ -1605,8 +1886,8 @@ function claveMensaje(chatId, m) {
  * del pedido del empleado, así que la firma se pone acá, cuando el envío ya volvió.
  * Lo que se manda desde el celular queda sin firma.
  */
-function firmarEnviado(chatId, id) {
-  const u = usuarioActual()
+function firmarEnviado(chatId, id, firmante = null) {
+  const u = firmante || usuarioActual()
   if (!u || !id || !buscarMensaje(chatId, id)) return
   actualizarMensaje(chatId, id, { enviadoPor: { id: u.id, nombre: u.nombre } })
 }
@@ -1619,10 +1900,189 @@ function mensajeCitado(chatId, id) {
   return { key: claveMensaje(chatId, m), message }
 }
 
-export function enviarTexto(chatId, texto, citadoId) {
+/* ---------------- Bandeja de salida ---------------- */
+
+/*
+ * Si se manda algo con WhatsApp desconectado (o se corta justo al mandar), no se pierde:
+ * queda en el chat como un borrador "en cola" (con su archivo guardado), persistido como
+ * cualquier mensaje (diario local + Supabase), y se manda solo, en orden, apenas vuelve la
+ * conexión, firmado por quien lo escribió. Cuando sale, el borrador se reemplaza por el
+ * mensaje real. Si falla por otra cosa queda en "error" (se puede reintentar o descartar).
+ */
+const SALIDA_MAX_INTENTOS = 5
+const esCorte = (err) =>
+  /no está conectado|connection (closed|terminated|lost)|timed? ?out|econn|socket|not open|precondition|stream errored/i.test(err?.message || '')
+
+/** Contenido de Baileys para un pedido de envío (lo comparten el envío directo y la cola). */
+function contenidoDe(p, buffer) {
+  if (p.tipo === 'texto') {
+    const contenido = { text: p.texto }
+    if (p.menciones?.length) contenido.mentions = p.menciones
+    return contenido
+  }
+  if (p.tipo === 'nota_voz') {
+    const contenido = { audio: buffer, mimetype: 'audio/ogg; codecs=opus', ptt: true }
+    if (p.segundos > 0) contenido.seconds = Math.round(p.segundos)
+    if (p.ondas?.length) contenido.waveform = Uint8Array.from(p.ondas)
+    return contenido
+  }
+  const base = (p.mime || 'application/octet-stream').split(';')[0].trim().toLowerCase()
+  const caption = p.caption || undefined
+  if (/^image\/(jpeg|png|webp)$/.test(base)) return { image: buffer, caption, mimetype: base }
+  if (base === 'video/mp4') return { video: buffer, caption, mimetype: base }
+  if (base.startsWith('audio/')) return { audio: buffer, mimetype: base }
+  return { document: buffer, mimetype: base, fileName: p.nombre || 'archivo', caption }
+}
+
+/** Manda ya. Devuelve el id del mensaje real. */
+function enviarPedido(chatId, p, buffer, firmante) {
+  const conArchivo = p.tipo !== 'texto'
+  return enviar(chatId, contenidoDe(p, buffer), conArchivo ? buffer : undefined, mensajeCitado(chatId, p.citadoId), firmante)
+}
+
+function tipoDeArchivo(mime) {
+  const base = (mime || '').split(';')[0].toLowerCase()
+  if (base.startsWith('image/')) return 'imagen'
+  if (base.startsWith('video/')) return 'video'
+  if (base.startsWith('audio/')) return 'audio'
+  return 'documento'
+}
+
+/** Guarda el pedido como borrador "en cola" en el chat. */
+async function encolarSalida(chatId, p, buffer) {
+  const u = usuarioActual()
+  const id = `SAL-${crypto.randomBytes(8).toString('hex').toUpperCase()}`
+  const m = {
+    id,
+    deMi: true,
+    ts: ahora(),
+    tipo: p.tipo === 'texto' ? 'texto' : p.tipo === 'nota_voz' ? 'nota_voz' : tipoDeArchivo(p.mime),
+    texto: p.tipo === 'texto' ? p.texto : p.caption || '',
+    origen: 'vivo',
+    estado: 'en_cola',
+    salida: {
+      tipo: p.tipo,
+      citadoId: p.citadoId || null,
+      menciones: p.menciones || null,
+      mime: p.mime || null,
+      nombre: p.nombre || null,
+      caption: p.caption || null,
+      segundos: p.segundos || 0,
+      ondas: p.ondas || null,
+      intentos: 0,
+      error: null,
+    },
+    ...(p.citadoId ? { citado: p.citadoId } : {}),
+    ...(u ? { enviadoPor: { id: u.id, nombre: u.nombre } } : {}),
+  }
+  if (buffer) {
+    const mime = p.tipo === 'nota_voz' ? 'audio/ogg; codecs=opus' : p.mime
+    const archivo = `${id}.${extensionDe(mime, p.nombre)}`
+    await guardarMedia(chatId, archivo, buffer, mime)
+    m.media = {
+      mime,
+      nombre: p.nombre || null,
+      tamano: buffer.length,
+      archivo,
+      estado: 'ok',
+      ...(p.segundos ? { segundos: p.segundos } : {}),
+      ...(p.ondas ? { ondas: p.ondas } : {}),
+    }
+  }
+  if (!existeChat(chatId)) upsertChat(chatId, { ultimoTs: m.ts })
+  agregarMensaje(chatId, m)
+  log('aviso', 'Mensaje en la bandeja de salida', `${nombreDe(chatId)} · se manda cuando vuelva la conexión`)
+  return { id, enCola: true }
+}
+
+/** Manda ya si hay conexión; si no (o se corta en el intento), lo deja en la bandeja de salida. */
+async function enviarOEncolar(chatId, p, buffer) {
+  if (sock && conexion === 'conectado') {
+    try {
+      return { id: await enviarPedido(chatId, p, buffer) }
+    } catch (err) {
+      if (!esCorte(err)) throw err
+      log('aviso', 'Se cortó al mandar un mensaje', err.message)
+    }
+  }
+  return encolarSalida(chatId, p, buffer)
+}
+
+let procesandoSalida = false
+/** Manda lo que esté en la bandeja de salida, del más viejo al más nuevo. */
+export async function procesarSalida() {
+  if (procesandoSalida || !sock || conexion !== 'conectado') return 0
+  procesandoSalida = true
+  let salieron = 0
+  try {
+    const cola = []
+    recorrerMensajes((chatId, m) => {
+      if (m.salida && m.estado === 'en_cola' && (m.salida.intentos || 0) < SALIDA_MAX_INTENTOS) cola.push([chatId, m])
+    })
+    cola.sort((a, b) => (a[1].ts || 0) - (b[1].ts || 0))
+    for (const [chatId, m] of cola) {
+      if (!sock || conexion !== 'conectado') break
+      const s = m.salida
+      try {
+        const buffer = m.media?.archivo ? await leerArchivo(claveMedia(chatId, m.media.archivo)) : undefined
+        if (m.media?.archivo && !buffer) throw new Error('No se encontró el archivo guardado del mensaje')
+        actualizarMensaje(chatId, m.id, { estado: 'enviando' })
+        const pedido = { tipo: s.tipo, texto: m.texto, citadoId: s.citadoId, menciones: s.menciones, mime: s.mime, nombre: s.nombre, caption: s.caption, segundos: s.segundos, ondas: s.ondas }
+        await enviarPedido(chatId, pedido, buffer, m.enviadoPor || null)
+        // Salió: el borrador se reemplaza por el mensaje real (que ya guardó el envío).
+        quitarMensaje(chatId, m.id)
+        if (m.media?.archivo) borrarArchivo(claveMedia(chatId, m.media.archivo)).catch(() => {})
+        salieron++
+      } catch (err) {
+        if (esCorte(err)) {
+          actualizarMensaje(chatId, m.id, { estado: 'en_cola' })
+          break
+        }
+        const intentos = (s.intentos || 0) + 1
+        actualizarMensaje(chatId, m.id, {
+          estado: intentos >= SALIDA_MAX_INTENTOS ? 'error' : 'en_cola',
+          salida: { ...s, intentos, error: err.message },
+        })
+        log('aviso', 'No se pudo mandar un mensaje de la bandeja de salida', `${nombreDe(chatId)} · ${err.message}`)
+      }
+    }
+  } finally {
+    procesandoSalida = false
+  }
+  if (salieron) log('ok', 'Bandeja de salida', `${salieron} mensajes enviados al volver la conexión`)
+  return salieron
+}
+
+/** Vuelve a poner en cola un mensaje de la bandeja de salida que dio error. */
+export function reintentarSalida(chatId, id) {
+  const m = buscarMensaje(chatId, id)
+  if (!m?.salida) throw Object.assign(new Error('No es un mensaje de la bandeja de salida'), { status: 404 })
+  actualizarMensaje(chatId, id, { estado: 'en_cola', salida: { ...m.salida, intentos: 0, error: null } })
+  sinUsuario(() => procesarSalida().catch(() => {}))
+  return vistaMensaje(buscarMensaje(chatId, id))
+}
+
+/** Descarta un mensaje de la bandeja de salida (no se manda). */
+export function descartarSalida(chatId, id) {
+  const m = buscarMensaje(chatId, id)
+  if (!m?.salida) throw Object.assign(new Error('No es un mensaje de la bandeja de salida'), { status: 404 })
+  if (m.estado === 'enviando') throw new Error('Se está mandando en este momento')
+  quitarMensaje(chatId, id)
+  if (m.media?.archivo) borrarArchivo(claveMedia(chatId, m.media.archivo)).catch(() => {})
+  return { ok: true }
+}
+
+let salidaPeriodica = false
+function arrancarSalidaPeriodica() {
+  if (salidaPeriodica) return
+  salidaPeriodica = true
+  setInterval(() => sinUsuario(() => procesarSalida().catch(() => {})), 60_000).unref()
+}
+
+export function enviarTexto(chatId, texto, citadoId, menciones) {
   const limpio = String(texto || '').trim()
   if (!limpio) throw new Error('El mensaje está vacío')
-  return enviar(chatId, { text: limpio }, undefined, mensajeCitado(chatId, citadoId))
+  return enviarOEncolar(chatId, { tipo: 'texto', texto: limpio, citadoId, menciones: mencionesDe(chatId, limpio, menciones) })
 }
 
 /**
@@ -1661,22 +2121,14 @@ export async function enviarReaccion(chatId, id, emoji) {
 }
 
 export function enviarArchivo(chatId, buffer, { mime, nombre, caption }) {
-  const base = (mime || 'application/octet-stream').split(';')[0].trim().toLowerCase()
-  const texto = caption || undefined
-  let contenido
-  if (/^image\/(jpeg|png|webp)$/.test(base)) contenido = { image: buffer, caption: texto, mimetype: base }
-  else if (base === 'video/mp4') contenido = { video: buffer, caption: texto, mimetype: base }
-  else if (base.startsWith('audio/')) contenido = { audio: buffer, mimetype: base }
-  else contenido = { document: buffer, mimetype: base, fileName: nombre || 'archivo', caption: texto }
-  return enviar(chatId, contenido, buffer)
+  return enviarOEncolar(chatId, { tipo: 'archivo', mime: mime || 'application/octet-stream', nombre, caption }, buffer)
 }
 
+/** Nota de voz: se convierte a ogg/opus (como las del celular) y lleva su forma de onda real. */
 export async function enviarNotaDeVoz(chatId, buffer, segundos) {
-  asegurarConectado()
   const ogg = await aNotaDeVoz(buffer)
-  const contenido = { audio: ogg, mimetype: 'audio/ogg; codecs=opus', ptt: true }
-  if (segundos > 0) contenido.seconds = Math.round(segundos)
-  return enviar(chatId, contenido, ogg)
+  const ondas = await formaDeOnda(ogg).catch(() => null)
+  return enviarOEncolar(chatId, { tipo: 'nota_voz', segundos, ondas }, ogg)
 }
 
 /** Abre (o crea) un chat con un número que puede no haber escrito nunca. */

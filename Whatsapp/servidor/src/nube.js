@@ -13,6 +13,7 @@
 import pg from 'pg'
 import { WA_DATABASE_URL } from './config.js'
 import { log } from './eventos.js'
+import * as diario from './diario.js'
 
 const ESPERA_MS = 1500
 const TANDA = 500 // filas por consulta
@@ -169,6 +170,7 @@ const pendientes = {
   estado: false,
   borrarChats: new Set(),
   borrarAntesDe: 0, // segundos: se borran los mensajes anteriores (ventana de días)
+  borrarMensajes: new Map(), // "jid\nid" → [jid, id]: mensajes sueltos que se quitan (bandeja de salida)
 }
 let leerEstado = null // lo pone el almacén: devuelve su estado y sus mensajes en memoria
 let timer = null
@@ -201,6 +203,14 @@ export function estadoCambiado() {
   pendientes.estado = true
   programar()
 }
+/** Un mensaje suelto se quita de la base (por ejemplo, el borrador de la bandeja de salida ya enviado). */
+export function mensajeBorrado(jid, id) {
+  const k = `${jid}\n${id}`
+  pendientes.mensajes.delete(k)
+  pendientes.borrarMensajes.set(k, [jid, id])
+  programar()
+}
+
 /** Los mensajes anteriores a `corte` (segundos) salieron de la ventana: se borran de la base. */
 export function mensajesAnterioresBorrados(corte) {
   pendientes.borrarAntesDe = Math.max(pendientes.borrarAntesDe, corte)
@@ -251,13 +261,14 @@ const SQL_ESTADO = `
 const trozos = (lista) => Array.from({ length: Math.ceil(lista.length / TANDA) }, (_, i) => lista.slice(i * TANDA, (i + 1) * TANDA))
 
 /** Escribe en tandas lo que un volcado trae (se usa al escribir y al importar). */
-async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar, borrarAntesDe = 0 }, marcas) {
+async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar, borrarAntesDe = 0, borrarMensajes = [] }, marcas) {
   for (const t of trozos(mensajes)) await cliente.query(SQL_MENSAJES, [aJson(t)])
   for (const t of trozos(chats.map((c) => filaChat(c, marcas)))) await cliente.query(SQL_CHATS, [aJson(t)])
   for (const t of trozos(contactos)) await cliente.query(SQL_CONTACTOS, [aJson(t)])
   if (estadoKv.length) await cliente.query(SQL_ESTADO, [aJson(estadoKv)])
   if (borrar.length) await cliente.query('delete from wa.chats where jid = any($1)', [borrar])
   if (borrarAntesDe) await cliente.query('delete from wa.mensajes where ts < to_timestamp($1)', [borrarAntesDe])
+  for (const [jid, id] of borrarMensajes) await cliente.query('delete from wa.mensajes where chat_jid = $1 and id = $2', [jid, id])
 }
 
 const kvDe = (estado) => [
@@ -293,6 +304,7 @@ export async function escribir() {
     estadoKv: pendientes.estado ? kvDe(estado) : [],
     borrar: [...pendientes.borrarChats],
     borrarAntesDe: pendientes.borrarAntesDe,
+    borrarMensajes: [...pendientes.borrarMensajes.values()],
   }
   const respaldo = {
     mensajes: new Map(pendientes.mensajes),
@@ -301,6 +313,7 @@ export async function escribir() {
     estado: pendientes.estado,
     borrarChats: new Set(pendientes.borrarChats),
     borrarAntesDe: pendientes.borrarAntesDe,
+    borrarMensajes: new Map(pendientes.borrarMensajes),
   }
   pendientes.mensajes.clear()
   pendientes.chats.clear()
@@ -308,10 +321,14 @@ export async function escribir() {
   pendientes.estado = false
   pendientes.borrarChats.clear()
   pendientes.borrarAntesDe = 0
+  pendientes.borrarMensajes.clear()
 
   const hayAlgo =
-    lote.mensajes.length || lote.chats.length || lote.contactos.length || lote.estadoKv.length || lote.borrar.length || lote.borrarAntesDe
+    lote.mensajes.length || lote.chats.length || lote.contactos.length || lote.estadoKv.length || lote.borrar.length ||
+    lote.borrarAntesDe || lote.borrarMensajes.length
   if (!hayAlgo) return
+  // Lo anotado en el diario hasta acá es lo que lleva esta tanda: se borra cuando Supabase confirme.
+  const tramo = diario.cerrarTramo()
 
   escribiendo = (async () => {
     const cliente = await base().connect()
@@ -319,6 +336,7 @@ export async function escribir() {
       await cliente.query('begin')
       await volcar(cliente, lote, estado)
       await cliente.query('commit')
+      diario.tramoGuardado(tramo)
     } catch (err) {
       await cliente.query('rollback').catch(() => {})
       // Lo que no se pudo escribir vuelve a la cola y se reintenta en 10 s.
@@ -328,6 +346,7 @@ export async function escribir() {
       for (const j of respaldo.borrarChats) pendientes.borrarChats.add(j)
       pendientes.estado ||= respaldo.estado
       pendientes.borrarAntesDe = Math.max(pendientes.borrarAntesDe, respaldo.borrarAntesDe)
+      for (const [k, v] of respaldo.borrarMensajes) if (!pendientes.borrarMensajes.has(k)) pendientes.borrarMensajes.set(k, v)
       log('aviso', 'No se pudo guardar en Supabase, se reintenta', err.message)
       clearTimeout(timer)
       timer = setTimeout(escribir, 10000)
@@ -340,7 +359,7 @@ export async function escribir() {
   } finally {
     escribiendo = null
   }
-  if (pendientes.mensajes.size || pendientes.chats.size || pendientes.contactos.size || pendientes.estado || pendientes.borrarChats.size || pendientes.borrarAntesDe) {
+  if (pendientes.mensajes.size || pendientes.chats.size || pendientes.contactos.size || pendientes.estado || pendientes.borrarChats.size || pendientes.borrarAntesDe || pendientes.borrarMensajes.size) {
     programar()
   }
 }
