@@ -371,7 +371,8 @@ function escribir(jid, op) {
 
 /** Lo que ve el navegador: sin el mensaje crudo de WhatsApp. */
 export function vistaMensaje(m) {
-  const { raw, ...resto } = m
+  const resto = { ...m }
+  delete resto.raw
   return resto
 }
 
@@ -664,6 +665,8 @@ export async function usoAlmacenamiento() {
     carpeta: `${EN_SUPABASE ? 'Mensajes en Supabase (esquema wa)' : `Mensajes en ${DATA_DIR}`} · archivos en ${DONDE}`,
     almacen: ALMACEN,
     pendientesDeGuardar: EN_SUPABASE ? nube.pendientesDeGuardar() : 0,
+    // Último respaldo cifrado de la sesión en R2 ({ ts, bytes, error }), o null si está apagado.
+    respaldo: estado.meta.respaldo || null,
   }
 }
 

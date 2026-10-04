@@ -1,7 +1,20 @@
 import express from 'express'
-import { HOST, LOGIN_CONFIGURADO, numeroLinea, ORIGENES_CRM, VENTANA_DIAS, PUERTO, SOLO_ESTA_PC, WEB_DIR } from './src/config.js'
+import {
+  DETRAS_DE_PROXY,
+  HOST,
+  LOGIN_CONFIGURADO,
+  MEDIA_MAX_BYTES,
+  MEDIA_MAX_MB,
+  numeroLinea,
+  ORIGENES_CRM,
+  VENTANA_DIAS,
+  PUERTO,
+  SOLO_ESTA_PC,
+  WEB_DIR,
+} from './src/config.js'
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
-import { cerrarSesion, exigirCabecera, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
+import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
+import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
@@ -18,10 +31,12 @@ if (!SOLO_ESTA_PC && !LOGIN_CONFIGURADO) {
   process.exit(1)
 }
 
+const INICIO = Date.now()
 const app = express()
 app.disable('x-powered-by')
-// Detrás de un proxy: así se sabe si el pedido vino por https (para la cookie).
-app.set('trust proxy', true)
+// Solo detrás de un proxy (Cloudflare Tunnel, nginx) se cree lo que el proxy informa
+// sobre https y la IP. Sin proxy, cualquiera podría inventarse esas cabeceras.
+app.set('trust proxy', DETRAS_DE_PROXY)
 app.use(express.json({ limit: '1mb' }))
 // El panel solo se puede mostrar embebido dentro del CRM, nunca en una página ajena.
 app.use((req, res, next) => {
@@ -47,13 +62,45 @@ function chatId(req) {
   return id
 }
 
-const binario = express.raw({ type: () => true, limit: '64mb' })
+/**
+ * Una acción que cambia algo: además de responder, queda en la auditoría (quién, qué,
+ * cuándo, en qué chat, desde qué IP). `detalle` arma lo que vale la pena guardar, nunca
+ * el contenido de los mensajes.
+ */
+const accion = (nombre, fn, detalle = () => ({})) =>
+  ruta(async (req, res) => {
+    const id = req.params.id ? chatId(req) : null
+    try {
+      const r = await fn(req, res)
+      auditar({ req, accion: nombre, chatId: id, detalle: detalle(req, r) || {} })
+      return r
+    } catch (err) {
+      auditar({ req, accion: nombre, resultado: 'error', chatId: id, detalle: { error: err.message } })
+      throw err
+    }
+  })
+
+const binario = express.raw({ type: () => true, limit: MEDIA_MAX_BYTES })
 function archivoDe(req) {
   if (!Buffer.isBuffer(req.body) || !req.body.length) throw new Error('No llegó ningún archivo')
   return req.body
 }
 
-/* Sesión: lo único de /api que se puede usar sin haber entrado */
+/* Público: lo único de /api que responde sin haber entrado */
+
+// Para el monitoreo (Task Scheduler, un vigía externo): si el servicio está vivo y la
+// línea conectada. No da datos de la cuenta.
+app.get('/api/salud', (req, res) => {
+  const { conexion, desde } = wa.estadoConexion(null)
+  res.status(conexion === 'conectado' ? 200 : 503).json({
+    ok: conexion === 'conectado',
+    conexion,
+    desdeSeg: Math.round((Date.now() - desde) / 1000),
+    activoSeg: Math.round((Date.now() - INICIO) / 1000),
+  })
+})
+// Desde qué sitios puede llegar la sesión del CRM (el panel embebido solo acepta esos).
+app.get('/api/publico', (req, res) => res.json({ origenesCrm: ORIGENES_CRM }))
 app.post('/api/sesion', iniciarSesion)
 app.post('/api/sesion/salir', cerrarSesion)
 
@@ -67,44 +114,45 @@ app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))
-app.get('/api/estado', ruta(() => ({ ...wa.estadoConexion(), config: config() })))
+app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: { ...config(), mediaMaxMb: MEDIA_MAX_MB } })))
 app.get('/api/log', ruta(() => ultimosLogs()))
+app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
-app.post('/api/config', ruta((req) => {
-  const c = setConfig(req.body || {})
+app.post('/api/config', exigirLinea, accion('preferencias', (req) => {
+  const c = { ...setConfig(req.body || {}), mediaMaxMb: MEDIA_MAX_MB }
   emitir('config', c)
   return c
-}))
-app.post('/api/desvincular', ruta(async () => {
+}, (req) => ({ cambios: req.body })))
+app.post('/api/desvincular', exigirLinea, accion('desvincular', async () => {
   await wa.desvincular()
   return { ok: true }
 }))
-app.post('/api/reconectar', ruta(async () => {
+app.post('/api/reconectar', exigirLinea, accion('reconectar', async () => {
   await wa.reconectar()
   return { ok: true }
 }))
-app.post('/api/sincronizar-chats', ruta(() => wa.sincronizarChats()))
-app.post('/api/sincronizar-grupos', ruta(() => wa.sincronizarGrupos()))
+app.post('/api/sincronizar-chats', exigirEscritura, accion('sincronizar_chats', () => wa.sincronizarChats()))
+app.post('/api/sincronizar-grupos', exigirEscritura, accion('sincronizar_grupos', () => wa.sincronizarGrupos()))
 
 /* Chats y mensajes */
 app.get('/api/chats', ruta(() => listarChats()))
 // Búsqueda de texto. Sin `chat` busca en todas las conversaciones.
 app.get('/api/buscar', ruta((req) => buscarMensajes(req.query.q, { jid: req.query.chat || null })))
-app.post('/api/chats', ruta(async (req) => ({ id: await wa.abrirChat(req.body?.telefono) })))
+app.post('/api/chats', exigirEscritura, accion('abrir_chat', async (req) => ({ id: await wa.abrirChat(req.body?.telefono) }), (req, r) => ({ chat: r.id })))
 app.get('/api/chats/:id/mensajes', ruta((req) => listarMensajes(chatId(req)).map(vistaMensaje)))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
-app.post('/api/chats/:id/reenviar', ruta((req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos)))
-app.post('/api/chats/:id/salir', ruta((req) => wa.salirDelGrupo(chatId(req))))
-app.post('/api/chats/:id/marca', ruta((req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null)))
-app.post('/api/chats/:id/leido', ruta(async (req) => {
+app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))
+app.post('/api/chats/:id/salir', exigirLinea, accion('salir_grupo', (req) => wa.salirDelGrupo(chatId(req))))
+app.post('/api/chats/:id/marca', exigirEscritura, accion('marca', (req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null), (req) => ({ marca: req.body?.accion, valor: req.body?.valor ?? null })))
+app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
-app.post('/api/chats/:id/texto', ruta(async (req) => ({ id: await wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId) })))
-app.post('/api/chats/:id/reaccion', ruta((req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji)))
-app.post('/api/chats/:id/eliminar', ruta((req) => wa.eliminarMensaje(chatId(req), req.body?.id)))
-app.post('/api/chats/:id/destacar', ruta((req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar)))
+app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', async (req) => ({ id: await wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId) }), (req, r) => ({ mensaje: r.id, largo: String(req.body?.texto || '').length })))
+app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))
+app.post('/api/chats/:id/eliminar', exigirEscritura, accion('eliminar_mensaje', (req) => wa.eliminarMensaje(chatId(req), req.body?.id), (req) => ({ mensaje: req.body?.id })))
+app.post('/api/chats/:id/destacar', exigirEscritura, accion('destacar', (req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar), (req) => ({ mensaje: req.body?.id })))
 app.post('/api/chats/:id/presencia', ruta((req) => wa.suscribirPresencia(chatId(req))))
 app.get('/api/chats/:id/foto', ruta(async (req, res) => {
   const jid = chatId(req)
@@ -116,16 +164,16 @@ app.get('/api/chats/:id/foto', ruta(async (req, res) => {
     throw err
   }
 }))
-app.post('/api/chats/:id/archivo', binario, ruta(async (req) => ({
+app.post('/api/chats/:id/archivo', exigirEscritura, binario, accion('enviar_archivo', async (req) => ({
   id: await wa.enviarArchivo(chatId(req), archivoDe(req), {
     mime: req.get('content-type'),
     nombre: req.query.nombre,
     caption: req.query.texto,
   }),
-})))
-app.post('/api/chats/:id/nota-voz', binario, ruta(async (req) => ({
+}), (req, r) => ({ mensaje: r.id, tipo: req.get('content-type'), bytes: req.body?.length || 0 })))
+app.post('/api/chats/:id/nota-voz', exigirEscritura, binario, accion('enviar_nota_voz', async (req) => ({
   id: await wa.enviarNotaDeVoz(chatId(req), archivoDe(req), Number(req.query.segundos) || 0),
-})))
+}), (req, r) => ({ mensaje: r.id, segundos: Number(req.query.segundos) || 0 })))
 // Sirve solo archivos ya descargados; nunca dispara una descarga (evita reintentos en loop desde la pantalla).
 app.get('/api/chats/:id/media/:msgId', ruta(async (req, res) => {
   const { clave, mime, nombre } = wa.obtenerMedia(chatId(req), req.params.msgId)

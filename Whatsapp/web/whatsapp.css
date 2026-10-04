@@ -368,3 +368,12 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 
 /* Embebido en el CRM: el tema lo pone el CRM */
 .embebido .theme-btn { display: none; }
+
+/* Permisos: el que entra solo a mirar no ve dónde escribir; lo de la línea, solo admins. */
+.aviso-lectura { display: none; padding: 12px 16px; border-top: 1px solid var(--line); font-size: 13px; color: var(--ink-3); text-align: center; }
+.solo-lectura .composer { display: none !important; }
+/* Con un chat abierto (la caja de escribir sin [hidden]) se muestra el aviso en su lugar. */
+.solo-lectura .composer:not([hidden]) + .aviso-lectura { display: block; }
+.solo-lectura [data-act="sincronizar-chats"], .solo-lectura [data-act="sincronizar-grupos"] { display: none; }
+.sin-linea .solo-linea { display: none; }
+.sin-linea [data-pref] { pointer-events: none; opacity: 0.5; }

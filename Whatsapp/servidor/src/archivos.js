@@ -53,6 +53,20 @@ export async function guardar(clave, buffer, mime) {
   fs.writeFileSync(ruta, buffer)
 }
 
+/** Contenido completo de un archivo (del disco si está ahí, si no de R2). null si no existe. */
+export async function leer(clave) {
+  const local = enDisco(clave)
+  if (fs.existsSync(local)) return fs.readFileSync(local)
+  if (!cliente) return null
+  try {
+    const obj = await cliente.send(new GetObjectCommand({ Bucket: R2.bucket, Key: clave }))
+    return Buffer.from(await obj.Body.transformToByteArray())
+  } catch (err) {
+    if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return null
+    throw err
+  }
+}
+
 /** Borra un archivo (de R2 y del disco, esté donde esté). */
 export async function borrar(clave) {
   fs.rmSync(enDisco(clave), { force: true })

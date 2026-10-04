@@ -51,7 +51,9 @@ Teléfono con WhatsApp Business
 
 ## Dónde corre
 
-Por ahora, solo en local, para probar. Dónde se va a alojar está pendiente de definir.
+En la **PC titular** de la concesionaria, que queda siempre encendida, como tarea de
+Windows que arranca sola, publicada por https con Cloudflare Tunnel. No hace falta Vercel
+ni otro hosting. Instalación, respaldo, alertas y restauración: [OPERACION.md](OPERACION.md).
 
 ---
 
@@ -61,12 +63,14 @@ No hay usuarios ni contraseñas propias del WhatsApp, ni se elige "qué PC" o "q
 empleado" se es: cada uno entra con su usuario del CRM y queda identificado con él.
 
 1. En el CRM, el ítem **WhatsApp** del menú (`/crm/whatsapp`) muestra el panel embebido
-   en la misma página, pasándole el token de Supabase del usuario (`#t=...`).
+   en la misma página. El panel le pide al CRM el token de Supabase del usuario por
+   mensaje entre ventanas (`postMessage`), y solo lo acepta si viene de un origen de
+   `CRM_URL` (`GET /api/publico`). El token nunca va en la dirección, el historial ni
+   los registros de ningún servidor.
 2. El servidor le pregunta a Supabase de quién es ese token, busca el usuario en
    `crm.usuarios` y revisa que esté **activo** y tenga **permiso**.
-3. Si todo da, deja una cookie propia, firmada, que dura 12 horas (`SESION_HORAS`). El
-   token se borra de la dirección. Si la sesión vence con el panel abierto, el CRM lo
-   recarga solo con un token nuevo.
+3. Si todo da, deja una cookie propia, firmada, que dura 12 horas (`SESION_HORAS`). Si
+   la sesión vence con el panel abierto, el panel le pide al CRM un token nuevo y sigue.
 4. En cada pedido se vuelve a mirar el usuario (con 60 s de caché). Si lo dan de baja o
    le sacan el permiso en el CRM, **pierde el acceso en menos de un minuto**.
 
@@ -83,23 +87,26 @@ empleado" se es: cada uno entra con su usuario del CRM y queda identificado con 
 
 ### Quién tiene permiso
 
-Todo usuario **activo** del CRM. El ítem **WhatsApp** está siempre en el menú, para todos
-los roles, y no hay que configurar nada en la base. Si lo dan de baja en el CRM, deja de
-entrar.
+Por rol del CRM (configurable en el `.env` del servidor), y solo usuarios **activos**:
 
-Para limitarlo a algunos roles se usa `WHATSAPP_ROLES` en el servidor (por ejemplo
-`admin,dueno`); el resto ve el menú pero el panel le dice que no tiene acceso.
+| Variable | Por defecto | Qué pueden hacer |
+|---|---|---|
+| `WHATSAPP_ROLES` | `admin,dueno,vendedor` | Entrar a la bandeja y escribir |
+| `WHATSAPP_ROLES_LINEA` | `admin,dueno` | Además: ver el QR, vincular, desvincular, reconectar, preferencias, salir de grupos y ver la auditoría |
+| `WHATSAPP_ROLES_LECTURA` | — | Solo mirar: no escriben ni cambian nada |
+
+El servidor lo controla en cada pedido (403 si no corresponde) y el panel esconde lo que
+el usuario no puede usar. Cada acción queda en la **auditoría** (`wa.auditoria`), también
+los intentos rechazados.
 
 ### Quién puede vincular la línea
 
-Cualquier usuario ve el QR en **Conexión** y lo puede escanear. Con el número de la
-concesionaria fijado (`WHATSAPP_NUMERO`), si alguien lo escanea con otro número (por
-ejemplo, su celular personal), el servidor lo desvincula al instante, no guarda nada de
-esa cuenta y la pantalla avisa qué número se rechazó. **Sin `WHATSAPP_NUMERO` se acepta
-cualquier número**: el servidor lo avisa al arrancar.
+Solo los roles de `WHATSAPP_ROLES_LINEA`: a los demás el servidor ni les manda el QR. Con
+el número de la concesionaria fijado (`WHATSAPP_NUMERO`), además, si se escanea con otro
+número el servidor lo desvincula al instante, no guarda nada de esa cuenta, lo deja en la
+auditoría y la pantalla avisa qué número se rechazó.
 
-**Desvincular** (en **Conexión**) también lo puede hacer cualquier usuario. Corta la
-línea para todos y pide confirmación; en el registro de actividad queda quién fue.
+**Desvincular** también es de `WHATSAPP_ROLES_LINEA`: corta la línea para todos.
 
 La línea se vincula únicamente con QR. Funciona igual con WhatsApp y con WhatsApp
 Business (la app del celular).
@@ -134,7 +141,12 @@ esté definido en el entorno tiene prioridad.
 | `SUPABASE_ANON_KEY` | (el de la raíz) | Para verificar el token del usuario |
 | `SUPABASE_SERVICE_ROLE_KEY` | (el de la raíz) | Para leer `crm.usuarios`. **Solo servidor** |
 | `CRM_URL` | — | Dirección del CRM: el único sitio que puede embeber el panel, y adónde manda "Ir al CRM" a quien entra sin sesión |
-| `WHATSAPP_ROLES` | — (todos) | Limita el WhatsApp a esos roles del CRM, separados por coma |
+| `WHATSAPP_ROLES` / `_LINEA` / `_LECTURA` | `admin,dueno,vendedor` / `admin,dueno` / — | Permisos por rol (ver "Quién tiene permiso") |
+| `WA_DETRAS_DE_PROXY` | `off` | `on` con Cloudflare Tunnel o nginx: toma de ahí el https y la IP |
+| `WA_BACKUP_CLAVE` | — | Cifra el respaldo de la sesión y los `.env` en R2 (ver OPERACION.md) |
+| `WA_ALERTA_EMAIL`, `RESEND_API_KEY`, `WA_ALERTA_WEBHOOK` | — | Destino de las alertas (ver OPERACION.md) |
+| `WA_MEDIA_MAX_MB` | `64` | Tamaño máximo de archivo, para bajar y para mandar |
+| `WA_VERSION` | — | Versión fija del protocolo de WhatsApp Web |
 | `WHATSAPP_NUMERO` | — | Número de la concesionaria, con código de país. Si se escanea el QR con otro, se rechaza. Vacío: se acepta cualquiera |
 | `SESION_HORAS` | `12` | Cuánto dura la sesión del panel |
 | `SESION_SECRETO` | se genera | Firma de la cookie. Si no se define se guarda en `DATA_DIR/secreto-sesion` |
@@ -242,7 +254,7 @@ archivos.
 | Síntoma | Qué pasa |
 |---|---|
 | El panel dice "Entrá desde el CRM" | No hay sesión o venció (12 h). Abrirlo de nuevo con el botón del CRM. |
-| "Tu usuario no tiene acceso al WhatsApp" | El usuario está inactivo en el CRM, o su rol no está en `WHATSAPP_ROLES`. |
+| "Tu usuario no tiene acceso al WhatsApp" | El usuario está inactivo en el CRM, o su rol no está en `WHATSAPP_ROLES` ni en `WHATSAPP_ROLES_LECTURA`. |
 | El servidor no arranca y habla de `HOST` | Está abierto a la red sin login configurado. Completar las variables de Supabase. |
 | Error 440 / "Otra conexión abrió esta misma sesión" | Hay dos servidores con la misma carpeta `data/`. Dejar uno solo. |
 | Se desvinculó solo | Pasaron más de 14 días sin abrir WhatsApp en el celular, o se cerró desde el teléfono. Escanear el QR otra vez. |

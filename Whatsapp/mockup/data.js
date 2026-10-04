@@ -123,6 +123,7 @@ const LOG = [
 ]
 
 /* Foto de auto dibujada (no hay imágenes externas en el mockup). */
+// eslint-disable-next-line no-unused-vars -- la usa mockup/app.js (scripts sueltos, sin módulos)
 function carSvg({ color = '#be1e2d', body = 'sedan' } = {}) {
   const shapes = {
     pickup: ['M18 96 L24 76 Q27 70 34 70 L70 68 L88 50 Q92 46 100 46 L128 46 Q134 46 137 52 L146 70 L178 72 Q186 73 186 81 L186 96 Z', 'M92 67 L101 54 Q103 51 107 51 L126 51 Q130 51 132 55 L138 67 Z'],
@@ -144,4 +145,5 @@ function carSvg({ color = '#be1e2d', body = 'sedan' } = {}) {
   </svg>`
 }
 
+// eslint-disable-next-line no-unused-vars -- la usa mockup/app.js (scripts sueltos, sin módulos)
 const fmtKm = (n) => new Intl.NumberFormat('es-AR').format(n)

@@ -21,6 +21,8 @@ import {
   CRM_URL,
   DATA_DIR,
   LOGIN_CONFIGURADO,
+  ROLES_LECTURA,
+  ROLES_LINEA,
   ROLES_WHATSAPP,
   SESION_HORAS,
   SESION_SECRETO,
@@ -28,6 +30,7 @@ import {
   SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_URL,
 } from './config.js'
+import { auditar } from './auditoria.js'
 
 const COOKIE = 'nf_wa'
 const CACHE_MS = 60 * 1000
@@ -122,8 +125,20 @@ async function supabase(ruta, { token, esquema } = {}) {
 const fichas = new Map() // id → { ts, usuario | null }
 
 /**
- * Ficha del usuario en el CRM. null si no existe, está inactivo o su rol quedó afuera
- * de WHATSAPP_ROLES (vacío: entran todos).
+ * Qué puede hacer cada rol (ver WHATSAPP_ROLES* en config.js). null: no entra.
+ *   escribir  mandar mensajes, reaccionar, archivar, etc.
+ *   linea     además ver el QR, vincular, desvincular y cambiar preferencias
+ */
+export function permisosDeRol(rol) {
+  const linea = ROLES_LINEA.includes(rol)
+  const escribir = linea || ROLES_WHATSAPP.includes(rol)
+  if (!escribir && !ROLES_LECTURA.includes(rol)) return null
+  return { escribir, linea }
+}
+
+/**
+ * Ficha del usuario en el CRM, con sus permisos. null si no existe, está inactivo o su
+ * rol no tiene acceso al WhatsApp.
  */
 async function fichaUsuario(id) {
   const guardada = fichas.get(id)
@@ -132,14 +147,8 @@ async function fichaUsuario(id) {
     `/rest/v1/usuarios?id=eq.${encodeURIComponent(id)}&select=id,usuario,nombre,rol,activo`,
     { esquema: 'crm' },
   )
-  let usuario = null
-  if (fila?.activo && (!ROLES_WHATSAPP.length || ROLES_WHATSAPP.includes(fila.rol))) {
-    usuario = {
-      id: fila.id,
-      nombre: fila.nombre || fila.usuario || 'Sin nombre',
-      rol: fila.rol,
-    }
-  }
+  const permisos = fila?.activo ? permisosDeRol(fila.rol) : null
+  const usuario = permisos ? { id: fila.id, nombre: fila.nombre || fila.usuario || 'Sin nombre', rol: fila.rol, ...permisos } : null
   fichas.set(id, { ts: Date.now(), usuario })
   return usuario
 }
@@ -157,8 +166,12 @@ export async function iniciarSesion(req, res) {
   try {
     const user = await supabase('/auth/v1/user', { token })
     const usuario = await fichaUsuario(user.id)
-    if (!usuario) return res.status(403).json({ error: 'Tu usuario del CRM no tiene acceso al WhatsApp. Pedíselo a un administrador.' })
+    if (!usuario) {
+      auditar({ req, usuario: { id: user.id, nombre: user.email }, accion: 'sesion', resultado: 'denegado' })
+      return res.status(403).json({ error: 'Tu usuario del CRM no tiene acceso al WhatsApp. Pedíselo a un administrador.' })
+    }
     ponerCookie(req, res, crearCookie(usuario.id), SESION_HORAS * 3600)
+    auditar({ req, usuario, accion: 'sesion' })
     res.json({ usuario, login: true })
   } catch (err) {
     if (err.status === 401 || err.status === 403) return noAutorizado(res, 'La sesión del CRM venció. Volvé a abrir el WhatsApp desde el CRM.')
@@ -197,6 +210,24 @@ export async function exigirSesion(req, res, next) {
 
 /** GET /api/sesion: quién está usando el panel. */
 export const sesionActual = (req) => ({ usuario: req.usuario || null, login: PIDE_SESION })
+
+/** Puede ver el QR, vincular y desvincular. Sin login (solo esta PC) puede cualquiera. */
+export const manejaLinea = (usuario) => !PIDE_SESION || !!usuario?.linea
+/** Puede mandar mensajes y cambiar cosas de los chats. */
+export const puedeEscribir = (usuario) => !PIDE_SESION || !!usuario?.escribir
+
+function exigir(condicion, mensaje) {
+  return (req, res, next) => {
+    if (condicion(req.usuario)) return next()
+    auditar({ req, accion: `${req.method} ${req.route?.path || req.path}`, resultado: 'denegado' })
+    res.status(403).json({ error: mensaje })
+  }
+}
+
+/** Corta el pedido si el usuario no maneja la línea (QR, vincular, desvincular, preferencias). */
+export const exigirLinea = exigir(manejaLinea, 'Solo un administrador puede vincular o desvincular la línea y cambiar las preferencias.')
+/** Corta el pedido si el usuario entra solo a mirar. */
+export const exigirEscritura = exigir(puedeEscribir, 'Tu usuario puede ver los chats pero no escribir ni cambiar nada.')
 
 /**
  * Freno contra pedidos armados desde otro sitio: como la cookie también viaja dentro del

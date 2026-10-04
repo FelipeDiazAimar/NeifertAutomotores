@@ -28,6 +28,9 @@ function guardarLocal(clave, valor) {
   } catch {}
 }
 
+/** Límite de archivos (lo informa el servidor: WA_MEDIA_MAX_MB). */
+const limiteMb = () => state.config?.mediaMaxMb || 64
+
 function fmtBytes(b) {
   if (!b) return '0 KB'
   const u = ['B', 'KB', 'MB', 'GB']
@@ -550,7 +553,7 @@ function mediaPendienteHtml(m) {
   const md = m.media
   const nombre = md.nombre || NOMBRE_MEDIA[m.tipo] || 'Archivo'
   if (md.estado === 'grande') {
-    return `<div class="media-missing">${ic('alert')}<span class="mm-txt"><b>${esc(nombre)}</b><small>${fmtBytes(md.tamano)}: supera el límite de descarga (50 MB).</small></span></div>`
+    return `<div class="media-missing">${ic('alert')}<span class="mm-txt"><b>${esc(nombre)}</b><small>${fmtBytes(md.tamano)}: supera el límite de descarga (${limiteMb()} MB).</small></span></div>`
   }
   if (md.estado === 'descargando') {
     return `<div class="media-missing"><span class="spinner" aria-hidden="true"></span><span class="mm-txt"><b>${esc(nombre)}</b><small>Descargando…</small></span></div>`
@@ -840,23 +843,52 @@ window.addEventListener('message', (e) => {
   syncTema()
 })
 
+/** 'http://localhost:*' → acepta cualquier puerto de localhost. */
+const coincideOrigen = (origen, patron) =>
+  new RegExp('^' + patron.replace(/[.+?^$(){}|[\]\\]/g, '\\$&').replace(/\*/g, '[^/]*') + '$').test(origen)
+
 /**
- * Entra al panel. El CRM abre esta página con su token en la URL (#t=...): se canjea
- * por la cookie del panel y se borra de la barra de direcciones. Sin token, se revisa
- * si ya había una sesión abierta.
+ * Le pide al CRM (la página que contiene al panel) la sesión de su usuario. El token
+ * viaja por mensaje entre ventanas y solo se acepta si viene del CRM: nunca pasa por la
+ * dirección, el historial ni los registros de ningún servidor.
+ */
+async function tokenDelCrm() {
+  if (!EMBEBIDO) return null
+  const { origenesCrm = [] } = await fetch('/api/publico').then((r) => r.json()).catch(() => ({}))
+  return new Promise((resolve) => {
+    const fin = (token) => {
+      clearTimeout(timer)
+      window.removeEventListener('message', alMensaje)
+      resolve(token)
+    }
+    const alMensaje = (e) => {
+      if (e.source !== window.parent || e.data?.tipo !== 'nf-wa:token') return
+      if (!origenesCrm.some((p) => coincideOrigen(e.origin, p))) return
+      fin(typeof e.data.token === 'string' ? e.data.token : null)
+    }
+    const timer = setTimeout(() => fin(null), 10000)
+    window.addEventListener('message', alMensaje)
+    avisarAlCrm({ tipo: 'nf-wa:pedir-token' })
+  })
+}
+
+async function canjearToken(token) {
+  return fetch('/api/sesion', {
+    method: 'POST',
+    headers: { ...CABECERA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ token }),
+  })
+}
+
+/**
+ * Entra al panel: si ya hay sesión abierta la usa; si no, embebido en el CRM pide la del
+ * usuario del CRM y la canjea por la cookie del panel.
  */
 async function entrar() {
-  const m = /[#&]t=([^&]+)/.exec(location.hash)
-  let res
-  if (m) {
-    history.replaceState(null, '', location.pathname + location.search)
-    res = await fetch('/api/sesion', {
-      method: 'POST',
-      headers: { ...CABECERA, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token: decodeURIComponent(m[1]) }),
-    })
-  } else {
-    res = await fetch('/api/sesion')
+  let res = await fetch('/api/sesion')
+  if (res.status === 401 && EMBEBIDO) {
+    const token = await tokenDelCrm()
+    if (token) res = await canjearToken(token)
   }
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
@@ -866,22 +898,41 @@ async function entrar() {
   sesion.usuario = data.usuario || null
   sesion.login = !!data.login
   renderYo()
+  aplicarPermisos()
   avisarAlCrm({ tipo: 'nf-wa:listo' })
   return true
 }
 
+/** Lo que el usuario puede hacer, según su rol en el CRM (sin login, en esta PC, todo). */
+const puede = {
+  escribir: () => !sesion.login || !!sesion.usuario?.escribir,
+  linea: () => !sesion.login || !!sesion.usuario?.linea,
+}
+
+/** Esconde lo que el usuario no puede usar: el que entra solo a mirar no ve dónde escribir. */
+function aplicarPermisos() {
+  document.documentElement.classList.toggle('solo-lectura', !puede.escribir())
+  document.documentElement.classList.toggle('sin-linea', !puede.linea())
+}
+
+let renovando = false
 /**
- * Tapa el panel y explica cómo entrar. Embebido en el CRM, si la sesión venció (401) se
- * le avisa al CRM, que vuelve a cargar el panel con el token de su usuario.
+ * Tapa el panel y explica cómo entrar. Embebido en el CRM, si la sesión venció (401)
+ * primero se intenta renovarla en silencio con la sesión del CRM.
  */
-function pantallaSinSesion(data = {}, status = 0) {
+async function pantallaSinSesion(data = {}, status = 0) {
+  if (status === 401 && EMBEBIDO && !renovando) {
+    renovando = true
+    const token = await tokenDelCrm()
+    if (token && (await canjearToken(token)).ok) return location.reload()
+  }
   const pane = $('#sinSesion')
   $('#sinSesionTxt').textContent = data.error || 'Entrá al WhatsApp desde el CRM.'
   const link = $('#sinSesionLink')
   link.hidden = !data.crmUrl || EMBEBIDO
   if (data.crmUrl) link.href = data.crmUrl
   pane.hidden = false
-  avisarAlCrm({ tipo: 'nf-wa:sin-sesion', vencida: status === 401 })
+  avisarAlCrm({ tipo: 'nf-wa:sin-sesion' })
 }
 
 async function salirDeSesion() {
@@ -1663,7 +1714,7 @@ async function enviarTexto() {
 
 async function enviarArchivo(file) {
   if (!file || !state.activo) return
-  if (file.size > 60 * 1024 * 1024) return toast('El archivo supera 60 MB.')
+  if (file.size > limiteMb() * 1024 * 1024) return toast(`El archivo supera ${limiteMb()} MB.`)
   const input = $('#msgInput')
   const texto = input?.value.trim() || ''
   const params = new URLSearchParams({ nombre: file.name })
@@ -1764,9 +1815,12 @@ function renderPill() {
 function renderConexion() {
   const { conexion, qr, yo, intentos, numeroLinea, rechazo } = state.conn
   const [cls, texto] = TEXTO_CONEXION[conexion] || TEXTO_CONEXION.iniciando
-  const acciones = conexion === 'conectado'
-    ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button><button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>`
-    : conexion === 'desconectado' ? `<button class="btn primary" data-act="reconectar">${ic('refresh')}Reconectar</button>` : ''
+  // Reconectar y desvincular son de quien maneja la línea (WHATSAPP_ROLES_LINEA).
+  const acciones = !puede.linea()
+    ? ''
+    : conexion === 'conectado'
+      ? `<button class="btn ghost" data-act="reconectar">${ic('refresh')}Reconectar</button><button class="btn ghost" data-act="desvincular">${ic('unlink')}Desvincular</button>`
+      : conexion === 'desconectado' ? `<button class="btn primary" data-act="reconectar">${ic('refresh')}Reconectar</button>` : ''
 
   $('#lineaCard').innerHTML = `
     <h2>Línea de WhatsApp</h2>
@@ -1784,6 +1838,8 @@ function renderConexion() {
   let cuerpo
   if (conexion === 'conectado') {
     cuerpo = `<div class="conn-ok">${ic('circle-check')}<div>La línea está vinculada.</div></div>`
+  } else if (conexion === 'qr' && !puede.linea()) {
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La línea no está vinculada. Pedile a un administrador que la vincule desde su usuario.</div></div>`
   } else if (conexion === 'qr' && !qr) {
     cuerpo = `<div class="conn-ok">${ic('clock')}<div>Generando el código…</div></div>`
   } else if (conexion === 'qr') {
@@ -1946,8 +2002,37 @@ function setView(view) {
     renderLog()
     renderPrefs()
     cargarUso()
+    if (puede.linea()) cargarAuditoria()
   }
   renderPill()
+}
+
+const ACCIONES_AUDITORIA = {
+  sesion: 'Entró al panel', desvincular: 'Desvinculó la línea', reconectar: 'Reconectó', preferencias: 'Cambió preferencias',
+  enviar_texto: 'Mandó un mensaje', enviar_archivo: 'Mandó un archivo', enviar_nota_voz: 'Mandó una nota de voz',
+  reenviar: 'Reenvió mensajes', eliminar_mensaje: 'Eliminó un mensaje', marca: 'Archivó, fijó o silenció', reaccion: 'Reaccionó',
+  destacar: 'Destacó un mensaje', abrir_chat: 'Abrió un chat nuevo', salir_grupo: 'Salió de un grupo',
+  sincronizar_chats: 'Sincronizó chats', sincronizar_grupos: 'Sincronizó grupos', rechazo_numero: 'Rechazo de número equivocado',
+}
+
+/** Registro de auditoría (solo quien maneja la línea): quién hizo qué, cuándo y desde qué IP. */
+async function cargarAuditoria() {
+  const lista = $('#auditoriaList')
+  try {
+    const filas = await api('/api/auditoria?limite=100')
+    lista.innerHTML = filas.length
+      ? filas.map((f) => {
+          const d = new Date(f.ts)
+          const cls = f.resultado === 'ok' ? '' : f.resultado === 'denegado' ? 'wait' : 'off'
+          const que = ACCIONES_AUDITORIA[f.accion] || f.accion
+          const chat = f.chat_jid ? state.chats.get(f.chat_jid)?.nombre || f.chat_jid.split('@')[0] : ''
+          const extra = [f.resultado !== 'ok' ? (f.resultado === 'denegado' ? 'sin permiso' : f.detalle?.error || 'error') : '', chat, f.ip].filter(Boolean).join(' · ')
+          return `<li><time>${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}</time><span class="dot ${cls}"></span><div>${esc(f.usuario_nombre || 'Servidor')}: ${esc(que)}${extra ? `<small>${esc(extra)}</small>` : ''}</div></li>`
+        }).join('')
+      : '<li style="display:block">Sin acciones registradas todavía.</li>'
+  } catch (err) {
+    lista.innerHTML = `<li style="display:block">${esc(err.message)}</li>`
+  }
 }
 
 function esOscuro() {
@@ -2364,6 +2449,7 @@ document.addEventListener('click', async (e) => {
       }
       break
     case 'uso': cargarUso(); break
+    case 'auditoria': cargarAuditoria(); break
     case 'lb-close':
       $('#lightbox').hidden = true
       $('#lbFig').innerHTML = ''

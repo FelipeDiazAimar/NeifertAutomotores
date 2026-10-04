@@ -4,11 +4,18 @@
  * Todos los navegadores abiertos reciben lo mismo en el mismo momento: por eso varios
  * empleados pueden atender el mismo número sin pisarse. Además se lleva la cuenta de
  * quién está conectado y qué chat tiene abierto, para avisar "Nico está en este chat".
+ *
+ * El registro de actividad va también a archivos, uno por día (data/logs/AAAA-MM-DD.log),
+ * y se conservan LOG_DIAS días: sobrevive a un reinicio y se puede revisar después.
  */
+import fs from 'node:fs'
+import path from 'node:path'
 import { usuarioActual } from './auth.js'
+import { LOG_DIAS, LOG_DIR } from './config.js'
 
 const clientes = new Map() // res → { usuario, pestana }
 const registro = []
+const MAX_EN_MEMORIA = 300
 
 // Qué chat tiene abierto cada pestaña. Una persona puede tener el panel abierto en dos
 // lugares a la vez: se cuenta por pestaña y se muestra por persona.
@@ -33,8 +40,14 @@ export function suscribir(req, res) {
   })
 }
 
+/** `datos` puede ser una función (usuario) → datos, para lo que no todos pueden ver (el QR). */
 export function emitir(evento, datos) {
-  const payload = `event: ${evento}\ndata: ${JSON.stringify(datos)}\n\n`
+  const armar = (d) => `event: ${evento}\ndata: ${JSON.stringify(d)}\n\n`
+  if (typeof datos === 'function') {
+    for (const [res, { usuario }] of clientes) res.write(armar(datos(usuario)))
+    return
+  }
+  const payload = armar(datos)
   for (const res of clientes.keys()) res.write(payload)
 }
 
@@ -70,18 +83,72 @@ export function marcarViendo(pestana, chatId) {
 
 /* ---------------- Registro ---------------- */
 
+const dos = (n) => String(n).padStart(2, '0')
+const diaDe = (d) => `${d.getFullYear()}-${dos(d.getMonth() + 1)}-${dos(d.getDate())}`
+const horaDe = (d) => `${dos(d.getHours())}:${dos(d.getMinutes())}:${dos(d.getSeconds())}`
+const archivoDelDia = (d) => path.join(LOG_DIR, `${diaDe(d)}.log`)
+
+const oyentes = new Set()
+/** Avisa cada entrada del registro (lo usa el vigía para disparar alertas). */
+export const alRegistrar = (fn) => oyentes.add(fn)
+
+let diaActual = null
+/** Borra los archivos de registro más viejos que LOG_DIAS. Corre al arrancar y al cambiar el día. */
+function rotar(hoy) {
+  diaActual = diaDe(hoy)
+  try {
+    fs.mkdirSync(LOG_DIR, { recursive: true })
+    const limite = Date.now() - LOG_DIAS * 86400e3
+    for (const f of fs.readdirSync(LOG_DIR)) {
+      const m = /^(\d{4})-(\d{2})-(\d{2})\.log$/.exec(f)
+      if (m && new Date(+m[1], +m[2] - 1, +m[3]).getTime() < limite) fs.rmSync(path.join(LOG_DIR, f))
+    }
+  } catch (err) {
+    console.error(`No se pudieron rotar los registros: ${err.message}`)
+  }
+}
+
 /** nivel: 'ok' | 'info' | 'aviso' | 'error'. Si lo dispara un empleado, queda su nombre. */
 export function log(nivel, texto, detalle = '') {
   const quien = usuarioActual()?.nombre || null
-  const item = { ts: Date.now(), nivel, texto, detalle, quien }
+  const ahora = new Date()
+  const item = { ts: ahora.getTime(), nivel, texto, detalle, quien }
   registro.unshift(item)
-  if (registro.length > 300) registro.pop()
-  const hora = new Date().toLocaleTimeString('es-AR')
-  console.log(`[${hora}] ${texto}${detalle ? ` · ${detalle}` : ''}${quien ? ` (${quien})` : ''}`)
+  if (registro.length > MAX_EN_MEMORIA) registro.pop()
+  const linea = `[${horaDe(ahora)}] ${texto}${detalle ? ` · ${detalle}` : ''}${quien ? ` (${quien})` : ''}`
+  console.log(linea)
+  if (diaActual !== diaDe(ahora)) rotar(ahora)
+  try {
+    fs.appendFileSync(archivoDelDia(ahora), `${JSON.stringify(item)}\n`)
+  } catch (err) {
+    console.error(`No se pudo escribir el registro: ${err.message}`)
+  }
   emitir('log', item)
+  for (const fn of oyentes) {
+    try {
+      fn(item)
+    } catch {}
+  }
 }
 
 export const ultimosLogs = () => registro
+
+// Al arrancar, la actividad reciente sale de los archivos: así no se pierde al reiniciar.
+try {
+  const hoy = new Date()
+  const ayer = new Date(hoy.getTime() - 86400e3)
+  for (const d of [ayer, hoy]) {
+    const f = archivoDelDia(d)
+    if (!fs.existsSync(f)) continue
+    for (const l of fs.readFileSync(f, 'utf8').split('\n')) {
+      if (!l) continue
+      try {
+        registro.unshift(JSON.parse(l))
+      } catch {}
+    }
+  }
+  registro.splice(MAX_EN_MEMORIA)
+} catch {}
 
 // Mantiene viva la conexión SSE detrás de proxies que cortan conexiones inactivas.
 setInterval(() => {

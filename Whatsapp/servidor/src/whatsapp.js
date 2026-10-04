@@ -32,9 +32,13 @@ import makeWASocket, {
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
-import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, VENTANA_DIAS, numeroLinea } from './config.js'
+import { ARCHIVOS_ENV, BAILEYS_LOG, MEDIA_MAX_BYTES, MEDIA_RECIENTE_SEG, VENTANA_DIAS, VERSION_WA, numeroLinea } from './config.js'
 import { emitir, log } from './eventos.js'
-import { sinUsuario, usuarioActual } from './auth.js'
+import { alertar, resolver, vigilar } from './vigia.js'
+import { mismoNumero } from './telefono.js'
+import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
+import { auditar } from './auditoria.js'
+import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz } from './audio.js'
 import { configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
 import { borrar as borrarArchivo, listarArchivos } from './archivos.js'
@@ -104,6 +108,7 @@ const logger = pino({
 
 let sock = null
 let conexion = 'iniciando' // iniciando | conectando | qr | conectado | desconectado
+let conexionDesde = Date.now() // desde cuándo está en ese estado (para la alerta de caída)
 let qrDataUrl = null
 let yo = null
 // Último intento de vincular un número que no es el de la concesionaria: { telefono, ts }.
@@ -113,6 +118,7 @@ let reconectarTimer = null
 let detenido = false
 
 const enviados = new Map() // id → contenido, para reintentos que pide WhatsApp (getMessage)
+const idsDelPanel = new Set() // ids de lo mandado desde el panel (lo demás propio salió del celular)
 const mediaPropia = new Map() // id → buffer de archivos enviados desde el panel (evita volver a descargarlos)
 const descargando = new Set()
 const pushNames = new Map()
@@ -132,30 +138,34 @@ configurarFotos(() => (conexion === 'conectado' ? sock : null))
 
 /* ---------------- Conexión ---------------- */
 
-/** Cualquier usuario puede escanear el QR. Con WHATSAPP_NUMERO fijado, otro número se rechaza. */
-export const estadoConexion = () => ({
+/**
+ * Estado de la línea. El QR solo les llega a quienes manejan la línea (WHATSAPP_ROLES_LINEA):
+ * con él se vincula un celular. Con WHATSAPP_NUMERO, además, otro número se rechaza.
+ */
+export const estadoConexion = (usuario = usuarioActual()) => ({
   conexion,
-  qr: qrDataUrl,
+  desde: conexionDesde,
+  qr: manejaLinea(usuario) ? qrDataUrl : null,
+  puedeVincular: manejaLinea(usuario),
   numeroLinea: numeroLinea() ? `+${numeroLinea()}` : null,
   rechazo,
   yo,
   intentos,
 })
 
-const emitirEstado = () => emitir('estado', estadoConexion())
+const emitirEstado = () => emitir('estado', (usuario) => estadoConexion(usuario))
 
 function setConexion(nuevo) {
+  if (nuevo !== conexion) conexionDesde = Date.now()
   conexion = nuevo
   if (nuevo !== 'qr') qrDataUrl = null
   emitirEstado()
 }
 
-// Argentina: el mismo celular puede figurar como 54… o 549…; se comparan los últimos 10 dígitos.
-const mismoNumero = (a, b) => String(a).replace(/\D/g, '').slice(-10) === String(b).replace(/\D/g, '').slice(-10)
-
 /** La línea `telefono` no es la de la concesionaria: se desvincula y se vuelve a mostrar el QR. */
 async function rechazarLinea(s, telefono, motivo) {
   log('error', motivo, `${telefono} · se desvinculó solo`)
+  auditar({ accion: 'rechazo_numero', resultado: 'denegado', detalle: { telefono, motivo } })
   rechazo = { telefono, ts: Date.now() }
   // Primero se suelta el socket: así ningún evento de esa cuenta llega a guardarse.
   sock = null
@@ -206,7 +216,113 @@ function programar(ms) {
 /** Arranca (o reinicia) la conexión. Nunca queda atada al empleado que la pidió. */
 export function iniciar() {
   vigilarNumero()
+  arrancarVigia()
   return sinUsuario(() => iniciarConexion())
+}
+
+/**
+ * Versión del protocolo de WhatsApp Web, fija: WA_VERSION si está definida; si no, la
+ * última con la que se conectó bien (queda guardada), y si no hay ninguna, la que trae
+ * Baileys. Solo se consulta la vigente cuando WhatsApp rechaza la que se usa (405).
+ */
+let actualizarVersion = false
+async function versionWa() {
+  if (VERSION_WA) return VERSION_WA
+  if (actualizarVersion) {
+    actualizarVersion = false
+    try {
+      const { version } = await fetchLatestBaileysVersion()
+      setMeta({ versionWa: version })
+      log('aviso', 'Se actualizó la versión de WhatsApp Web', version.join('.'))
+      return version
+    } catch (err) {
+      log('aviso', 'No se pudo consultar la versión vigente de WhatsApp Web', err.message)
+    }
+  }
+  return meta().versionWa || undefined
+}
+
+/* ---------------- Señales del celular y vigía ---------------- */
+
+/**
+ * WhatsApp desvincula los dispositivos si el celular pasa 14 días sin conectarse. Cuenta
+ * como señal todo lo que solo puede venir del celular: un mensaje mandado desde él, o que
+ * responda un pedido de reenvío de archivos.
+ */
+function senalDelCelular() {
+  const ahoraMs = Date.now()
+  // Se guarda como mucho una vez por hora: no hace falta más precisión.
+  if (ahoraMs - (meta().ultimaSenalCelular || 0) > 3600e3) setMeta({ ultimaSenalCelular: ahoraMs })
+  sinRespuestaCelular = 0
+  resolver('celular-sin-respuesta')
+}
+
+let sinRespuestaCelular = 0
+/** El celular no respondió un pedido de reenvío: de a varios seguidos, puede estar sin internet. */
+function celularNoResponde() {
+  if (++sinRespuestaCelular < 3) return
+  alertar(
+    'El celular de la concesionaria no responde',
+    'No contestó varios pedidos seguidos para volver a subir archivos. Revisá que tenga internet y WhatsApp abierto.',
+    { clave: 'celular-sin-respuesta' },
+  )
+}
+
+/* ---------------- Respaldo de la sesión ---------------- */
+
+let respaldoTimer = null
+/**
+ * Respalda la sesión cifrada en R2 (ver respaldo.js). Los cambios de la llave vienen de a
+ * muchos seguidos: se agrupan y se respalda una vez, `ms` después del último.
+ */
+function programarRespaldo(ms = 120_000) {
+  if (!respaldoActivo()) return
+  clearTimeout(respaldoTimer)
+  respaldoTimer = setTimeout(() => sinUsuario(() => respaldarAhora()), ms)
+  respaldoTimer.unref?.()
+}
+
+async function respaldarAhora() {
+  try {
+    const r = await respaldarSesion(AUTH_DIR)
+    if (r) setMeta({ respaldo: { ts: Date.now(), bytes: r.bytes, archivos: r.archivos, error: null } })
+  } catch (err) {
+    setMeta({ respaldo: { ...(meta().respaldo || {}), error: err.message, errorTs: Date.now() } })
+    alertar('No se pudo respaldar la sesión de WhatsApp', `${err.message}. Si la PC se rompe, habría que volver a escanear el QR.`, { clave: 'respaldo', nivel: 'aviso' })
+    return
+  }
+  resolver('respaldo')
+}
+
+let respaldoEnMarcha = false
+function arrancarRespaldoPeriodico() {
+  if (respaldoEnMarcha) return
+  respaldoEnMarcha = true
+  if (!respaldoActivo()) {
+    log('aviso', 'Respaldo de la sesión apagado', 'Definí WA_BACKUP_CLAVE (y R2) para poder restaurar la línea en otra PC sin escanear el QR')
+    return
+  }
+  const respaldarEnvs = () =>
+    respaldarEnv().catch((err) => log('aviso', 'No se pudo respaldar la configuración (.env)', err.message))
+  respaldarEnvs()
+  setInterval(() => sinUsuario(() => respaldarAhora()), 6 * 3600e3).unref()
+  setInterval(respaldarEnvs, 24 * 3600e3).unref()
+}
+
+let vigiaEnMarcha = false
+function arrancarVigia() {
+  arrancarRespaldoPeriodico()
+  if (vigiaEnMarcha) return
+  vigiaEnMarcha = true
+  vigilar({
+    estado: () => ({ conexion, desde: conexionDesde }),
+    ultimaSenalCelular: () => meta().ultimaSenalCelular || null,
+    alDespertar: () => {
+      if (detenido) return
+      intentos = 0
+      iniciar().catch((err) => log('error', 'No se pudo reconectar al despertar', err.message))
+    },
+  })
 }
 
 async function iniciarConexion() {
@@ -223,15 +339,12 @@ async function iniciarConexion() {
 
   const { state, saveCreds } = await useMultiFileAuthState(AUTH_DIR)
   authActual = state
-  let version
-  try {
-    ;({ version } = await fetchLatestBaileysVersion())
-  } catch {
-    // Sin internet para consultar la versión: Baileys usa la que trae incorporada.
-  }
+  const version = await versionWa()
 
   const s = makeWASocket({
-    version,
+    // Sin versión fijada se usa la que trae Baileys: la clave no puede ir con undefined
+    // porque pisaría ese valor por defecto.
+    ...(version ? { version } : {}),
     auth: state,
     logger,
     // Presentarse como "WhatsApp de escritorio" (Browsers.windows('Desktop')) haría que el
@@ -256,7 +369,11 @@ async function iniciarConexion() {
     }
   }
 
-  s.ev.on('creds.update', saveCreds)
+  s.ev.on('creds.update', async (c) => {
+    await saveCreds(c)
+    // Cambió la llave de la sesión: se vuelve a respaldar (agrupado, no en cada cambio).
+    programarRespaldo()
+  })
   s.ev.on('connection.update', seguro('la conexión', (u) => alActualizarConexion(s, u)))
   s.ev.on('messaging-history.set', seguro('el historial', alHistorial))
   s.ev.on('messages.upsert', seguro('mensajes nuevos', async ({ messages, type }) => {
@@ -288,6 +405,7 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
   if (qr) {
     qrDataUrl = await QRCode.toDataURL(qr, { margin: 1, scale: 8 })
     if (conexion !== 'qr') log('info', 'Código QR listo para escanear')
+    if (conexion !== 'qr') conexionDesde = Date.now()
     conexion = 'qr'
     emitirEstado()
   }
@@ -305,6 +423,11 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     if (s.user?.lid) registrarLid(jidNormalizedUser(s.user.lid), id)
     setConexion('conectado')
     log('ok', 'WhatsApp conectado', yo.telefono || id)
+    for (const clave of ['desvinculada', '440', '403', 'sesion-danada']) resolver(clave)
+    // Recién vinculada: el celular acaba de escanear, así que está activo.
+    if (!meta().ultimaSenalCelular) senalDelCelular()
+    // La sesión cambió (o es nueva): se respalda cifrada en R2.
+    programarRespaldo(30_000)
     // Una vez por sesión vinculada: trae del celular qué chats están archivados o fijados.
     if (!meta().chatsSincronizados) {
       setTimeout(() => {
@@ -338,6 +461,10 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
 
     if (codigo === DisconnectReason.loggedOut || codigo === DisconnectReason.multideviceMismatch) {
       log('aviso', 'La sesión se cerró (desde el celular o desde el panel)', 'Hay que escanear el QR de nuevo')
+      if (!desvinculandoDesdePanel) {
+        alertar('La línea se desvinculó', 'Se cerró la sesión desde el celular (o WhatsApp la dio de baja). Hay que escanear el QR de nuevo desde Conexión.', { clave: 'desvinculada' })
+      }
+      desvinculandoDesdePanel = false
       borrarSesion()
       setMeta({ chatsSincronizados: null })
       yo = null
@@ -347,12 +474,39 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       log('info', 'Reiniciando la conexión después de vincular')
       programar(0)
     } else if (codigo === DisconnectReason.connectionReplaced) {
-      log('error', 'Otra conexión abrió esta misma sesión', 'Se frenó la reconexión automática. Cerrá el otro servicio y tocá Reconectar.')
+      // 440: otra PC (u otro proceso) abrió esta misma sesión. Si se reintenta enseguida,
+      // las dos se pisan sin fin; se espera y se avisa para que alguien cierre la otra.
+      intentos++
+      const espera = intentos <= 1 ? 5 * 60e3 : 30 * 60e3
+      log('error', 'Otra conexión abrió esta misma sesión (440)', `Se reintenta en ${espera / 60e3} min. Cerrá el otro servicio (otra PC con la misma carpeta data/sesion).`)
+      alertar('Otra PC está usando la misma sesión de WhatsApp', 'Hay dos servidores con la misma sesión (error 440): se desconectan entre sí. Dejá uno solo prendido.', { clave: '440' })
       setConexion('desconectado')
+      programar(espera)
     } else if (codigo === DisconnectReason.forbidden) {
-      log('error', 'WhatsApp rechazó la conexión (403)', 'Puede ser un bloqueo del número: revisá el celular.')
+      // 403: WhatsApp rechaza la cuenta (suele ser un bloqueo). Se reintenta cada 30 min.
+      log('error', 'WhatsApp rechazó la conexión (403)', 'Puede ser un bloqueo del número: revisá el celular. Se reintenta cada 30 min.')
+      alertar('WhatsApp rechazó la conexión (403)', 'Puede ser un bloqueo o una restricción del número. Revisá el celular de la concesionaria; ver "Plan si bloquean el número" en docs/OPERACION.md.', { clave: '403' })
       setConexion('desconectado')
+      programar(30 * 60e3)
+    } else if (codigo === 405) {
+      // Versión del protocolo vieja: se consulta la vigente y se reintenta enseguida.
+      log('aviso', 'WhatsApp rechazó la versión del protocolo (405)', 'Se consulta la versión vigente')
+      actualizarVersion = true
+      setConexion('conectando')
+      programar(2000)
+    } else if (codigo === DisconnectReason.badSession) {
+      // Sesión dañada: a veces se arregla sola; si no, hay que restaurar el respaldo o vincular de nuevo.
+      intentos++
+      if (intentos >= 3) {
+        alertar('La sesión de WhatsApp está dañada', 'Falló varias veces seguidas (error 500). Restaurá el último respaldo (npm run restaurar) o desvinculá y escaneá el QR.', { clave: 'sesion-danada' })
+      }
+      const espera = Math.min(10 * 60e3, 5000 * 2 ** Math.min(intentos - 1, 6))
+      log('error', 'Sesión dañada (500)', `Reintento ${intentos} en ${Math.round(espera / 1000)} s · ${motivo}`)
+      setConexion('conectando')
+      programar(espera)
     } else {
+      // Cortes de red, timeouts (408), conexión cerrada (428), servicio caído (503): se
+      // reintenta siempre, con espera creciente hasta un minuto.
       intentos++
       const espera = Math.min(60000, 2000 * 2 ** Math.min(intentos - 1, 5))
       log('aviso', `Conexión perdida (${codigo ?? 'sin código'})`, `Reintento ${intentos} en ${Math.round(espera / 1000)} s · ${motivo}`)
@@ -362,8 +516,10 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
   }
 }
 
+let desvinculandoDesdePanel = false
 export async function desvincular() {
   log('aviso', 'Desvinculando la línea desde el panel')
+  desvinculandoDesdePanel = true
   if (sock && conexion === 'conectado') {
     await sock.logout() // dispara connection.close con loggedOut → borra la sesión y muestra un QR nuevo
   } else {
@@ -596,8 +752,6 @@ export async function purgarVentana() {
   return { mensajes: quitados.length, archivos, chats }
 }
 
-const reintentados = new Set()
-
 /**
  * Pone en la cola todo archivo de la ventana que todavía no se bajó (fotos, audios,
  * stickers, videos, documentos), de lo más nuevo a lo más viejo. Corre al conectar: la
@@ -627,13 +781,19 @@ export async function ponerAlDiaArchivos() {
     faltan.push({ chatId, m })
   })
   faltan.sort((a, b) => (b.m.ts || 0) - (a.m.ts || 0))
+  // Lo que ya falló se reintenta una vez por semana como mucho, aunque el servidor se
+  // reinicie (queda anotado): insistir enseguida no lo recupera y le pega a WhatsApp.
+  const reintentos = { ...(meta().reintentosMedia || {}) }
+  const semana = 7 * 86400e3
+  for (const [llave, ts] of Object.entries(reintentos)) if (Date.now() - ts > semana) delete reintentos[llave]
   let n = 0
   for (const { chatId, m } of faltan) {
     const llave = `${chatId}|${m.id}`
-    const forzar = seDaPorPerdido(m) && !reintentados.has(llave)
-    if (forzar) reintentados.add(llave)
+    const forzar = seDaPorPerdido(m) && !reintentos[llave]
+    if (forzar) reintentos[llave] = Date.now()
     if (encolarMedia(chatId, m.id, { forzar })) n++
   }
+  setMeta({ reintentosMedia: reintentos })
   // Lo que ya estaba en la cola de antes de un corte también tiene que seguir bajando.
   arrancarCola()
   return n
@@ -666,6 +826,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
 
   const mensaje = { id: key.id, deMi, ts, ...datos, origen }
   if (deMi) mensaje.estado = ESTADOS[m.status] || 'enviado'
+  // Un mensaje propio que no salió del panel lo mandaron desde el celular: está activo.
+  if (deMi && origen === 'vivo' && !idsDelPanel.has(key.id)) senalDelCelular()
 
   // En un grupo hace falta saber quién habló, para dibujarlo arriba de cada burbuja y
   // porque WhatsApp exige el participante al archivar o marcar como leído.
@@ -1263,11 +1425,18 @@ async function descargarMedia(chatId, m) {
         throw new Error('El enlace venció y WhatsApp no está conectado para pedir el reenvío.', { cause: err })
       }
       huboReenvio = true
-      wa = await conTimeout(
-        sock.updateMediaMessage(wa),
-        REENVIO_TIMEOUT_MS,
-        'El celular no respondió al pedido de reenvío. Revisá que tenga internet y volvé a intentar.',
-      )
+      try {
+        wa = await conTimeout(
+          sock.updateMediaMessage(wa),
+          REENVIO_TIMEOUT_MS,
+          'El celular no respondió al pedido de reenvío. Revisá que tenga internet y volvé a intentar.',
+        )
+      } catch (errReenvio) {
+        if (/no respondió/.test(errReenvio.message)) celularNoResponde()
+        throw errReenvio
+      }
+      // Respondió: el celular está conectado.
+      senalDelCelular()
       buffer = await downloadMediaMessage(wa, 'buffer', {})
       // El reenvío trae un enlace nuevo: se guarda para no tener que pedirlo otra vez.
       actualizarMensaje(chatId, m.id, {
@@ -1406,6 +1575,8 @@ function asegurarConectado() {
 async function enviar(chatId, contenido, buffer, quoted) {
   asegurarConectado()
   const messageId = generateMessageIDV2(sock.user?.id)
+  idsDelPanel.add(messageId)
+  if (idsDelPanel.size > 1000) idsDelPanel.delete(idsDelPanel.values().next().value)
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
     const enviado = await sock.sendMessage(chatId, contenido, { messageId, quoted })

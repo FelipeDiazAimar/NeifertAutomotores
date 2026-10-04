@@ -24,6 +24,9 @@ function base() {
   return pool
 }
 
+/** Consulta suelta, fuera de las tandas (auditoría, bandeja de salida, mantenimiento). */
+export const consultar = (sql, params) => base().query(sql, params)
+
 /* ---------------- Conversión memoria ↔ filas ---------------- */
 
 // Segundos o milisegundos → fecha para la base. -1 (silenciado para siempre) → infinito.
@@ -209,8 +212,6 @@ export function chatBorrado(jid) {
   for (const [k, [j]] of pendientes.mensajes) if (j === jid) pendientes.mensajes.delete(k)
   programar()
 }
-
-const upsert = (sql, filas) => (filas.length ? base().query(sql, [aJson(filas)]) : null)
 
 const SQL_MENSAJES = `
   insert into wa.mensajes (chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos)
