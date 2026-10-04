@@ -106,15 +106,20 @@ describe('vehiculosPublico.service', () => {
     expect(desc.map((v) => v.id)).toEqual(['caro-ars', 'medio-ars', 'barato-usd'])
   })
 
-  it('si no hay cotización disponible, los vehículos sin precio_usd quedan al final (no rompe el orden)', async () => {
+  it('si no hay cotización disponible usa la aproximada (ARS_TO_USD_RATE) para no romper el orden por precio', async () => {
     obtenerCotizacionUsd.mockResolvedValue(null)
     const filas = [
       { id: 'usd', marca: 'A', modelo: 'A', moneda: 'USD', precio_contado: 5000, estado: 'disponible', vehiculo_fotos: [] },
-      { id: 'ars-sin-convertir', marca: 'B', modelo: 'B', moneda: 'ARS', precio_contado: 10000000, estado: 'disponible', vehiculo_fotos: [] },
+      { id: 'ars', marca: 'B', modelo: 'B', moneda: 'ARS', precio_contado: 10000000, estado: 'disponible', vehiculo_fotos: [] }, // 10.000 USD con rate 1/1000
     ]
     selectMock.mockReturnValue(chain({ data: filas, error: null }))
+    const [primero, segundo] = await listarPublicos({ sort: 'price-asc' })
+    // Sin fallback ambos ARS quedarían con price_usd=null al final y la
+    // paginación los cortaba (vendidos "desaparecidos").
+    expect(primero.id).toBe('usd')
+    expect(segundo.price_usd).toBe(10000)
     const asc = await listarPublicos({ sort: 'price-asc' })
-    expect(asc.map((v) => v.id)).toEqual(['usd', 'ars-sin-convertir'])
+    expect(asc.map((v) => v.id)).toEqual(['usd', 'ars'])
   })
 
   it('year-desc y km-asc siguen ordenando en la base (no necesitan conversión de moneda)', async () => {
@@ -127,6 +132,40 @@ describe('vehiculosPublico.service', () => {
     expect(c.order).toHaveBeenCalledWith('km', { ascending: true })
   })
 
+  it('incluye vendidos entre los estados públicos (siempre con publicado=true)', async () => {
+    const c = chain({ data: [], error: null })
+    selectMock.mockReturnValue(c)
+    await listarPublicos()
+    expect(c.in).toHaveBeenCalledWith('estado', ['disponible', 'reservado', 'vendido'])
+    expect(c.eq).toHaveBeenCalledWith('publicado', true)
+  })
+
+  it('brand-asc ordena marca A-Z, luego modelo A-Z y año desc (sin .order() en base)', async () => {
+    const filas = [
+      { id: 'toy', marca: 'Toyota', modelo: 'Corolla', anio: 2021, moneda: 'USD', precio_contado: 20000, estado: 'disponible', vehiculo_fotos: [] },
+      { id: 'audi', marca: 'Audi', modelo: 'A4', anio: 2020, moneda: 'USD', precio_contado: 25000, estado: 'vendido', vehiculo_fotos: [] },
+      { id: 'fiat', marca: 'Fiat', modelo: 'Cronos', anio: 2022, moneda: 'USD', precio_contado: 15000, estado: 'disponible', vehiculo_fotos: [] },
+      { id: 'toy-viejo', marca: 'Toyota', modelo: 'Corolla', anio: 2019, moneda: 'USD', precio_contado: 12000, estado: 'disponible', vehiculo_fotos: [] },
+    ]
+    const c = chain({ data: filas, error: null })
+    selectMock.mockReturnValue(c)
+    const out = await listarPublicos({ sort: 'brand-asc' })
+    expect(out.map((v) => v.id)).toEqual(['audi', 'fiat', 'toy', 'toy-viejo'])
+    expect(c.order).not.toHaveBeenCalled()
+  })
+
+  it('model-asc ordena por modelo A-Z y desempata por marca (sin .order() en base)', async () => {
+    const filas = [
+      { id: 'toy', marca: 'Toyota', modelo: 'Corolla', anio: 2021, moneda: 'USD', precio_contado: 20000, estado: 'disponible', vehiculo_fotos: [] },
+      { id: 'audi', marca: 'Audi', modelo: 'A4', anio: 2020, moneda: 'USD', precio_contado: 25000, estado: 'disponible', vehiculo_fotos: [] },
+      { id: 'fiat', marca: 'Fiat', modelo: 'Cronos', anio: 2022, moneda: 'USD', precio_contado: 15000, estado: 'disponible', vehiculo_fotos: [] },
+    ]
+    const c = chain({ data: filas, error: null })
+    selectMock.mockReturnValue(c)
+    const out = await listarPublicos({ sort: 'model-asc' })
+    expect(out.map((v) => v.id)).toEqual(['audi', 'toy', 'fiat'])
+    expect(c.order).not.toHaveBeenCalled()
+  })
   it('obtenerPublicoPorId devuelve null si no hay match', async () => {
     selectMock.mockReturnValue(chain({ data: null, error: null }))
     const v = await obtenerPublicoPorId('nope')

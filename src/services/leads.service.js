@@ -20,6 +20,10 @@ const FIELD_MAP = {
   avatar_url: 'foto_url', external_id: 'id_externo', external_source: 'origen_externo',
   viewed_vehicles: 'vehiculos_vistos', synced_at: 'sincronizado_en',
   last_contact_at: 'ultimo_contacto_en', created_at: 'creado_en', updated_at: 'actualizado_en',
+  // Listas de vehículos (jsonb, ver supabase/prospectos_vehiculos.sql).
+  // Mismo nombre en ambos mundos: cada item es
+  // { condicion: 'usado'|'cero', marca, modelo, version, anio, color, km, notas }.
+  vehiculos_interes: 'vehiculos_interes', autos_entrega: 'autos_entrega',
 }
 const FIELD_MAP_REVERSE = Object.fromEntries(Object.entries(FIELD_MAP).map(([en, es]) => [es, en]))
 
@@ -39,11 +43,41 @@ function toAppLead(row) {
   for (const [esKey, val] of Object.entries(row)) {
     out[FIELD_MAP_REVERSE[esKey] || esKey] = val
   }
+  // Filas anteriores a la migración prospectos_vehiculos.sql (o select sin
+  // esas columnas) llegan sin las listas: normalizar a [] para que la UI
+  // no tenga que defenderse en cada uso.
+  if (!Array.isArray(out.vehiculos_interes)) out.vehiculos_interes = []
+  if (!Array.isArray(out.autos_entrega)) out.autos_entrega = []
   return out
+}
+
+/** Resumen corto de un vehículo del lead para mostrar/buscar.
+ *  Ej: "Toyota Corolla XEi 2022". */
+export function resumenVehiculo(v) {
+  if (!v) return ''
+  return [v.marca, v.modelo, v.version, v.anio].filter(Boolean).join(' ')
+}
+
+/** Texto que se guarda en el campo viejo `vehicle_interest` cada vez que
+ *  cambia la lista de interés: mantiene funcionando la búsqueda del listado
+ *  y la tabla sin tener que filtrar por jsonb. */
+export function resumenIntereses(items = []) {
+  return items.map(resumenVehiculo).filter(Boolean).join(' · ')
 }
 
 // MODO DEMO: copia mutable para que los leads creados aparezcan en la sesión.
 let demoLeads = [...MOCK_LEADS]
+
+/** Los mocks (y filas viejas) pueden no traer las listas de vehículos:
+ *  normalizar a [] para que la UI no tenga que defenderse en cada uso. */
+function normalizarListas(l) {
+  if (!l) return l
+  return {
+    ...l,
+    vehiculos_interes: Array.isArray(l.vehiculos_interes) ? l.vehiculos_interes : [],
+    autos_entrega: Array.isArray(l.autos_entrega) ? l.autos_entrega : [],
+  }
+}
 
 // sort (ver LEAD_SORT_OPTIONS en lib/constants.js) → [columna, ascendente].
 // Se comparte entre el modo real (columna de Supabase) y el demo (columna app).
@@ -81,10 +115,12 @@ function filterDemo({ quickFilter = 'todos', search = '', sort = 'date-desc', or
     out = out.filter(
       (l) =>
         l.full_name.toLowerCase().includes(q) ||
-        (l.vehicle_interest || '').toLowerCase().includes(q)
+        (l.vehicle_interest || '').toLowerCase().includes(q) ||
+        resumenIntereses(l.vehiculos_interes).toLowerCase().includes(q) ||
+        resumenIntereses(l.autos_entrega).toLowerCase().includes(q)
     )
   }
-  return applySortDemo(out, sort)
+  return applySortDemo(out, sort).map(normalizarListas)
 }
 
 export async function fetchLeads({
@@ -108,7 +144,7 @@ export async function fetchLeads({
 }
 
 export async function fetchLeadById(id) {
-  if (!isSupabaseConfigured) return demoLeads.find((l) => l.id === id) || null
+  if (!isSupabaseConfigured) return normalizarListas(demoLeads.find((l) => l.id === id)) || null
   const { data, error } = await supabase.from('prospectos').select('*').eq('id', id).single()
   if (error) throw error
   return toAppLead(data)
@@ -161,6 +197,8 @@ export async function createLead(payload) {
     const lead = {
       id: 'l' + Date.now(),
       status: 'nuevo',
+      vehiculos_interes: [],
+      autos_entrega: [],
       avatar_url: `https://i.pravatar.cc/80?u=${encodeURIComponent(payload.email || Date.now())}`,
       created_at: new Date().toISOString(),
       last_contact_at: new Date().toISOString(),
@@ -182,7 +220,7 @@ export async function updateLead(id, payload) {
     const idx = demoLeads.findIndex((l) => l.id === id)
     if (idx === -1) throw new Error('Lead no encontrado')
     demoLeads[idx] = { ...demoLeads[idx], ...payload, updated_at: new Date().toISOString() }
-    return demoLeads[idx]
+    return normalizarListas(demoLeads[idx])
   }
   const { data, error } = await supabase
     .from('prospectos')

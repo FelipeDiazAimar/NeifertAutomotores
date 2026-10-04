@@ -48,6 +48,39 @@ export async function listar({
   return { filas: data ?? [], total: count ?? 0 }
 }
 
+/** Stock completo para la planilla DOCX: misma búsqueda/filtros que `listar`
+ *  pero sin paginar (trae todo en tandas) y ordenado por marca. Solo trae
+ *  las columnas que usa la planilla. */
+export async function listarTodoStock({ busqueda = '', filtros = {} } = {}) {
+  const CHUNK = 1000
+  const todas = []
+  for (let from = 0; ; from += CHUNK) {
+    let q = db()
+      .from('vehiculos')
+      .select('marca, modelo, version, anio, km, moneda, precio_contado, precio_canje, duenio_nombre, duenio_apellido, duenio_contacto, estado, es_0km')
+
+    const b = busqueda.trim()
+    if (b) q = q.or(BUSQUEDA_CAMPOS.map((c) => `${c}.ilike.%${b}%`).join(','))
+
+    if (filtros.estado?.length) q = q.in('estado', filtros.estado)
+    if (filtros.tipo?.length) q = q.in('tipo', filtros.tipo)
+    if (filtros.moneda) q = q.eq('moneda', filtros.moneda)
+    if (filtros.condicion === 'cero') q = q.eq('es_0km', true)
+    else if (filtros.condicion === 'usados') q = q.or('es_0km.is.false,es_0km.is.null')
+    if (filtros.anioMin != null && filtros.anioMin !== '') q = q.gte('anio', Number(filtros.anioMin))
+    if (filtros.anioMax != null && filtros.anioMax !== '') q = q.lte('anio', Number(filtros.anioMax))
+    if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
+    if (filtros.precioMax != null && filtros.precioMax !== '') q = q.lte('precio_contado', Number(filtros.precioMax))
+
+    q = q.order('marca', { ascending: true }).range(from, from + CHUNK - 1)
+    const { data, error } = await q
+    if (error) throw error
+    todas.push(...(data ?? []))
+    if ((data ?? []).length < CHUNK) break
+  }
+  return todas
+}
+
 /** Recuento por estado para el encabezado de la lista. Aplica la misma
  *  búsqueda y filtros que `listar`, salvo el propio filtro de estado (para
  *  que los números sean estables al filtrar por estado). */

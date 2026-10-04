@@ -11,6 +11,8 @@ export const VEHICLE_CATEGORIES = [
 
 /** Opciones de ordenamiento del catálogo. */
 export const SORT_OPTIONS = [
+  { id: 'brand-asc', label: 'Marca A-Z' },
+  { id: 'model-asc', label: 'Modelo A-Z' },
   { id: 'price-desc', label: 'Precio Mayor' },
   { id: 'price-asc', label: 'Precio Menor' },
   { id: 'year-desc', label: 'Más nuevos' },

@@ -1,11 +1,15 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { Plus, Search, SlidersHorizontal, Download } from 'lucide-react'
+import { toast } from 'sonner'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
 import GlassCard from '@/components/common/GlassCard'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { useVehiculos, useConteoVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
+import { listarTodoStock } from '@/crm/services/vehiculos.service'
+import { generarStockDocx, nombreArchivoStock, LOGO_ANCHO_PX } from '@/crm/lib/stockDocx'
+import logoLight from '@/assets/images/logo-light.png'
 import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
 import { useViewModeStore } from '@/crm/store/useViewModeStore'
@@ -26,6 +30,7 @@ export default function VehiculosListPage() {
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [abrirNuevo, setAbrirNuevo] = useState(false)
+  const [descargando, setDescargando] = useState(false)
   const { cambiarEstado, actualizar } = useVehiculoMutations()
   const viewMode = useViewModeStore((s) => s.viewMode)
 
@@ -47,6 +52,47 @@ export default function VehiculosListPage() {
   const { data: conteo } = useConteoVehiculos({ busqueda, filtros })
   const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
 
+  /** Descarga la planilla DOCX del stock con los filtros/búsqueda actuales,
+   *  con las mismas columnas de la planilla en papel + logo y fecha. */
+  async function descargarStock() {
+    if (descargando) return
+    setDescargando(true)
+    try {
+      const stock = await listarTodoStock({ busqueda, filtros })
+      if (stock.length === 0) {
+        toast.info('No hay vehículos para exportar con esos filtros.')
+        return
+      }
+      let logoPng = null
+      try {
+        const buf = await (await fetch(logoLight)).arrayBuffer()
+        let height = 40
+        if (typeof createImageBitmap === 'function') {
+          const bmp = await createImageBitmap(new Blob([buf], { type: 'image/png' }))
+          height = Math.round((LOGO_ANCHO_PX * bmp.height) / bmp.width)
+          bmp.close?.()
+        }
+        logoPng = { data: buf, width: LOGO_ANCHO_PX, height }
+      } catch {
+        logoPng = null // sin logo igual se genera la planilla
+      }
+      const blob = await generarStockDocx({ vehiculos: stock, logoPng })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = nombreArchivoStock()
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      setTimeout(() => URL.revokeObjectURL(url), 5000)
+      toast.success(`Planilla descargada: ${stock.length} vehículos.`)
+    } catch (e) {
+      toast.error('No se pudo generar la planilla: ' + (e?.message ?? e))
+    } finally {
+      setDescargando(false)
+    }
+  }
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,9 +113,14 @@ export default function VehiculosListPage() {
             </span>
           </p>
         </div>
-        <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
-          Cargar vehículo
-        </Button>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button variant="glass" icon={Download} onClick={descargarStock} disabled={descargando}>
+            {descargando ? 'Generando…' : 'Descargar stock'}
+          </Button>
+          <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
+            Cargar vehículo
+          </Button>
+        </div>
       </div>
 
       <div className="flex items-center gap-2">

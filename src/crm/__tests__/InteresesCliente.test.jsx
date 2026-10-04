@@ -12,19 +12,20 @@ vi.mock('../hooks/useClientes.js', () => ({
 const { default: InteresesCliente } = await import('../components/InteresesCliente.jsx')
 
 describe('InteresesCliente', () => {
-  it('agregar marca+modelo llama agregarInteres', async () => {
+  it('agregar vehículo llama agregarInteres con el shape completo', async () => {
     agregarInteres.mutate.mockReset()
     render(<InteresesCliente clienteId="c1" intereses={[]} />)
-    await userEvent.type(screen.getByPlaceholderText('Marca'), 'Nissan')
-    await userEvent.type(screen.getByPlaceholderText('Modelo'), 'Kicks')
-    await userEvent.click(screen.getByRole('button', { name: /agregar/i }))
+    await userEvent.click(screen.getByRole('button', { name: /agregar vehículo/i }))
+    await userEvent.type(screen.getByLabelText(/marca/i), 'Nissan')
+    await userEvent.type(screen.getByLabelText(/modelo/i), 'Kicks')
+    await userEvent.click(screen.getByRole('button', { name: /^agregar$/i }))
     expect(agregarInteres.mutate).toHaveBeenCalledWith(
-      { marca: 'Nissan', modelo: 'Kicks' },
-      expect.any(Object),
+      expect.objectContaining({ condicion: 'usado', marca: 'Nissan', modelo: 'Kicks' }),
     )
   })
 
   it('quitar dispara quitarInteres con el id', async () => {
+    quitarInteres.mutate.mockReset()
     render(<InteresesCliente clienteId="c1" intereses={[{ id: 5, marca: 'Ford', modelo: 'KA' }]} />)
     await userEvent.click(screen.getByRole('button', { name: /quitar ford/i }))
     expect(quitarInteres.mutate).toHaveBeenCalledWith(5)
