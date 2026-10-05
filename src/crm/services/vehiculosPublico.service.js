@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabaseClient'
 import { obtenerCotizacionUsd } from '@/lib/exchangeRate'
+import { ARS_TO_USD_RATE } from '@/lib/constants'
 
 const db = () => supabase.schema('crm')
 
@@ -9,13 +10,28 @@ const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, prec
   km, combustible, transmision, categoria, es_nuevo, es_0km, descripcion, estado,
   creado_en, vehiculo_fotos ( url, es_portada, orden )`
 
-// year-desc/km-asc ordenan en el server. price-asc/price-desc se resuelven
-// aparte (ver listarPublicos): conviven vehículos en ARS y en USD, así que
-// para ordenarlos por precio hay que pasarlos a una moneda común primero —
-// eso no lo puede hacer un ORDER BY simple en la base.
+// year-desc/km-asc ordenan en el server. price-asc/price-desc y los
+// alfabéticos (brand-asc/model-asc) se resuelven aparte (ver
+// listarPublicos): los precios conviven en ARS y en USD (hay que pasarlos a
+// una moneda común primero) y el orden alfabético debe ser insensible a
+// mayúsculas/acentos (locale 'es') — ninguna de las dos cosas la puede hacer
+// un ORDER BY simple en la base.
 const SORT_MAP = {
   'year-desc': ['anio', false],
   'km-asc': ['km', true],
+}
+
+/** Comparación alfabética en español, insensible a mayúsculas y acentos. */
+function compararTexto(a, b) {
+  return String(a ?? '').localeCompare(String(b ?? ''), 'es', { sensitivity: 'base' })
+}
+
+/** ARS por USD para convertir precios a una moneda común al ordenar.
+ *  Si la API del dólar falla, se usa la cotización aproximada de constantes
+ *  (ARS_TO_USD_RATE está expresada como USD por ARS, por eso se invierte). */
+async function cotizacionConFallback() {
+  const cotizacion = await obtenerCotizacionUsd()
+  return cotizacion ?? 1 / ARS_TO_USD_RATE
 }
 
 // Estados visibles en la web pública (siempre con publicado=true).
@@ -91,23 +107,28 @@ function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
 
 export async function listarPublicos({
   category = 'todos',
-  sort = 'price-desc',
+  sort = 'brand-asc',
   search = '',
   filters = null,
   condition = 'todos',
 } = {}) {
   const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
+  const ordenaAlfabetico = sort === 'brand-asc' || sort === 'model-asc'
 
   let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).in('estado', ESTADOS_PUBLICOS).eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
   query = aplicarFiltros(query, { search, filters, condition })
-  if (!ordenaPorPrecio) {
+  if (!ordenaPorPrecio && !ordenaAlfabetico) {
     const [col, asc] = SORT_MAP[sort] || SORT_MAP['year-desc']
     query = query.order(col, { ascending: asc })
   }
 
-  const [{ data, error }, usdRate] = await Promise.all([query, obtenerCotizacionUsd()])
+  const [{ data, error }, usdRate] = await Promise.all([query, cotizacionConFallback()])
   if (error) throw error
+  // Con cotización garantizada (API o fallback), los vehículos en ARS ya no
+  // quedan con price_usd=null al final en orden por precio: antes, si la API
+  // fallaba en una PC, la paginación los cortaba y parecía que "desaparecían"
+  // (incluidos los vendidos).
   const vehiculos = (data ?? []).map((v) => mapear(v, usdRate))
 
   if (ordenaPorPrecio) {
@@ -118,6 +139,26 @@ export async function listarPublicos({
       if (b.price_usd == null) return -1
       return asc ? a.price_usd - b.price_usd : b.price_usd - a.price_usd
     })
+  } else if (ordenaAlfabetico) {
+    // brand-asc (default): marca A-Z → modelo A-Z → año desc → versión A-Z.
+    // model-asc: modelo A-Z → marca A-Z → año desc.
+    // La grilla agrupa visualmente por marca (grupos A-Z) y conserva este
+    // orden dentro de cada grupo.
+    vehiculos.sort((a, b) => {
+      if (sort === 'brand-asc') {
+        return (
+          compararTexto(a.brand, b.brand) ||
+          compararTexto(a.model, b.model) ||
+          (b.year ?? 0) - (a.year ?? 0) ||
+          compararTexto(a.version, b.version)
+        )
+      }
+      return (
+        compararTexto(a.model, b.model) ||
+        compararTexto(a.brand, b.brand) ||
+        (b.year ?? 0) - (a.year ?? 0)
+      )
+    })
   }
   return vehiculos
 }
@@ -127,7 +168,7 @@ export async function listarPublicos({
 export async function listarTodos() {
   const [{ data, error }, usdRate] = await Promise.all([
     db().from('vehiculos').select(COLUMNAS_PUBLICAS).order('creado_en', { ascending: false }),
-    obtenerCotizacionUsd(),
+    cotizacionConFallback(),
   ])
   if (error) throw error
   return (data ?? []).map((v) => mapear(v, usdRate))
@@ -136,7 +177,7 @@ export async function listarTodos() {
 export async function obtenerPublicoPorId(id) {
   const [{ data, error }, usdRate] = await Promise.all([
     db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).in('estado', ESTADOS_PUBLICOS).eq('publicado', true).maybeSingle(),
-    obtenerCotizacionUsd(),
+    cotizacionConFallback(),
   ])
   if (error) throw error
   return data ? mapear(data, usdRate) : null

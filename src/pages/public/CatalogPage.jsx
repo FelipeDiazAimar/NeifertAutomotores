@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { motion } from 'framer-motion'
 import { Share2 } from 'lucide-react'
 import CategoryFilter from '@/components/catalog/CategoryFilter'
@@ -13,6 +13,8 @@ import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
+import { groupVehiclesByBrand } from '@/lib/brandGroups'
+import { useCatalogStore } from '@/store/useCatalogStore'
 import { useVehicles } from '@/hooks/useVehicles'
 
 const VARIANT_COPY = {
@@ -42,11 +44,31 @@ const VARIANT_COPY = {
   },
 }
 
+const BRANDS_INITIAL = 4
+const BRANDS_STEP = 4
+
 export default function CatalogPage({ variant = 'usados' }) {
   const copy = VARIANT_COPY[variant] || VARIANT_COPY.usados
   const { data: vehicles = [], isLoading } = useVehicles(copy.condition)
-  const [visible, setVisible] = useState(8)
-  const shown = vehicles.slice(0, visible)
+  // Paginación por MARCAS (no por vehículos) para no cortar nunca una
+  // marca a la mitad: se muestran grupos completos.
+  const [visibleBrands, setVisibleBrands] = useState(BRANDS_INITIAL)
+  const groups = useMemo(() => groupVehiclesByBrand(vehicles), [vehicles])
+  const shownGroups = groups.slice(0, visibleBrands)
+  const shownCount = shownGroups.reduce((n, [, items]) => n + items.length, 0)
+  const shown = shownGroups.flatMap(([, items]) => items)
+
+  // Al cambiar filtros/búsqueda/orden se vuelve a la primera página de marcas.
+  const category = useCatalogStore((s) => s.category)
+  const sort = useCatalogStore((s) => s.sort)
+  const search = useCatalogStore((s) => s.search)
+  const filters = useCatalogStore((s) => s.filters)
+  const queryKey = JSON.stringify({ category, sort, search, filters, condition: copy.condition })
+  const [prevQueryKey, setPrevQueryKey] = useState(queryKey)
+  if (queryKey !== prevQueryKey) {
+    setPrevQueryKey(queryKey)
+    setVisibleBrands(BRANDS_INITIAL)
+  }
 
   return (
     <section className="mx-auto max-w-7xl px-4 py-10 md:px-8">
@@ -110,15 +132,17 @@ export default function CatalogPage({ variant = 'usados' }) {
       {!isLoading && vehicles.length > 0 && (
         <div className="mt-4 text-center sm:mt-12">
           <p className="text-sm text-ink-3">
-            Mostrando {shown.length} de {vehicles.length} {copy.countLabel}
+            Mostrando {shownGroups.length} de {groups.length}{' '}
+            {groups.length === 1 ? 'marca' : 'marcas'} · {shownCount} de{' '}
+            {vehicles.length} {copy.countLabel}
           </p>
-          {visible < vehicles.length && (
+          {visibleBrands < groups.length && (
             <Button
               variant="glass"
               className="mt-4"
-              onClick={() => setVisible((v) => v + 8)}
+              onClick={() => setVisibleBrands((v) => v + BRANDS_STEP)}
             >
-              Cargar más unidades
+              Cargar más marcas
             </Button>
           )}
         </div>

@@ -14,7 +14,7 @@ export async function listar({
   pageSize = 20,
   incluirArchivados = false,
 } = {}) {
-  let q = db().from('clientes').select('*, intereses:cliente_intereses(marca,modelo)', { count: 'exact' })
+  let q = db().from('clientes').select('*, intereses:cliente_intereses(*)', { count: 'exact' })
 
   if (!incluirArchivados) q = q.is('archivado_en', null)
 
@@ -114,11 +114,11 @@ export async function registrarVenta(clienteId, vehiculoId, estadoVehiculoAnteri
   })
 }
 
-// --- intereses ---
-export async function agregarInteres(clienteId, { marca, modelo }) {
-  const { data, error } = await db().from('cliente_intereses').insert({ cliente_id: clienteId, marca, modelo }).select()
+// --- intereses (ver supabase/crm_clientes_vehiculos.sql para las columnas) ---
+export async function agregarInteres(clienteId, data) {
+  const { data: filas, error } = await db().from('cliente_intereses').insert({ cliente_id: clienteId, ...data }).select()
   if (error) throw error
-  return data[0]
+  return filas[0]
 }
 export async function quitarInteres(id) {
   const { error } = await db().from('cliente_intereses').delete().eq('id', id)

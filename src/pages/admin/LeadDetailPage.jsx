@@ -22,8 +22,10 @@ import GlassCard from '@/components/common/GlassCard'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import LeadStatusBadge from '@/components/crm/LeadStatusBadge'
+import LeadVehiculos from '@/components/crm/LeadVehiculos'
 import Select from '@/components/common/Select'
 import { formatDateTime } from '@/lib/formatters'
+import { resumenIntereses } from '@/services/leads.service'
 import { LEAD_STATUSES, LEAD_SOURCES, WHATSAPP_PHONE } from '@/lib/constants'
 import { leadFollowUpMessage } from '@/lib/whatsapp'
 import { cn } from '@/lib/cn'
@@ -114,6 +116,13 @@ export default function LeadDetailPage() {
   }
 
   const canSave = editStatus !== lead.status || editSource !== lead.source
+
+  const intereses = lead.vehiculos_interes ?? []
+  const entrega = lead.autos_entrega ?? []
+
+  const guardarIntereses = (items) =>
+    updateLead.mutateAsync({ id, vehiculos_interes: items, vehicle_interest: resumenIntereses(items) || null })
+  const guardarEntrega = (items) => updateLead.mutateAsync({ id, autos_entrega: items })
 
   return (
     <div className="mx-auto max-w-3xl">
@@ -221,6 +230,35 @@ export default function LeadDetailPage() {
               <p className="mt-1 text-sm text-ink-2">{lead.notes}</p>
             </div>
           )}
+
+          <div className="mt-6 space-y-4">
+            <div>
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                <Car size={16} />
+                Vehículos de interés ({intereses.length})
+              </p>
+              <LeadVehiculos
+                items={intereses}
+                pending={updateLead.isPending}
+                emptyText="Sin vehículos de interés cargados."
+                onAgregar={(item) => guardarIntereses([...intereses, item])}
+                onQuitar={(i) => guardarIntereses(intereses.filter((_, j) => j !== i))}
+              />
+            </div>
+            <div>
+              <p className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
+                <Car size={16} />
+                Autos en entrega ({entrega.length})
+              </p>
+              <LeadVehiculos
+                items={entrega}
+                pending={updateLead.isPending}
+                emptyText="Sin autos en entrega."
+                onAgregar={(item) => guardarEntrega([...entrega, item])}
+                onQuitar={(i) => guardarEntrega(entrega.filter((_, j) => j !== i))}
+              />
+            </div>
+          </div>
 
           <div className="mt-6 flex flex-wrap gap-3">
             {editing ? (
