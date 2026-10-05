@@ -44,10 +44,14 @@ function CardImage({ vehicle, rounded, isHovered }) {
   // recortarlas, así se ve la foto completa igual que en las cuadradas 1:1.
   const [wideImages, setWideImages] = useState({})
 
-  // Volver a la primera imagen al salir el mouse (solo desktop, sin pausa manual)
-  useEffect(() => {
-    if (!isHovered && !paused) setIdx(0)
-  }, [isHovered, paused])
+  // Volver a la primera imagen al salir el mouse (solo desktop, sin pausa manual). Se ajusta
+  // en el render al cambiar, en vez de en un efecto (evita un render de más).
+  const activo = isHovered || paused
+  const [activoAntes, setActivoAntes] = useState(activo)
+  if (activo !== activoAntes) {
+    setActivoAntes(activo)
+    if (!activo) setIdx(0)
+  }
 
   // Autoplay solo en desktop y con el mouse encima de la card.
   useEffect(() => {

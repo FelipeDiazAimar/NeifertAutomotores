@@ -9,9 +9,8 @@ const CROP_MARGIN = 0.88
 
 export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspectOptions = null, onConfirm, onCancel }) {
   const dragRef = useRef(null)
-  const urlRef = useRef(null)
   const stageRef = useRef(null)
-  const [preview, setPreview] = useState(null)
+  // Imagen que se está recortando: la que llegó, o la rotada.
   const [activeFile, setActiveFile] = useState(null)
   const [crop, setCrop] = useState({ x: 0.5, y: 0.5, zoom: 1 })
   const [imageSize, setImageSize] = useState(null)
@@ -24,15 +23,18 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspec
     setCrop({ x: 0.5, y: 0.5, zoom: 1 })
   }
 
-  useEffect(() => {
-    const next = file || null
-    setActiveFile(next)
+  // Llega otro archivo: se vuelve a empezar (se ajusta en el render, no en un efecto).
+  const [fileAnterior, setFileAnterior] = useState(file)
+  if (file !== fileAnterior) {
+    setFileAnterior(file)
+    setActiveFile(null)
     setWorking(false)
-    if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null }
-    if (next) { urlRef.current = URL.createObjectURL(next); setPreview(urlRef.current) }
-    else setPreview(null)
-    return () => { if (urlRef.current) { URL.revokeObjectURL(urlRef.current); urlRef.current = null } }
-  }, [file])
+  }
+
+  // La vista previa sale de la imagen activa; la URL vieja se libera al cambiar.
+  const shownFile = activeFile || file || null
+  const preview = useMemo(() => (shownFile ? URL.createObjectURL(shownFile) : null), [shownFile])
+  useEffect(() => () => { if (preview) URL.revokeObjectURL(preview) }, [preview])
 
   useEffect(() => {
     const element = stageRef.current
@@ -123,10 +125,6 @@ export default function ImageCropper({ file, aspectRatio = { w: 1, h: 1 }, aspec
     try {
       const target = activeFile || file
       const rotated = await rotateImageClockwise(target)
-      const newUrl = URL.createObjectURL(rotated)
-      if (urlRef.current) URL.revokeObjectURL(urlRef.current)
-      urlRef.current = newUrl
-      setPreview(newUrl)
       setActiveFile(rotated)
       setCrop({ x: 0.5, y: 0.5, zoom: 1 })
       setImageSize(null)
