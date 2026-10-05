@@ -19,6 +19,8 @@ export default defineConfig({
       'src/components/**/__tests__/**/*.test.{js,jsx}',
       'src/hooks/__tests__/**/*.test.{js,jsx}',
       'src/lib/__tests__/**/*.test.{js,jsx}',
+      // Servidor de WhatsApp (Node puro, sin React).
+      'Whatsapp/servidor/test/**/*.test.js',
     ],
     setupFiles: ['./vitest.setup.js'],
   },

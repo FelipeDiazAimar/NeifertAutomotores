@@ -2,8 +2,8 @@
 
 > **Documento de referencia técnica y arquitectura**  
 > Proyecto: **Neifert Automotores** — Módulo de WhatsApp CRM  
-> Ubicación: `Whatsapp/Baileys.md`  
-> Fecha: Septiembre 2026
+> Ubicación: `Whatsapp/docs/Baileys.md`  
+> Fecha: Septiembre 2026 · actualizado en octubre 2026 (secciones 4 a 8: estado real)
 
 ---
 
@@ -81,7 +81,7 @@ Los archivos binarios **NUNCA** deben guardarse dentro de la base de datos relac
     "id": "3EB0...",
     "chat_id": "5493564...@s.whatsapp.net",
     "tipo": "imagen",
-    "url": "https://r2.neifert.com.ar/media/3EB0....jpg",
+    "archivo": "media/Juan Pérez (+5493564...)/3EB0....jpg",
     "tamano": 1048576,
     "mime": "image/jpeg"
   }
@@ -139,93 +139,93 @@ La arquitectura adecuada consiste en **un único servicio central de Node.js con
 
 ---
 
-## 4. Requisitos para el Escenario Multi-Operador en Producción
+## 4. Estado actual del servicio (octubre 2026)
 
-Para que tres empleados puedan trabajar en simultáneo sin conflictos sobre la misma línea de WhatsApp, se deben implementar cuatro puntos:
+Lo que en la primera versión de este documento eran "requisitos" ya está hecho. El detalle
+de cada punto está en [SERVIDOR.md](SERVIDOR.md) y la operación diaria en
+[OPERACION.md](OPERACION.md).
 
-### 4.1. Abrir el puerto y agregar Autenticación
-- Actualmente en `src/config.js`, el servicio está configurado como `HOST = '127.0.0.1'` para evitar accesos indebidos durante el desarrollo local.
-- Para operar en red local (LAN) o en un VPS externo, se debe cambiar `HOST` a `0.0.0.0` y **agregar obligatoriamente autenticación** (usuarios, contraseñas o tokens JWT). Sin autenticación, cualquier dispositivo con acceso a la red podría enviar mensajes haciéndose pasar por la concesionaria.
+| Tema | Cómo quedó |
+|---|---|
+| Acceso y login | Se entra desde el CRM: el panel está embebido y recibe la sesión por `postMessage` (origen validado). Cookie firmada, HttpOnly, `Partitioned` por https. |
+| Permisos | Por rol del CRM: `WHATSAPP_ROLES_LINEA` (QR, vincular, desvincular, preferencias), `WHATSAPP_ROLES` (escribir), `WHATSAPP_ROLES_LECTURA` (solo mirar). |
+| Auditoría | Toda acción que cambia algo queda en `wa.auditoria` (quién, qué, cuándo, chat, IP). Nunca el contenido de los mensajes. |
+| Autoría interna | Cada mensaje mandado desde el panel guarda `enviadoPor` (usuario del CRM). |
+| "Escribiendo…" entre operadores | Por SSE: el panel muestra quién está viendo/escribiendo cada chat. |
+| Persistencia | Supabase (`wa.*`) con escritura por tandas + **diario local** (write-ahead) con `fdatasync`: un corte de luz no pierde mensajes. |
+| Multimedia | Bucket R2 **privado** (`neifert-whatsapp`), carpeta por contacto, miniaturas, servido solo a usuarios con sesión. |
+| Retención | 365 días, purga diaria (mensajes + archivos) y conciliación R2 ↔ base. |
+| Envíos sin conexión | Bandeja de salida persistente: lo que se manda con la línea caída sale solo al reconectar. |
+| Grupos | Menciones, avisos de altas/bajas, reacciones por persona, "Fulano está escribiendo…". |
+| CRM | Cada chat reconoce su cliente por teléfono normalizado; crear cliente, seguimiento y tarea desde el chat. |
+| Respaldo | Sesión y `.env` cifrados (AES-256-GCM) en R2; restauración en una PC nueva **sin volver a escanear el QR**. |
+| Monitoreo | `/api/salud`, logs diarios con rotación, alertas por email/webhook (línea caída, celular sin señal, sesión cerrada), vigía externo del Programador de tareas. |
 
-### 4.2. Atribución de autoría interna (Quién respondió)
-Actualmente todos los mensajes enviados desde el panel figuran con autor `"yo"`. En un entorno multi-usuario, el esquema de datos debe registrar qué usuario interno redactó el mensaje:
-```json
-{
-  "id": "3EB0ABC123...",
-  "deMi": true,
-  "autorInterno": "Julián (Ventas)",
-  "usuarioId": "usr_9481",
-  "texto": "Hola, sí, la Hilux sigue disponible.",
-  "ts": 1774372587
-}
-```
+## 5. Versión del protocolo y actualizaciones de Baileys
 
-### 4.3. Prevención de colisiones ("Escribiendo...")
-Para evitar que dos vendedores contesten al mismo tiempo la misma consulta a un cliente:
-- Aprovechar el canal SSE existente para propagar un evento `operador_escribiendo`:
-  ```json
-  { "chatId": "5493564...@s.whatsapp.net", "operador": "Marcos", "estado": "componiendo" }
-  ```
-- La pantalla de los demás empleados muestra: *"Marcos está respondiendo este chat..."*, bloqueando temporalmente el envío o alertando al segundo operador.
+- **Baileys fijo en `7.0.0-rc14`** (`package.json` sin `^`). Una actualización se hace a
+  mano, probando primero en una instancia aislada (ver SERVIDOR.md → "Modo local").
+- **Versión de WhatsApp Web fija** con `WA_VERSION` (por ejemplo `2.3000.1027934701`).
+  Vacía: se usa la que trae Baileys. Si WhatsApp la rechaza por vieja (cierre **405**), el
+  servidor consulta la vigente, la usa, la guarda en `meta.versionWa` y **avisa** para que
+  se actualice `WA_VERSION` a conciencia.
+- Navegador declarado: `Browsers.windows('Chrome')` con `syncFullHistory`. (Con
+  `'Desktop'` WhatsApp devolvía 428 y no generaba QR.)
+- **Códigos de cierre que se manejan** (`src/whatsapp.js`):
 
-### 4.4. Riesgo de Baileys vs. WhatsApp Cloud API Oficial
-- **Baileys (No oficial):** Es gratuito y no tiene costos por mensaje ni limitaciones de plantillas, pero está sujeto a cambios en el protocolo de WhatsApp, requiere mantener la regla de los 14 días en el teléfono y existe riesgo de baneo si se realizan envíos masivos o conductas que violen las políticas de Meta.
-- **WhatsApp Cloud API (Oficial):** Permite multi-agente nativo sin límite de terminales ni teléfono celular encendido, pero tiene costo por ventana de conversación de 24 horas y exige validación de plantillas (templates) para iniciar conversaciones salientes.
-
----
-
-## 5. Hoja de Ruta de Implementación Técnica (Roadmap)
-
-El orden de trabajo recomendado para evitar retrabajos es el siguiente:
-
-```
-[Fase 1]                [Fase 2]                [Fase 3]
-Conectar y medir   ───► Ventana de Respaldo───► Envíos Optimistas
-historial real          (Filtro e ingesta)      (UI instantánea)
-                                                       │
-                                                       ▼
-[Fase 6]                [Fase 5]                [Fase 4]
-Grupos y canales   ◄─── Supabase + R2      ◄─── Multi-Usuario
-(opcional CRM)          (Batch inserts)         (Auth + Atribución)
-```
-
-1. **Fase 1: Vinculación e ingesta del historial base:**  
-   Vincular el número real o de prueba y dejar que descargue el historial para medir el volumen exacto de mensajes y multimedia existente.
-2. **Fase 2: Ventana de respaldo (Filtro y purga periódica):**  
-   Establecer la política de retención: qué chats se procesan, descartar contenido innecesario (estados, llamadas, newsletters) y configurar limpieza programada de archivos temporales.
-3. **Fase 3: Envío con burbuja optimista en frontend:**  
-   Pintar el mensaje inmediatamente en la interfaz al pulsar Enter y actualizar su estado conforme lleguen los eventos del socket.
-4. **Fase 4: Multi-usuario y atribución antes de la base de datos:**  
-   Definir roles de empleados, login y campo de autor en los mensajes. Esto debe hacerse antes de migrar a base de datos para no tener que hacer migraciones de esquemas posteriores.
-5. **Fase 5: Conexión con Supabase y Cloudflare R2:**  
-   Reemplazar la persistencia local de `src/almacen.js` por la capa de base de datos con inserciones por lote (*batching*) y subir las fotos/audios a buckets R2.
-6. **Fase 6: Canales y grupos secundarios:**  
-   Evaluar si se incorporan chats grupales al CRM (actualmente filtrados para no saturar con mensajes irrelevantes de grupos).
-
----
-
-## 6. Despliegue: ¿PC Local o Servidor VPS?
-
-La elección del entorno de ejecución define la necesidad inmediata de Supabase:
-
-| Criterio | Opción A: PC fija en la Concesionaria | Opción B: Servidor VPS en la Nube (Ubuntu/Docker) |
+| Código | Qué significa | Qué hace el servidor |
 |---|---|---|
-| **Acceso** | Solo dentro de la oficina (red local WiFi) | Desde cualquier lugar (oficina, home office, celular) |
-| **Persistencia** | Los archivos JSONL locales (`data/`) alcanzan y son ultra veloces | Requiere base de datos centralizada (Supabase) y Storage (R2) |
-| **Disponibilidad** | Si se apaga la PC o se corta la luz, se corta WhatsApp | 99.9% uptime 24/7 en centro de datos |
-| **Costo** | $0 adicional | ~$5 a $10 USD/mes de servidor |
-| **Regla de 14 días** | Fácil de monitorear (el teléfono suele estar cerca) | Se debe recordar al encargado abrir la app cada 10-12 días |
+| 401 `loggedOut` | Se desvinculó desde el celular | Borra la sesión, muestra QR nuevo y **alerta** (salvo que se haya desvinculado desde el panel). |
+| 403 | Cuenta restringida/bloqueada | Espera 30 min antes de reintentar y **alerta**: puede ser el inicio de un baneo. |
+| 405 | Versión de protocolo rechazada | Consulta la versión vigente y reintenta (ver arriba). |
+| 408 / 428 | Tiempo agotado / conexión cerrada | Reintento con espera creciente. |
+| 440 `connectionReplaced` | Otra instancia usa la misma sesión | Reintenta a los 5 y 30 min y **alerta**: hay dos servidores con la misma carpeta `sesion/`. |
+| 500 `badSession` | Sesión dañada | Reintento con espera; a la 3ª vez **alerta** (restaurar el respaldo de la sesión). |
+| 515 `restartRequired` | Normal tras vincular | Reconecta de inmediato. |
 
----
+- **Al despertar la PC** (suspensión/hibernación, detectado por un salto de reloj > 90 s)
+  se fuerza la reconexión en vez de esperar al keep-alive.
 
-## 7. Mapeo de Componentes del Servidor (`Whatsapp/servidor/`)
+## 6. Riesgo de baneo y Plan B
+
+El plan concreto (qué evitar, señales de alerta, qué hacer si llega un 403 y la migración
+a la API oficial con costos de referencia) está en
+[OPERACION.md → Riesgo de baneo y Plan B](OPERACION.md#10-riesgo-de-baneo-y-plan-b).
+
+## 7. Despliegue: PC titular en la concesionaria
+
+Decidido: **una PC de la concesionaria encendida 24/7** corre el servicio (Programador de
+tareas de Windows, arranca solo con el equipo). No hace falta Vercel ni un VPS: la base y
+los archivos ya están en la nube (Supabase + R2) y el acceso desde fuera de la oficina se
+publica con **Cloudflare Tunnel** (https, sin abrir puertos del router).
+
+| Riesgo | Mitigación |
+|---|---|
+| Se corta la luz / se apaga la PC | Arranca solo al volver; lo pendiente se recupera del diario local; los mensajes que llegaron mientras tanto los reenvía WhatsApp al reconectar. UPS recomendada. |
+| Se rompe la PC | Restaurar el respaldo cifrado en otra PC (sin QR). Ver OPERACION.md. |
+| Regla de los 14 días | El servidor avisa si el celular no da señales en `WA_ALERTA_CELULAR_DIAS` (10 por defecto). |
+| Windows Update reinicia | La tarea arranca con el equipo, sin sesión iniciada. |
+
+## 8. Mapeo de componentes del servidor (`Whatsapp/servidor/`)
 
 | Archivo | Responsabilidad |
 |---|---|
-| `src/config.js` | Variables de entorno, puertos, rutas de datos y límites de multimedia. |
-| `src/whatsapp.js` | Conexión con Baileys (`makeWASocket`), gestión del ciclo de vida del socket, eventos de mensajes, reconexión exponencial y cifrado. |
-| `src/almacen.js` | Capa de persistencia única (actualmente archivos JSON y JSONL). **Este es el único módulo que se sustituye para integrar Supabase.** |
-| `src/eventos.js` | Servidor de Server-Sent Events (SSE) y registro de actividad en tiempo real hacia los navegadores. |
-| `src/fotos.js` | Descarga diferida y almacenamiento en caché de avatares de perfil. |
-| `src/audio.js` | Transcodificación de notas de voz a formato OGG Opus (PTT - Push to Talk). |
-| `index.js` | API HTTP Express y orquestación de arranque y apagado seguro (*graceful shutdown*). |
+| `index.js` | API HTTP (Express 5), permisos por ruta, auditoría de acciones, arranque y apagado ordenado, purga diaria. |
+| `src/config.js` | Variables de entorno (lee el número de la línea en vivo del `.env`). |
+| `src/whatsapp.js` | Conexión Baileys, ciclo de vida y códigos de cierre, mensajes, grupos, bandeja de salida, descargas, conciliación R2. |
+| `src/almacen.js` | Estado y mensajes en memoria; persistencia local o en Supabase; páginas, búsqueda, carpetas por contacto, ventana de 365 días. |
+| `src/nube.js` | Escritura por tandas a Supabase (`wa.*`) con el diario local como red de seguridad. |
+| `src/diario.js` | Diario local (write-ahead): lo anotado antes de la tanda se recupera si el proceso muere. |
+| `src/archivos.js` | Archivos en R2 o disco: guardar, servir con Range, listar, mover prefijos con verificación. |
+| `src/auth.js` | Login con el CRM, cookie firmada, permisos por rol, protección CSRF. |
+| `src/auditoria.js` | Registro de quién hizo qué (`wa.auditoria`, con respaldo en archivo local). |
+| `src/crm.js` | Cliente del CRM de cada chat; crear cliente, seguimiento y tarea. |
+| `src/telefono.js` | Normalización de teléfonos argentinos (54 / 549 / 0 / 15). |
+| `src/tipos.js` | Extensión ↔ MIME y categorías de archivos. |
+| `src/audio.js` | ffmpeg: notas de voz OGG/Opus, forma de onda, miniaturas de fotos y videos. |
+| `src/fotos.js` | Fotos de perfil (bajada diferida y reparación). |
+| `src/respaldo.js` | Respaldo cifrado de la sesión y del `.env` en R2. |
+| `src/vigia.js` | Alertas (email por Resend, webhook) y vigilancia de la conexión y del celular. |
+| `src/eventos.js` | SSE hacia los navegadores y log diario con rotación. |
+| `scripts/` | `respaldar`, `restaurar`, `subir-a-r2`, instalación del servicio de Windows y vigía externo. |
+| `test/` | Tests de Vitest (`npm test` desde la raíz del repo). |

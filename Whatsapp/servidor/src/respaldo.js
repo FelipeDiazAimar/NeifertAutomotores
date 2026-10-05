@@ -94,6 +94,9 @@ export async function respaldarSesion(authDir) {
 export async function respaldarEnv() {
   if (!respaldoActivo()) return null
   const [servidor, proyecto] = ARCHIVOS_ENV.map((f) => (fs.existsSync(f) ? fs.readFileSync(f, 'utf8') : null))
+  // Con la app de escritorio no hay .env (la configuración va cifrada en la app): no se
+  // pisa el respaldo que haya con uno vacío.
+  if (!servidor && !proyecto) return null
   const paquete = zlib.gzipSync(JSON.stringify({ tipo: 'env', creado: new Date().toISOString(), servidor, proyecto }))
   await guardar(CLAVE_ENV, cifrar(paquete, BACKUP_CLAVE), 'application/octet-stream')
   return { servidor: !!servidor, proyecto: !!proyecto }

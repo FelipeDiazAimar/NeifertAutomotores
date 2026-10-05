@@ -7,7 +7,11 @@ import crypto from 'node:crypto'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import ffmpegPath from 'ffmpeg-static'
+import ffmpegStatic from 'ffmpeg-static'
+
+// La app de escritorio trae su propio ffmpeg (WA_FFMPEG): así los paquetes de actualización
+// del servidor no cargan los 80 MB del binario.
+const ffmpegPath = process.env.WA_FFMPEG || ffmpegStatic
 
 /** Corre ffmpeg con `entrada` por stdin (o un archivo en los args) y devuelve stdout. */
 function ffmpeg(args, entrada) {

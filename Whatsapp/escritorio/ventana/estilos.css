@@ -1,0 +1,44 @@
+:root {
+  --rojo: #be1e2d;
+  --tinta: #16161d;
+  --tinta-2: #5b5b66;
+  --borde: rgba(11, 11, 15, 0.14);
+  --fondo: #f6f5f3;
+  --tarjeta: #ffffff;
+  --ok: #1e8a50;
+  --aviso: #a8730c;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --tinta: #f2f2f4;
+    --tinta-2: #a5a5b0;
+    --borde: rgba(255, 255, 255, 0.14);
+    --fondo: #141418;
+    --tarjeta: #1d1d23;
+    --ok: #4cc287;
+    --aviso: #e0a93a;
+  }
+}
+* { box-sizing: border-box; margin: 0; }
+body { font: 14px/1.5 'Segoe UI', system-ui, sans-serif; background: var(--fondo); color: var(--tinta); padding: 28px; }
+h1 { font-size: 20px; margin-bottom: 6px; }
+p { color: var(--tinta-2); }
+.tarjeta { background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px; padding: 18px; margin-top: 18px; }
+.btn { font: inherit; font-weight: 600; border: 0; border-radius: 10px; padding: 9px 16px; cursor: pointer; }
+.btn.primario { background: var(--rojo); color: #fff; }
+.btn.primario:disabled { opacity: 0.5; cursor: default; }
+.btn.secundario { background: transparent; color: var(--tinta); border: 1px solid var(--borde); }
+.fila { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+.fila.final { justify-content: flex-end; }
+label { display: flex; flex-direction: column; gap: 4px; font-weight: 600; font-size: 13px; color: var(--tinta-2); margin-top: 12px; }
+input[type='text'], input[type='password'] { font: inherit; padding: 9px 11px; border-radius: 10px; border: 1px solid var(--borde); background: var(--fondo); color: var(--tinta); }
+input:focus { outline: 2px solid var(--rojo); outline-offset: -1px; }
+.check { flex-direction: row; align-items: center; gap: 8px; font-weight: 400; color: var(--tinta); }
+ul { padding-left: 18px; margin-top: 6px; }
+li { margin: 2px 0; }
+.ok { color: var(--ok); font-weight: 600; }
+.aviso { color: var(--aviso); }
+.error { color: var(--rojo); font-weight: 600; margin-top: 10px; }
+.ruta { font-family: Consolas, monospace; font-size: 12px; word-break: break-all; color: var(--tinta-2); }
+[hidden] { display: none !important; }
+.mt { margin-top: 10px; }

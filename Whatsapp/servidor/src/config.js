@@ -165,7 +165,13 @@ export const SOLO_ESTA_PC = ['127.0.0.1', 'localhost', '::1'].includes(HOST)
 
 // Sitios que pueden mostrar el panel dentro de una página (el CRM lo embebe) y mandarle
 // la sesión. Sale de CRM_URL; en esta PC también se acepta el CRM de desarrollo.
+// Con y sin "www.": el dominio redirige uno al otro, pero mejor aceptar los dos.
+const conYSinWww = (origen) => {
+  const u = new URL(origen)
+  const otro = u.hostname.startsWith('www.') ? u.hostname.slice(4) : `www.${u.hostname}`
+  return [u.origin, `${u.protocol}//${otro}${u.port ? `:${u.port}` : ''}`]
+}
 export const ORIGENES_CRM = [
-  ...(CRM_URL ? [new URL(CRM_URL).origin] : []),
+  ...(CRM_URL && !/^(localhost|127\.0\.0\.1)$/.test(new URL(CRM_URL).hostname) ? conYSinWww(CRM_URL) : CRM_URL ? [new URL(CRM_URL).origin] : []),
   ...(SOLO_ESTA_PC ? ['http://localhost:*', 'http://127.0.0.1:*'] : []),
 ]

@@ -156,7 +156,7 @@ export async function crearCliente(jid, { nombre, localidad, notas } = {}, usuar
   if (ficha.cliente) throw error(`Este chat ya es de ${ficha.cliente.nombre}.`, 409)
   // Como se cargan en el CRM: los 10 dígitos (código de área + número), sin +54 9.
   const normal = normalizarAR(ficha.telefono)
-  const telefono = normal ? normal.slice(3) : ficha.telefono
+  const telefono = /^549\d{10}$/.test(normal) ? normal.slice(3) : ficha.telefono
   const fila = {
     nombre: String(nombre || '').trim() || nombreDe(jid),
     telefono,

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'" />
+    <title>Configuración — Neifert WhatsApp</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <h1>Configurar el servidor de WhatsApp</h1>
+    <p>Esta PC va a ser el servidor del WhatsApp de la concesionaria. Elegí el archivo de configuración que te pasaron (el <b>.env</b> del servidor). Se guarda cifrado en esta PC y no se envía a ningún lado.</p>
+
+    <div class="tarjeta">
+      <div class="fila">
+        <button class="btn secundario" id="elegir">Elegir archivo…</button>
+        <span class="ruta" id="ruta">Ningún archivo elegido</span>
+      </div>
+      <div id="resultado" hidden>
+        <p class="ok" id="okTxt" hidden>El archivo tiene todo lo necesario.</p>
+        <div id="faltanBox" hidden>
+          <p class="error">Faltan datos obligatorios:</p>
+          <ul id="faltan"></ul>
+        </div>
+        <div id="avisosBox" hidden>
+          <p class="aviso mt">Arranca igual, pero conviene completar:</p>
+          <ul id="avisos" class="aviso"></ul>
+        </div>
+        <p id="detalle" class="mt"></p>
+      </div>
+      <p class="error" id="error" hidden></p>
+    </div>
+
+    <label class="check"><input type="checkbox" id="borrar" checked /> Borrar el archivo original después de guardarlo (recomendado)</label>
+
+    <div class="fila final">
+      <button class="btn primario" id="guardar" disabled>Guardar y arrancar el servidor</button>
+    </div>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const lista = (el, items) => {
+        el.replaceChildren(...items.map((t) => Object.assign(document.createElement('li'), { textContent: t })))
+      }
+      $('elegir').addEventListener('click', async () => {
+        $('error').hidden = true
+        const r = await window.nfApp.elegirConfig()
+        if (!r) return
+        $('ruta').textContent = r.ruta
+        $('resultado').hidden = false
+        if (r.error) {
+          $('error').textContent = r.error
+          $('error').hidden = false
+        }
+        $('okTxt').hidden = !r.ok
+        $('faltanBox').hidden = !r.faltan?.length
+        lista($('faltan'), r.faltan || [])
+        $('avisosBox').hidden = !r.avisos?.length
+        lista($('avisos'), r.avisos || [])
+        const datos = [r.numero ? `Número de la línea: +${String(r.numero).replace(/\D/g, '')}` : null, r.crm ? `CRM: ${r.crm}` : null].filter(Boolean)
+        $('detalle').textContent = datos.join(' · ')
+        $('guardar').disabled = !r.ok
+      })
+      $('guardar').addEventListener('click', async () => {
+        $('guardar').disabled = true
+        $('guardar').textContent = 'Guardando…'
+        const r = await window.nfApp.guardarConfig({ borrarOriginal: $('borrar').checked })
+        if (!r.ok) {
+          $('error').textContent = r.error
+          $('error').hidden = false
+          $('guardar').disabled = false
+          $('guardar').textContent = 'Guardar y arrancar el servidor'
+        }
+      })
+    </script>
+  </body>
+</html>

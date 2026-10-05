@@ -999,6 +999,9 @@ const sesion = { usuario: null, login: false }
 // El CRM muestra el panel dentro de su página. Ahí la sesión es la del usuario del CRM:
 // no hay "Ir al CRM" ni "Cerrar sesión", y si la sesión vence se le pide al CRM una nueva.
 const EMBEBIDO = window.parent !== window
+// La app de escritorio (la PC que hace de servidor) abre el panel en su propia ventana y le
+// da la sesión del usuario del CRM que entró en la app (ver Whatsapp/escritorio).
+const ESCRITORIO = typeof window.nfEscritorio?.tokenCrm === 'function'
 const avisarAlCrm = (datos) => EMBEBIDO && window.parent.postMessage({ origen: 'nf-wa', ...datos }, '*')
 
 // El CRM le pasa su tema (claro/oscuro) para que el panel no desentone.
@@ -1019,6 +1022,7 @@ const coincideOrigen = (origen, patron) =>
  * dirección, el historial ni los registros de ningún servidor.
  */
 async function tokenDelCrm() {
+  if (ESCRITORIO) return window.nfEscritorio.tokenCrm().catch(() => null)
   if (!EMBEBIDO) return null
   const { origenesCrm = [] } = await fetch('/api/publico').then((r) => r.json()).catch(() => ({}))
   return new Promise((resolve) => {
@@ -1052,7 +1056,7 @@ async function canjearToken(token) {
  */
 async function entrar() {
   let res = await fetch('/api/sesion')
-  if (res.status === 401 && EMBEBIDO) {
+  if (res.status === 401 && (EMBEBIDO || ESCRITORIO)) {
     const token = await tokenDelCrm()
     if (token) res = await canjearToken(token)
   }
@@ -1087,7 +1091,7 @@ let renovando = false
  * primero se intenta renovarla en silencio con la sesión del CRM.
  */
 async function pantallaSinSesion(data = {}, status = 0) {
-  if (status === 401 && EMBEBIDO && !renovando) {
+  if (status === 401 && (EMBEBIDO || ESCRITORIO) && !renovando) {
     renovando = true
     const token = await tokenDelCrm()
     if (token && (await canjearToken(token)).ok) return location.reload()
@@ -1095,7 +1099,7 @@ async function pantallaSinSesion(data = {}, status = 0) {
   const pane = $('#sinSesion')
   $('#sinSesionTxt').textContent = data.error || 'Entrá al WhatsApp desde el CRM.'
   const link = $('#sinSesionLink')
-  link.hidden = !data.crmUrl || EMBEBIDO
+  link.hidden = !data.crmUrl || EMBEBIDO || ESCRITORIO
   if (data.crmUrl) link.href = data.crmUrl
   pane.hidden = false
   avisarAlCrm({ tipo: 'nf-wa:sin-sesion' })
@@ -1122,7 +1126,7 @@ function renderYo() {
     <span class="yo-nombre" title="${otros.length ? `También conectados: ${esc(otros.map((a) => a.nombre).join(', '))}` : 'Nadie más conectado'}">
       ${ic('user')}${esc(sesion.usuario.nombre)}${otros.length ? `<em class="tnum">+${otros.length}</em>` : ''}
     </span>
-    ${EMBEBIDO ? '' : `<button class="icon-btn" data-act="salir-sesion" aria-label="Cerrar sesión" title="Cerrar sesión">${ic('unlink')}</button>`}`
+    ${EMBEBIDO || ESCRITORIO ? '' : `<button class="icon-btn" data-act="salir-sesion" aria-label="Cerrar sesión" title="Cerrar sesión">${ic('unlink')}</button>`}`
 }
 
 /** Compañeros que tienen abierto ese chat ahora mismo (sin contarme a mí). */

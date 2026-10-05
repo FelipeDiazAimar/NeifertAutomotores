@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'node_modules'] },
+  { ignores: ['dist', 'node_modules', 'Whatsapp/escritorio/dist', 'Whatsapp/escritorio/build'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
@@ -81,5 +81,28 @@ export default [
     rules: {
       'no-empty': ['error', { allowEmptyCatch: true }],
     },
+  },
+  {
+    // App de escritorio de la PC servidor (Electron): proceso principal y scripts en Node.
+    files: ['Whatsapp/escritorio/**/*.{cjs,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ['Whatsapp/escritorio/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+  },
+  {
+    // El preload corre en la página (usa location) con el require de Electron.
+    files: ['Whatsapp/escritorio/preload.cjs'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
 ]

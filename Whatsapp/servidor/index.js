@@ -303,4 +303,9 @@ async function cerrar() {
 }
 process.on('SIGINT', cerrar)
 process.on('SIGTERM', cerrar)
+// La app de escritorio (Whatsapp/escritorio) corre el servidor como proceso hijo; en
+// Windows no hay SIGTERM entre procesos, así que pide el cierre por este canal.
+process.on('message', (m) => m?.tipo === 'cerrar' && cerrar())
+// Si la app se cerró de golpe, el servidor no queda huérfano ocupando el puerto.
+process.on('disconnect', cerrar)
 process.on('unhandledRejection', (err) => log('error', 'Error no controlado', err?.message || String(err)))
