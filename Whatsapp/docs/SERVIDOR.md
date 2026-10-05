@@ -207,6 +207,25 @@ Se guarda lo de los últimos 365 días (`WA_VENTANA_DIAS`), y nada más viejo:
   emoji con la cantidad y, al pasar el mouse, quiénes fueron.
 - **"Fulano está escribiendo…":** con el nombre de quien escribe o graba.
 
+### Cliente del CRM en cada chat
+
+En la ficha del contacto (clic en el nombre del chat) aparece **Cliente del CRM**
+(`src/crm.js`, usa `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY`, los mismos del login):
+
+- **Se reconoce solo por el teléfono.** Los del CRM están cargados de muchas formas
+  ("3406 51-8585", "+54 9 3406…", "0 3406 15…"); se comparan normalizados a
+  `549` + 10 dígitos (`src/telefono.js`). La lista de clientes se refresca cada 2 minutos.
+- **A mano:** "Vincular a un cliente existente" (buscar por nombre o teléfono), "No es
+  cliente" (el número coincide con alguien que no es) y "Reconocer por el teléfono"
+  (vuelve a lo automático). El vínculo se guarda en el chat (`wa.chats.datos.clienteId`).
+- **Crear cliente:** con el teléfono del chat (10 dígitos, como se cargan en el CRM),
+  canal WhatsApp y estado Activo. Queda como creado por el usuario que lo hizo.
+- **Registrar seguimiento:** es el mismo "contacto" de la bitácora del cliente en el CRM.
+- **Crear tarea:** fecha, hora, prioridad y a quién se asigna (por defecto, a quien la crea).
+- **Ver ficha en el CRM:** abre `/crm/clientes/<id>` en el mismo CRM (solo embebido).
+- Todo queda también en la auditoría del WhatsApp. El rol de solo lectura no ve las
+  acciones.
+
 ### Multimedia
 
 - **Un solo límite** de tamaño para todo (`WA_MEDIA_MAX_MB`, 64 MB): lo que se baja solo, lo

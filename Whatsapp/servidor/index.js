@@ -19,6 +19,7 @@ import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesio
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
+import * as crm from './src/crm.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, servir } from './src/archivos.js'
 
@@ -118,7 +119,7 @@ app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.
 app.get('/api/eventos', (req, res) => suscribir(req, res))
 // Lo que el panel necesita saber de la configuración del servidor (límite de archivos y
 // la definición de privacidad: si se conservan los eliminados y las ediciones).
-const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS })
+const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO })
 app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: configPublica() })))
 app.get('/api/log', ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
@@ -169,7 +170,16 @@ app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', (req) =
 app.post('/api/chats/:id/salida/:msgId/reintentar', exigirEscritura, accion('reintentar_envio', (req) => wa.reintentarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 app.post('/api/chats/:id/salida/:msgId/descartar', exigirEscritura, accion('descartar_envio', (req) => wa.descartarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 // Integrantes de un grupo, para el "@" del cuadro de texto.
-app.get('/api/chats/:id/integrantes', ruta((req) => wa.integrantesDe(chatId(req))))
+// CRM: de qué cliente es el chat y acciones que quedan en el CRM a nombre de quien las hace.
+app.get('/api/crm/clientes', ruta((req) => crm.buscarClientes(req.query.q)))
+app.get('/api/crm/usuarios', ruta(() => crm.usuariosCrm()))
+app.get('/api/chats/:id/crm', ruta((req) => crm.fichaCrm(chatId(req))))
+app.post('/api/chats/:id/crm/vincular', exigirEscritura, accion('crm_vincular', (req) => crm.vincularCliente(chatId(req), req.body?.clienteId || null), (req) => ({ cliente: req.body?.clienteId || null })))
+app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_cliente', (req) => crm.crearCliente(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.cliente?.id })))
+app.post('/api/chats/:id/crm/seguimiento', exigirEscritura, accion('crm_seguimiento', (req) => crm.registrarSeguimiento(chatId(req), req.body?.texto, req.usuario), (req, r) => ({ cliente: r.clienteId })))
+app.post('/api/chats/:id/crm/tarea', exigirEscritura, accion('crm_tarea', (req) => crm.crearTarea(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, tarea: r.tareaId })))
+
+app.get('/api/chats/:id/integrantes',ruta((req) => wa.integrantesDe(chatId(req))))
 app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))
 app.post('/api/chats/:id/eliminar', exigirEscritura, accion('eliminar_mensaje', (req) => wa.eliminarMensaje(chatId(req), req.body?.id), (req) => ({ mensaje: req.body?.id })))
 app.post('/api/chats/:id/destacar', exigirEscritura, accion('destacar', (req) => wa.destacarMensaje(chatId(req), req.body?.id, req.body?.destacar), (req) => ({ mensaje: req.body?.id })))

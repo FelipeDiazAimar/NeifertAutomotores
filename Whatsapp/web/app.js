@@ -1321,6 +1321,139 @@ function renderInfo() {
   if (!f) return
   $('#infoPane').innerHTML = info.vista === 'media' ? vistaArchivos(f) : vistaFicha(f)
   $('#infoPane').scrollTop = 0
+  if (info.vista === 'ficha' && $('#crmBloque')) cargarCrm(f.id)
+}
+
+/* ---------------- Cliente del CRM (en la ficha del contacto) ---------------- */
+
+const crmUi = { chat: null, ficha: null, form: null, resultados: [], usuarios: null }
+const ESTADOS_CLIENTE = { activo: 'Activo', en_seguimiento: 'En seguimiento', vendido: 'Vendido', perdido: 'Perdido' }
+const hoyISO = () => {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+async function cargarCrm(chat) {
+  if (crmUi.chat !== chat) Object.assign(crmUi, { chat, ficha: null, form: null, resultados: [] })
+  try {
+    const ficha = await api(`/api/chats/${enc(chat)}/crm`)
+    if (crmUi.chat !== chat) return
+    crmUi.ficha = ficha
+  } catch (err) {
+    crmUi.ficha = { error: err.message }
+  }
+  renderCrm()
+}
+
+function renderCrm() {
+  const el = $('#crmBloque')
+  const f = crmUi.ficha
+  if (!el || !f || info.ficha?.id !== crmUi.chat) return
+  const partes = ['<h4>Cliente del CRM</h4>']
+  if (f.error) {
+    partes.push(`<p class="info-vacio">No se pudo consultar el CRM: ${esc(f.error)}</p>`)
+  } else if (f.cliente) {
+    const c = f.cliente
+    partes.push(`<div class="crm-cliente">
+      <div><b>${esc(c.nombre)}</b><span class="crm-estado est-${esc(c.status)}">${esc(ESTADOS_CLIENTE[c.status] || c.status)}</span>${c.archivado ? '<span class="crm-estado">Archivado</span>' : ''}</div>
+      <p class="info-sub">${esc([c.telefono, c.localidad].filter(Boolean).join(' · ') || 'Sin teléfono cargado')}</p>
+      <p class="info-sub">${f.vinculo === 'manual' ? 'Vinculado a mano.' : 'Se reconoció por el teléfono.'}</p>
+    </div>`)
+    partes.push(`<div class="info-filas">
+      ${EMBEBIDO ? `<button class="info-fila" data-act="crm-ver">${ic('user')}<span>Ver ficha en el CRM</span></button>` : ''}
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="seguimiento">${ic('file')}<span>Registrar seguimiento</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('unlink')}<span>${f.vinculo === 'manual' ? 'Cambiar el cliente' : 'No es este cliente'}</span></button>
+    </div>`)
+  } else {
+    partes.push(`<p class="info-vacio">${f.vinculo === 'ninguno' ? 'Marcado como que no es cliente del CRM.' : 'Este número no está cargado como cliente.'}</p>
+    <div class="info-filas">
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="crear">${ic('plus')}<span>Crear cliente</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('search')}<span>Vincular a un cliente existente</span></button>
+    </div>`)
+  }
+  if (crmUi.form) partes.push(formCrm(crmUi.form, f))
+  el.innerHTML = partes.join('')
+  el.querySelector('form [autofocus]')?.focus()
+}
+
+function formCrm(tipo, f) {
+  const botones = (ok) => `<div class="crm-botones"><button type="button" class="btn ghost" data-act="crm-cancelar">Cancelar</button><button class="btn primary">${ok}</button></div><p class="crm-err" hidden></p>`
+  if (tipo === 'crear') {
+    const nombre = info.ficha?.nombre && !/^\+?\d[\d\s]*$/.test(info.ficha.nombre) ? info.ficha.nombre : ''
+    return `<form class="crm-form" data-crm-form="crear">
+      <label>Nombre<input name="nombre" required maxlength="120" value="${esc(nombre)}" autofocus></label>
+      <label>Localidad<input name="localidad" maxlength="80"></label>
+      <label>Notas<textarea name="notas" rows="2" maxlength="1000"></textarea></label>
+      <p class="info-sub">Teléfono: ${esc(f.telefono || 'desconocido')} · Canal: WhatsApp</p>
+      ${botones('Crear cliente')}</form>`
+  }
+  if (tipo === 'seguimiento') {
+    return `<form class="crm-form" data-crm-form="seguimiento">
+      <label>Qué se habló<textarea name="texto" rows="3" required maxlength="2000" autofocus placeholder="Ej.: pidió precio del Corolla, le paso cotización el lunes"></textarea></label>
+      ${botones('Guardar')}</form>`
+  }
+  if (tipo === 'tarea') {
+    const yo = sesion.usuario?.id
+    const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
+    return `<form class="crm-form" data-crm-form="tarea">
+      <label>Tarea<input name="titulo" required maxlength="200" autofocus placeholder="Ej.: Llamar para coordinar la prueba de manejo"></label>
+      <div class="crm-par"><label>Fecha<input type="date" name="fecha" required value="${hoyISO()}"></label><label>Hora<input type="time" name="hora"></label></div>
+      <div class="crm-par"><label>Prioridad<select name="prioridad"><option value="baja">Baja</option><option value="normal" selected>Normal</option><option value="alta">Alta</option></select></label>
+      ${opciones ? `<label>Para<select name="asignadoA">${opciones}</select></label>` : ''}</div>
+      <label>Detalle<textarea name="descripcion" rows="2" maxlength="1000"></textarea></label>
+      ${botones('Crear tarea')}</form>`
+  }
+  // vincular
+  const filas = crmUi.resultados.map((c) => `<li><button type="button" class="crm-res" data-act="crm-elegir" data-cliente="${esc(c.id)}"><b>${esc(c.nombre)}</b><span>${esc(c.telefono || '')}</span></button></li>`).join('')
+  return `<form class="crm-form" data-crm-form="vincular">
+    <label>Buscar cliente<input name="q" id="crmBuscar" autocomplete="off" autofocus placeholder="Nombre o teléfono"></label>
+    <ul class="crm-resultados">${filas}</ul>
+    <div class="crm-botones">${f.vinculo === 'telefono' ? '<button type="button" class="btn ghost" data-act="crm-desvincular" data-cliente="ninguno">No es cliente</button>' : ''}${f.vinculo === 'manual' || f.vinculo === 'ninguno' ? '<button type="button" class="btn ghost" data-act="crm-desvincular">Reconocer por el teléfono</button>' : ''}<button type="button" class="btn ghost" data-act="crm-cancelar">Cancelar</button></div>
+    <p class="crm-err" hidden></p></form>`
+}
+
+let crmBusqueda = 0
+async function buscarClienteCrm(q) {
+  const n = ++crmBusqueda
+  const lista = q.trim().length < 2 ? [] : await api(`/api/crm/clientes?q=${enc(q)}`).catch(() => [])
+  if (n !== crmBusqueda) return
+  crmUi.resultados = lista
+  const ul = $('#crmBloque .crm-resultados')
+  if (!ul) return
+  ul.innerHTML = lista.length
+    ? lista.map((c) => `<li><button type="button" class="crm-res" data-act="crm-elegir" data-cliente="${esc(c.id)}"><b>${esc(c.nombre)}</b><span>${esc(c.telefono || '')}</span></button></li>`).join('')
+    : q.trim().length >= 2 ? '<li class="info-vacio">Sin coincidencias.</li>' : ''
+}
+
+async function abrirFormCrm(tipo) {
+  crmUi.form = tipo
+  crmUi.resultados = []
+  if (tipo === 'tarea' && !crmUi.usuarios) crmUi.usuarios = await api('/api/crm/usuarios').catch(() => [])
+  renderCrm()
+}
+
+/** Guarda lo del formulario (crear cliente, seguimiento, tarea) o el vínculo elegido. */
+async function enviarCrm(tipo, datos, boton) {
+  const chat = crmUi.chat
+  const err = $('#crmBloque .crm-err')
+  if (err) err.hidden = true
+  if (boton) boton.disabled = true
+  const ruta = { crear: 'cliente', seguimiento: 'seguimiento', tarea: 'tarea', vincular: 'vincular' }[tipo]
+  try {
+    const r = await api(`/api/chats/${enc(chat)}/crm/${ruta}`, { method: 'POST', json: datos })
+    if (crmUi.chat !== chat) return
+    crmUi.form = null
+    if (r?.configurado !== undefined) crmUi.ficha = r
+    renderCrm()
+    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
+  } catch (e) {
+    if (err) {
+      err.textContent = e.message
+      err.hidden = false
+    } else toast(e.message)
+    if (boton) boton.disabled = false
+  }
 }
 
 function vistaFicha(f) {
@@ -1338,6 +1471,9 @@ function vistaFicha(f) {
     ${f.esGrupo && g?.creacion ? `<p class="info-sub">Creado el ${fechaLarga(g.creacion * 1000)}</p>` : ''}
     ${f.sinChat ? '<p class="info-sub">Todavía no hay conversación con este contacto.</p>' : ''}
   </div>`)
+
+  // El cliente del CRM se pide aparte (no demora la ficha) y se dibuja en este hueco.
+  if (!f.esGrupo && !f.sinChat && state.config?.crm) partes.push('<div class="info-bloque crm-bloque" id="crmBloque"><h4>Cliente del CRM</h4><p class="info-vacio">Buscando…</p></div>')
 
   if (g?.descripcion) {
     partes.push(`<div class="info-bloque"><h4>Descripción</h4><p class="info-desc">${formatear(g.descripcion)}</p></div>`)
@@ -2311,6 +2447,8 @@ const ACCIONES_AUDITORIA = {
   reenviar: 'Reenvió mensajes', eliminar_mensaje: 'Eliminó un mensaje', marca: 'Archivó, fijó o silenció', reaccion: 'Reaccionó',
   destacar: 'Destacó un mensaje', abrir_chat: 'Abrió un chat nuevo', salir_grupo: 'Salió de un grupo',
   sincronizar_chats: 'Sincronizó chats', sincronizar_grupos: 'Sincronizó grupos', rechazo_numero: 'Rechazo de número equivocado',
+  borrar_chat: 'Borró un chat del respaldo', reintentar_envio: 'Reintentó un envío', descartar_envio: 'Descartó un envío',
+  crm_vincular: 'Vinculó un chat a un cliente', crm_crear_cliente: 'Creó un cliente en el CRM', crm_seguimiento: 'Registró un seguimiento', crm_tarea: 'Creó una tarea en el CRM',
 }
 
 /** Registro de auditoría (solo quien maneja la línea): quién hizo qué, cuándo y desde qué IP. */
@@ -2702,6 +2840,23 @@ document.addEventListener('click', async (e) => {
     case 'cerrar-info':
       cerrarInfo()
       break
+    case 'crm-ver':
+      // El CRM abre la ficha del cliente (el panel está embebido en el CRM).
+      if (crmUi.ficha?.cliente) avisarAlCrm({ tipo: 'nf-wa:abrir', ruta: `/crm/clientes/${crmUi.ficha.cliente.id}` })
+      break
+    case 'crm-form':
+      abrirFormCrm(t.dataset.form)
+      break
+    case 'crm-cancelar':
+      crmUi.form = null
+      renderCrm()
+      break
+    case 'crm-elegir':
+      enviarCrm('vincular', { clienteId: t.dataset.cliente }, t)
+      break
+    case 'crm-desvincular':
+      enviarCrm('vincular', { clienteId: t.dataset.cliente || null }, t)
+      break
     case 'emojis':
       abrirEmojis(t)
       break
@@ -2782,6 +2937,13 @@ document.addEventListener('click', async (e) => {
 })
 
 document.addEventListener('submit', async (e) => {
+  const crmForm = e.target.dataset?.crmForm
+  if (crmForm) {
+    e.preventDefault()
+    if (crmForm === 'vincular') return
+    const datos = Object.fromEntries(new FormData(e.target))
+    return enviarCrm(crmForm, datos, e.target.querySelector('.btn.primary'))
+  }
   if (e.target.id === 'formNuevo') {
     e.preventDefault()
     const errEl = $('#nuevoErr')
@@ -2805,6 +2967,7 @@ document.addEventListener('submit', async (e) => {
 document.addEventListener('input', (e) => {
   if (e.target.id === 'search') alBuscar(e.target.value)
   if (e.target.id === 'fwdBuscar') renderReenviar(e.target.value)
+  if (e.target.id === 'crmBuscar') buscarClienteCrm(e.target.value)
   if (e.target.id === 'msgInput') {
     autoAlto(e.target)
     syncSendBtn()
