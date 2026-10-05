@@ -186,12 +186,21 @@ async function rechazarLinea(s, telefono, motivo) {
   rechazo = { telefono, ts: Date.now() }
   // Primero se suelta el socket: así ningún evento de esa cuenta llega a guardarse.
   sock = null
-  await s.logout().catch(() => {})
-  borrarSesion()
-  setMeta({ chatsSincronizados: null })
-  yo = null
-  setConexion('conectando')
-  programar(1000)
+  // La baja puede tardar hasta un minuto si WhatsApp no contesta: se espera como mucho
+  // 5 s y se corta igual, así enseguida hay un QR nuevo (y la app muestra el error).
+  try {
+    await Promise.race([s.logout().catch(() => {}), new Promise((r) => setTimeout(r, 5000))])
+    try {
+      s.end(undefined)
+    } catch {}
+    borrarSesion()
+    setMeta({ chatsSincronizados: null })
+  } finally {
+    // Pase lo que pase al limpiar, siempre se arma un QR nuevo: si no, quedaba "cargando".
+    yo = null
+    setConexion('conectando')
+    programar(1000)
+  }
 }
 
 /**
@@ -955,6 +964,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   // Menciones (@): qué nombre mostrar en lugar de cada "@número" del texto.
   if (mencionados?.length) mensaje.menciones = nombresDeMenciones(mencionados)
   if (deMi) mensaje.estado = ESTADOS[m.status] || 'enviado'
+  // Mandado desde el panel: queda firmado con quien lo mandó desde que se guarda.
+  if (deMi && firmasPendientes.has(key.id)) mensaje.enviadoPor = firmasPendientes.get(key.id)
   // Un mensaje propio que no salió del panel lo mandaron desde el celular: está activo.
   if (deMi && origen === 'vivo' && !idsDelPanel.has(key.id)) senalDelCelular()
 
@@ -990,6 +1001,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   }
 
   const { nuevo, mensaje: guardado } = agregarMensaje(chatId, mensaje)
+  // Si el tilde llegó antes que el mensaje, se aplica ahora.
+  if (deMi) aplicarEstadoTemprano(chatId, guardado)
   if (!nuevo) return
   if (grupo) pedirNombreGrupo(chatId)
   if (tipoUpsert === 'notify') pedirFotos([chatId])
@@ -1026,10 +1039,36 @@ async function procesarActualizacion({ key, update }) {
 
   if (update.status != null) {
     const nuevo = ESTADOS[update.status]
+    if (!nuevo) return
     const m = buscarMensaje(chatId, key.id)
-    if (!m || !m.deMi || !nuevo) return
-    if (nuevo === 'error' || ORDEN.indexOf(nuevo) > ORDEN.indexOf(m.estado)) actualizarMensaje(chatId, key.id, { estado: nuevo })
+    // El tilde puede llegar antes de que termine de guardarse el mensaje (los dos avisos de
+    // WhatsApp vienen casi juntos): se guarda un momento y se aplica al guardarlo.
+    if (!m) {
+      if (key.fromMe) anotarEstadoTemprano(key.id, nuevo)
+      return
+    }
+    if (m.deMi) aplicarEstado(chatId, m, nuevo)
   }
+}
+
+/** Sube el estado de un mensaje propio (nunca lo baja: un "leído" no vuelve a "enviado"). */
+function aplicarEstado(chatId, m, nuevo) {
+  if (nuevo === 'error' || ORDEN.indexOf(nuevo) > ORDEN.indexOf(m.estado)) actualizarMensaje(chatId, m.id, { estado: nuevo })
+}
+
+// Estados que llegaron antes que su mensaje: id → { estado, ts }. Viven 2 minutos.
+const estadosTempranos = new Map()
+function anotarEstadoTemprano(id, estado) {
+  const previo = estadosTempranos.get(id)
+  if (previo && estado !== 'error' && ORDEN.indexOf(estado) <= ORDEN.indexOf(previo.estado)) return
+  estadosTempranos.set(id, { estado, ts: Date.now() })
+  if (estadosTempranos.size > 500) estadosTempranos.delete(estadosTempranos.keys().next().value)
+}
+function aplicarEstadoTemprano(chatId, m) {
+  const e = estadosTempranos.get(m.id)
+  if (!e) return
+  estadosTempranos.delete(m.id)
+  if (Date.now() - e.ts < 120_000 && m.deMi) aplicarEstado(chatId, m, e.estado)
 }
 
 /**
@@ -1909,6 +1948,13 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
   asegurarConectado()
   const messageId = generateMessageIDV2(sock.user?.id)
   idsDelPanel.add(messageId)
+  // Quién lo manda se anota ANTES de mandarlo, con el id: así queda firmado apenas se guarda,
+  // aunque WhatsApp avise del mensaje antes de que vuelva el envío.
+  const u = firmante || usuarioActual()
+  if (u) {
+    firmasPendientes.set(messageId, { id: u.id, nombre: u.nombre })
+    setTimeout(() => firmasPendientes.delete(messageId), 120_000).unref?.()
+  }
   if (idsDelPanel.size > 1000) idsDelPanel.delete(idsDelPanel.values().next().value)
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
@@ -1919,7 +1965,13 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
     }
     // Normalmente ya lo guardó messages.upsert; esto cubre el caso en que no llegue.
     if (enviado && !buscarMensaje(chatId, enviado.key.id)) await procesarEntrante(enviado, 'append')
-    if (enviado) firmarEnviado(chatId, enviado.key.id, firmante)
+    if (enviado) {
+      firmarEnviado(chatId, enviado.key.id, firmante)
+      // Salió por la conexión: deja de ser "pendiente" (un tilde) aunque el acuse del
+      // servidor de WhatsApp se demore o se pierda. Después sube a entregado/leído.
+      const guardado = buscarMensaje(chatId, enviado.key.id)
+      if (guardado?.estado === 'pendiente') aplicarEstado(chatId, guardado, 'enviado')
+    }
     return enviado?.key?.id
   } finally {
     setTimeout(() => mediaPropia.delete(messageId), 60000)
@@ -1939,10 +1991,15 @@ function claveMensaje(chatId, m) {
  * Lo que se manda desde el celular queda sin firma.
  */
 function firmarEnviado(chatId, id, firmante = null) {
-  const u = firmante || usuarioActual()
-  if (!u || !id || !buscarMensaje(chatId, id)) return
+  const u = firmante || usuarioActual() || firmasPendientes.get(id)
+  const m = id ? buscarMensaje(chatId, id) : null
+  if (!u || !m || m.enviadoPor) return
   actualizarMensaje(chatId, id, { enviadoPor: { id: u.id, nombre: u.nombre } })
 }
+
+// Mensajes mandados desde el panel que todavía no se guardaron: id → { id, nombre } de quien
+// los mandó (ver enviar). procesarEntrante los firma al guardarlos.
+const firmasPendientes = new Map()
 
 /** Mensaje a citar, armado con lo guardado: Baileys necesita la clave y el contenido original. */
 function mensajeCitado(chatId, id) {

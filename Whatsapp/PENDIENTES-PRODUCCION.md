@@ -33,10 +33,12 @@ Fuera de `Whatsapp/` solo toca: `AppSidebar.jsx`, `AppMobileSidebar.jsx`, `AppRo
 
 - Si se mergea antes de que el servidor esté listo, la página WhatsApp muestra
   "Falta configurar la dirección del servidor". No rompe nada más.
-- `npm test`: 504 tests pasan. `npm run build`: OK.
-- ⚠️ `npm run lint` marca **42 problemas (21 errores)** que vienen de `main`
-  (`ImageCropper`, `VehicleCard`, `LeadForm`, tests con `global`, `sw.js`, etc.). Ninguno es
-  del WhatsApp. Si el lint tiene que pasar antes de mergear, hay que arreglar esos.
+- `npm test`: 504 tests pasan. `npm run build`: OK. `npm run lint`: sin errores
+  (quedan 21 advertencias, que no lo hacen fallar).
+- La rama además corrige cosas que venían de `main`: los 21 errores de lint (`global` →
+  `globalThis` en tests, `sw.js`, y `ImageCropper`, `VehicleCard` y
+  `VehiculoFotoCarousel`, que actualizaban su estado dentro de un efecto) y el test de
+  tareas que fallaba de 21 a 24 h por la zona horaria.
 
 ### 1.2 Variable de entorno en Vercel (proyecto del CRM)
 
@@ -141,11 +143,12 @@ Windows en la PC servidor.
 | Actualizaciones sin reinstalar | ✅ `npm run publicar` → la PC servidor la baja sola; vuelve a la anterior si falla. Versión publicada: 20261005-0241 |
 | Tope de espacio R2 | ✅ 9 GB (hoy 0,22 GB usados); al 85 % borra los archivos más viejos |
 | Integración con el CRM | ✅ Cliente por teléfono, crear cliente, seguimiento y tarea desde el chat |
-| Tests / build | ✅ 504 tests (62 del servidor de WhatsApp); build OK; lint del WhatsApp sin problemas |
-| Lint del repo | ⚠️ 42 problemas que vienen de `main` (ver 1.1) |
-| Commits | ⚠️ Lo de hoy (app de estado, número a mano, datos por línea, tope R2) está sin commitear; la rama tiene 8 commits sin pushear |
+| Tests / lint / build | ✅ 504 tests (62 del servidor de WhatsApp); lint sin errores; build OK |
+| Registros en la app | ✅ Ventana "Registros" con cada error explicado (qué pasó y qué hacer) |
+| Número equivocado | ✅ Se rechaza en segundos con aviso claro y QR nuevo (antes quedaba "cargando" hasta un minuto) |
+| Relojito al enviar | ✅ El tilde ya no se pierde si llega antes que el mensaje; al salir el envío pasa a ✓ |
 | Instalador | ⚠️ Sin firma digital (aviso de SmartScreen la primera vez) |
-| App instalada en la PC de Jeremías | ⚠️ Es la versión anterior: reinstalar con el `.exe` nuevo |
+| App instalada en la PC de Jeremías | ⚠️ Reinstalar con el `.exe` nuevo de `Whatsapp/escritorio/dist/` |
 
 **Documentación completa:** `Whatsapp/docs/ESCRITORIO.md` (la app y el túnel),
 `OPERACION.md` (operación, respaldo, alertas, costos, plan ante bloqueo, checklist),

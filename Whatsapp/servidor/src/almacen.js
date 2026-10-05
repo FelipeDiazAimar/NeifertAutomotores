@@ -758,9 +758,36 @@ export const existeMedia = (jid, archivo) =>
 
 /* ---------------- Sesión y espacio usado ---------------- */
 
+/**
+ * Borra la sesión de WhatsApp (desvincular, número equivocado). En Windows la carpeta puede
+ * estar tomada un instante (Baileys todavía escribiendo, el antivirus, OneDrive) y el borrado
+ * falla con ENOTEMPTY/EBUSY: se reintenta y, si sigue, se aparta con otro nombre para
+ * borrarla después. Nunca tira error: una sesión vieja no puede trabar el QR nuevo.
+ */
 export function borrarSesion() {
-  fs.rmSync(AUTH_DIR, { recursive: true, force: true })
+  try {
+    fs.rmSync(AUTH_DIR, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
+    return
+  } catch {}
+  const apartada = `${AUTH_DIR}-borrar-${Date.now()}`
+  try {
+    fs.renameSync(AUTH_DIR, apartada)
+  } catch (err) {
+    log('aviso', 'No se pudo borrar la sesión anterior', err.message)
+    return
+  }
+  setTimeout(() => fs.rm(apartada, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }, () => {}), 5000).unref?.()
 }
+
+/** Sesiones apartadas que quedaron de un borrado que no se pudo terminar: se borran al arrancar. */
+function limpiarSesionesApartadas() {
+  try {
+    for (const f of fs.readdirSync(LINEA_DIR)) {
+      if (f.startsWith('sesion-borrar-')) fs.rm(path.join(LINEA_DIR, f), { recursive: true, force: true, maxRetries: 5, retryDelay: 500 }, () => {})
+    }
+  } catch {}
+}
+limpiarSesionesApartadas()
 
 function recorrer(dir, alArchivo) {
   if (!fs.existsSync(dir)) return

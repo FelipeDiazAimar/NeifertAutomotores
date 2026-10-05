@@ -15,13 +15,14 @@
  * con Windows (safeStorage/DPAPI) en %APPDATA%\Neifert WhatsApp. No viaja por internet.
  * Los datos de la línea (sesión, registros) quedan en %APPDATA%\Neifert WhatsApp\data.
  */
-const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, safeStorage, shell } = require('electron')
+const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, shell } = require('electron')
 const { fork, spawn } = require('node:child_process')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { parseEnv } = require('node:util')
 const { credencialesR2, r2Get } = require('./r2.cjs')
+const { leerRegistros } = require('./registros.cjs')
 
 // Datos en %APPDATA%Neifert WhatsApp (y no con el nombre interno del paquete).
 // WA_DATOS_APP: otra carpeta (para pruebas, sin tocar la instalación de esta PC).
@@ -398,6 +399,7 @@ const TEXTO_ESTADO = {
 }
 let estado = { conexion: 'iniciando', ok: false }
 let desconectadoDesde = null
+let ultimoRechazo = null
 let avisado = false
 
 async function consultarEstado() {
@@ -424,6 +426,14 @@ async function consultarEstado() {
       // 5 minutos sin conectar (las alertas por email las manda el servidor).
       avisado = true
       new Notification({ title: 'WhatsApp de Neifert sin conexión', body: `${TEXTO_ESTADO[estado.conexion] || estado.conexion}. Abrí la app para ver qué pasa.` }).show()
+    }
+  }
+  // Escanearon con otro número: el servidor lo desvinculó. Se avisa una vez por rechazo.
+  if (estado.rechazo?.ts && estado.rechazo.ts !== ultimoRechazo) {
+    ultimoRechazo = estado.rechazo.ts
+    abrirVentana()
+    if (Notification.isSupported()) {
+      new Notification({ title: 'Número equivocado', body: `Se escaneó con ${estado.rechazo.telefono || 'otro número'}, que no es el de esta línea. Escaneá con el celular correcto.` }).show()
     }
   }
   if (anterior !== estado.conexion) actualizarIcono()
@@ -506,10 +516,11 @@ function abrirVentana() {
     return
   }
   ventana = new BrowserWindow({
-    width: 440,
-    height: 780,
+    width: 460,
+    height: 760,
     resizable: false,
     maximizable: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
     title: 'Servidor de WhatsApp — Neifert',
     icon: ICONO,
     show: false,
@@ -535,17 +546,44 @@ function abrirWhatsappWeb() {
   if (url && /^https?:\/\//.test(url)) shell.openExternal(url)
 }
 
+/* Registros: lo del servidor, la app y el túnel, con qué significa cada error. */
+let ventanaRegistros = null
+function abrirRegistros() {
+  if (ventanaRegistros) {
+    ventanaRegistros.show()
+    return ventanaRegistros.focus()
+  }
+  ventanaRegistros = new BrowserWindow({
+    width: 820,
+    height: 640,
+    minWidth: 560,
+    minHeight: 400,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
+    title: 'Registros — Neifert WhatsApp',
+    icon: ICONO,
+    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
+  })
+  ventanaRegistros.removeMenu()
+  ventanaRegistros.webContents.on('will-navigate', (e) => e.preventDefault())
+  ventanaRegistros.on('closed', () => (ventanaRegistros = null))
+  ventanaRegistros.loadFile(path.join(__dirname, 'ventana', 'registros.html'))
+}
+
 function abrirConfig() {
   if (ventanaConfig) return ventanaConfig.focus()
   ventanaConfig = new BrowserWindow({
-    width: 620,
-    height: 640,
+    width: 560,
+    height: 720,
     resizable: false,
+    maximizable: false,
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
     title: 'Configuración — Neifert WhatsApp',
     icon: ICONO,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
   })
   ventanaConfig.removeMenu()
+  // Soltar un archivo afuera de la zona de arrastre no tiene que abrirlo en la ventana.
+  ventanaConfig.webContents.on('will-navigate', (e) => e.preventDefault())
   ventanaConfig.on('closed', () => (ventanaConfig = null))
   ventanaConfig.loadFile(path.join(__dirname, 'ventana', 'config.html'))
 }
@@ -569,7 +607,7 @@ function actualizarIcono() {
       { label: 'Abrir WhatsApp en el navegador', enabled: !!leerConfig()?.CRM_URL, click: abrirWhatsappWeb },
       { label: 'Reiniciar el servidor', enabled: iniciado, click: () => reiniciarTodo() },
       { label: buscando ? 'Buscando actualización…' : 'Buscar actualización ahora', enabled: ACTUALIZA && !buscando && !!leerConfig(), click: () => buscarYAvisar(true) },
-      { label: 'Ver registros', click: () => shell.openPath(fs.existsSync(path.join(DATA_DIR, 'logs')) ? path.join(DATA_DIR, 'logs') : DATOS) },
+      { label: 'Ver registros', click: abrirRegistros },
       { label: 'Cambiar configuración…', click: abrirConfig },
       { label: 'Restaurar la sesión desde el respaldo…', enabled: !!leerConfig(), click: () => restaurarSesion() },
       {
@@ -683,13 +721,28 @@ ipcMain.handle('config-elegir', async (e) => {
     filters: [{ name: 'Configuración', extensions: ['env', 'txt', '*'] }],
   })
   if (canceled || !filePaths[0]) return null
-  const ruta = filePaths[0]
+  return revisarArchivo(filePaths[0])
+})
+
+// El mismo archivo, pero arrastrado a la ventana.
+ipcMain.handle('config-desde-ruta', (e, ruta) => revisarArchivo(ruta))
+
+/** Lee y revisa un archivo de configuración. Al navegador solo vuelve el diagnóstico, nunca los valores. */
+function revisarArchivo(ruta) {
+  const mal = (error) => ({ ok: false, error, ruta: String(ruta || '') })
+  let info
+  try {
+    info = fs.statSync(String(ruta || ''))
+  } catch {
+    return mal('No se encontró el archivo.')
+  }
+  if (!info.isFile()) return mal('Eso no es un archivo: arrastrá el .env.')
+  if (info.size > 200 * 1024) return mal('El archivo es demasiado grande para ser un .env.')
   const texto = fs.readFileSync(ruta, 'utf8')
   const r = revisarConfig(texto)
   elegido = r.ok ? { ruta, texto } : null
-  // Al navegador solo vuelve el diagnóstico, nunca los valores.
   return { ok: r.ok, error: r.error, faltan: r.faltan, avisos: r.avisos, ruta, crm: r.config?.CRM_URL || null }
-})
+}
 
 ipcMain.handle('config-guardar', async (e, { borrarOriginal } = {}) => {
   if (!elegido) return { ok: false, error: 'Primero elegí el archivo.' }
@@ -719,6 +772,10 @@ ipcMain.handle('iniciar-servidor', (e, opciones) => iniciarServidor(opciones))
 ipcMain.handle('detener-servidor', () => detenerServidor())
 ipcMain.on('abrir-whatsapp', abrirWhatsappWeb)
 ipcMain.on('ocultar', () => ventana?.hide())
+ipcMain.on('abrir-registros', abrirRegistros)
+ipcMain.handle('registros', () => leerRegistros({ dirLogs: path.join(DATA_DIR, 'logs'), archivoApp: LOG_APP }))
+ipcMain.on('copiar', (e, texto) => clipboard.writeText(String(texto ?? '')))
+ipcMain.on('abrir-carpeta-registros', () => shell.openPath(fs.existsSync(path.join(DATA_DIR, 'logs')) ? path.join(DATA_DIR, 'logs') : DATOS))
 
 /* ---------------- Arranque ---------------- */
 

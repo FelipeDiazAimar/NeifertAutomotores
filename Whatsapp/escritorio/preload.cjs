@@ -2,13 +2,14 @@
  * Puente entre las pantallas de la app (archivos locales: configuración y estado) y el
  * proceso principal. Solo pasan diagnósticos y el estado de la línea, nunca las claves.
  */
-const { contextBridge, ipcRenderer } = require('electron')
+const { contextBridge, ipcRenderer, webUtils } = require('electron')
 
 if (location.protocol === 'file:') {
   contextBridge.exposeInMainWorld('nfApp', {
-    // Configuración
+    // Configuración: elegirla con el diálogo o arrastrar el archivo a la ventana
     estado: () => ipcRenderer.invoke('app-estado'),
     elegirConfig: () => ipcRenderer.invoke('config-elegir'),
+    configDesdeArchivo: (archivo) => ipcRenderer.invoke('config-desde-ruta', webUtils.getPathForFile(archivo)),
     guardarConfig: (opciones) => ipcRenderer.invoke('config-guardar', opciones),
     // Estado de la línea (QR, número conectado)
     estadoLinea: () => ipcRenderer.invoke('estado-linea'),
@@ -19,5 +20,10 @@ if (location.protocol === 'file:') {
     iniciarServidor: (opciones) => ipcRenderer.invoke('iniciar-servidor', opciones),
     detenerServidor: () => ipcRenderer.invoke('detener-servidor'),
     ocultar: () => ipcRenderer.send('ocultar'),
+    // Registros del servidor, la app y el túnel
+    abrirRegistros: () => ipcRenderer.send('abrir-registros'),
+    registros: () => ipcRenderer.invoke('registros'),
+    copiar: (texto) => ipcRenderer.send('copiar', texto),
+    abrirCarpetaRegistros: () => ipcRenderer.send('abrir-carpeta-registros'),
   })
 }

@@ -6,82 +6,134 @@
     <title>Servidor de WhatsApp — Neifert</title>
     <link rel="stylesheet" href="estilos.css" />
   </head>
-  <body class="estado">
+  <body>
     <header class="cabecera">
-      <img src="../icono.png" alt="" class="logo" />
       <div>
-        <h1>Servidor de WhatsApp</h1>
-        <p>Neifert Automotores</p>
+        <img src="img/logo-light.png" alt="Neifert Automotores" class="marca clara" />
+        <img src="img/logo-dark.png" alt="" aria-hidden="true" class="marca oscura" />
       </div>
+      <span class="etiqueta">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.6-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.8s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.6-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.4.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.8-.1 1.4Z"/></svg>
+        Servidor de WhatsApp
+      </span>
     </header>
 
-    <!-- Inicio: número de la línea + Iniciar servidor -->
-    <form class="tarjeta" id="vistaInicio" hidden>
-      <label for="numero">Número de la línea de WhatsApp</label>
-      <input type="text" id="numero" inputmode="numeric" autocomplete="off" placeholder="3492 123456" maxlength="20" />
-      <p class="ayuda">
-        <b>Característica sin el 0</b> + <b>número sin el 15</b>: 10 dígitos en total.<br />
-        Ej.: <b>3492 123456</b> · <b>341 1234567</b> · <b>11 2345 6789</b><br />
-        No va +54 ni 9: eso lo agrega la app.
-      </p>
-      <p class="error" id="errorNumero" hidden></p>
-      <label class="check"><input type="checkbox" id="autoInicio" checked /> Iniciar el servidor solo al prender la PC</label>
-      <p class="nota">Cada número tiene sus propios chats y archivos: cambiarlo no borra los de otro.</p>
-      <div class="fila final">
-        <button class="btn primario" id="iniciar">Iniciar servidor</button>
+    <!-- ============ Inicio: número de la línea + Iniciar servidor ============ -->
+    <form id="vistaInicio" hidden>
+      <h1>Iniciar el servidor</h1>
+      <p class="bajada">Escribí el número de WhatsApp que va a usar esta PC.</p>
+
+      <div class="tarjeta">
+        <label class="rotulo" for="numero">Número de la línea</label>
+        <div class="campo-numero" id="campoNumero">
+          <span class="prefijo">+54 9</span>
+          <input type="text" id="numero" inputmode="numeric" autocomplete="off" placeholder="3492 123456" maxlength="20" />
+        </div>
+        <ul class="reglas">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Característica sin el 0</b> + <b>número sin el 15</b> (10 dígitos)</span></li>
+          <li class="no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Sin +54 ni 9: ya están puestos</span></li>
+        </ul>
+        <div class="ejemplos"><span class="ejemplo">3492 123456</span><span class="ejemplo">341 1234567</span><span class="ejemplo">11 2345 6789</span></div>
+        <p class="error" id="errorNumero" hidden></p>
+
+        <div class="separador"></div>
+        <label class="interruptor">
+          <span class="textos"><b>Iniciar solo al prender la PC</b><span>Después de un corte de luz vuelve sin que nadie toque nada.</span></span>
+          <input type="checkbox" id="autoInicio" checked />
+        </label>
       </div>
+
+      <div class="acciones">
+        <button class="btn primario ancho" id="iniciar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+          Iniciar servidor
+        </button>
+      </div>
+      <p class="chico centro mt">Cada número tiene sus propios chats y archivos: cambiarlo no borra los de otro.</p>
     </form>
 
-    <!-- Servidor andando -->
+    <!-- ============ Servidor andando ============ -->
     <div id="vistaServidor" hidden>
-      <div class="tarjeta centro">
-        <span class="chip" id="chip">Iniciando…</span>
-        <p class="linea" id="linea"></p>
+      <div class="tarjeta">
+        <div class="error rechazo" id="rechazo" hidden></div>
+        <div class="estado-hero">
+          <div class="circulo" id="circulo"><div class="spinner"></div></div>
+          <div>
+            <h2 id="titulo">Iniciando…</h2>
+            <p id="subtitulo">Arrancando el servidor</p>
+            <span class="linea-chip" id="lineaChip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg><span id="linea"></span></span>
+          </div>
+        </div>
 
         <!-- Hay que vincular la línea -->
         <div id="vistaQr" hidden>
-          <p class="mt">Escaneá este código con el celular de esa línea:</p>
-          <p class="paso">WhatsApp → <b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b></p>
-          <img id="qr" class="qr" alt="Código QR para vincular WhatsApp" />
-          <p class="error" id="rechazo" hidden></p>
-          <p class="nota">Después de escanearlo dejá WhatsApp abierto en el celular unos minutos: ahí manda el historial.</p>
+          <div class="qr-marco">
+            <img id="qr" alt="Código QR para vincular WhatsApp" hidden />
+            <div class="cargando" id="qrCargando">Generando código…</div>
+          </div>
+          <ol class="pasos">
+            <li>Abrí WhatsApp en el celular de esta línea</li>
+            <li>Tocá <b>&nbsp;Dispositivos vinculados&nbsp;</b> → <b>&nbsp;Vincular</b></li>
+            <li>Apuntá la cámara a este código</li>
+          </ol>
+          <div class="aviso-caja">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>Después de escanearlo dejá WhatsApp abierto en el celular unos minutos: ahí manda el historial de chats.</span>
+          </div>
         </div>
 
         <!-- Conectada -->
         <div id="vistaOk" hidden>
-          <p class="numero" id="nombre"></p>
-          <p class="mt">La línea está conectada. El WhatsApp se usa desde el CRM, en el navegador.</p>
+          <div class="aviso-caja">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+            <span>El WhatsApp se usa desde el <b>CRM</b>, en el navegador. Cerrá esta ventana tranquilo: el servidor sigue andando en segundo plano.</span>
+          </div>
         </div>
 
-        <!-- Conectando / sin conexión -->
-        <div id="vistaEspera" hidden>
-          <div class="spinner" aria-hidden="true"></div>
-          <p class="mt" id="espera">Conectando con WhatsApp…</p>
-        </div>
       </div>
 
-      <p class="nota centro">Podés cerrar esta ventana: el servidor sigue funcionando en segundo plano (ícono junto al reloj).</p>
-      <div class="fila final">
-        <button class="btn secundario" id="cambiar">Cambiar número</button>
-        <button class="btn secundario" id="whatsapp">Abrir WhatsApp</button>
-        <button class="btn primario" id="cerrar">Cerrar</button>
+      <div class="acciones" id="filaWhatsapp">
+        <button class="btn secundario" id="whatsapp" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+          Abrir WhatsApp
+        </button>
+      </div>
+      <div class="acciones">
+        <button class="btn secundario" id="cambiar" type="button">Cambiar número</button>
+        <button class="btn primario" id="cerrar" type="button">Listo</button>
       </div>
     </div>
 
-    <p class="version" id="version"></p>
+    <footer class="pie">
+      <span class="version" id="version"></span>
+      <button class="enlace" id="verRegistros" type="button">Ver registros</button>
+    </footer>
 
     <script>
       const $ = (id) => document.getElementById(id)
-      const ESPERA = {
-        iniciando: 'Arrancando el servidor…',
-        conectando: 'Conectando con WhatsApp…',
-        desconectado: 'Sin conexión con WhatsApp. Revisá que la PC tenga internet; se reintenta solo.',
+      const ICONOS = {
+        conectado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+        qr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M17 21h4v-4"/></svg>',
+        desconectado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2-1.5M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8A15 15 0 0 0 11 4.1M12 20h.01"/></svg>',
+        espera: '<div class="spinner"></div>',
+      }
+      const TEXTOS = {
+        conectado: ['Línea conectada', null],
+        qr: ['Vinculá la línea', 'Escaneá el código con el celular de esta línea'],
+        conectando: ['Conectando…', 'Hablando con WhatsApp'],
+        iniciando: ['Iniciando…', 'Arrancando el servidor'],
+        desconectado: ['Sin conexión', 'Revisá que la PC tenga internet; se reintenta solo'],
+      }
+      // "+5493406518585" → "+54 9 3406 518585"
+      const telefonoLindo = (t) => {
+        const d = String(t || '').replace(/\D/g, '')
+        return /^549\d{10}$/.test(d) ? `+54 9 ${formatear(d.slice(3))}` : t || 'otro número'
       }
       const formatear = (d) => (d && d.length === 10 ? `${d.slice(0, d.length - 6)} ${d.slice(-6)}` : d || '')
       let numeroCargado = false
 
       function mostrar(e) {
-        $('version').textContent = `Versión del servidor: ${e.version}`
+        $('version').textContent = `Servidor ${e.version}`
         $('vistaInicio').hidden = e.iniciado
         $('vistaServidor').hidden = !e.iniciado
         if (!e.iniciado) {
@@ -94,29 +146,50 @@
           return
         }
         numeroCargado = false
-        $('chip').textContent = e.texto
-        $('chip').className = `chip est-${e.conexion}`
-        $('linea').textContent = e.numero ? `Línea: ${formatear(e.numero)}` : ''
+        const clase = ['conectado', 'qr', 'desconectado'].includes(e.conexion) ? e.conexion : 'espera'
+        const circulo = $('circulo')
+        if (circulo.dataset.estado !== clase) {
+          circulo.innerHTML = ICONOS[clase]
+          circulo.dataset.estado = clase
+          circulo.className = `circulo est-${e.conexion}`
+        }
+        let [titulo, sub] = TEXTOS[e.conexion] || [e.texto, '']
+        // Después de un número equivocado, mientras se arma el código nuevo.
+        if (e.rechazo && !['qr', 'conectado'].includes(e.conexion)) [titulo, sub] = ['Generando un código nuevo…', 'Esperá unos segundos']
+        $('titulo').textContent = titulo
+        $('subtitulo').innerHTML = e.conexion === 'conectado'
+          ? `<span class="punto"></span>${e.nombre ? `Conectada como <b></b>` : 'Funcionando'}`
+          : ''
+        if (e.conexion === 'conectado' && e.nombre) $('subtitulo').querySelector('b').textContent = e.nombre
+        if (e.conexion !== 'conectado') $('subtitulo').textContent = sub || ''
+        $('linea').textContent = e.numero ? `+54 9 ${formatear(e.numero)}` : ''
+        $('lineaChip').hidden = !e.numero
         $('vistaQr').hidden = e.conexion !== 'qr'
         $('vistaOk').hidden = e.conexion !== 'conectado'
-        $('vistaEspera').hidden = e.conexion === 'qr' || e.conexion === 'conectado'
         if (e.conexion === 'qr' && e.qr && $('qr').src !== e.qr) $('qr').src = e.qr
-        $('rechazo').hidden = !e.rechazo
-        if (e.rechazo) {
-          $('rechazo').textContent = `Se escaneó con ${e.rechazo.telefono || 'otro número'}, que no es el de esta línea. Escaneá con el celular de ${formatear(e.numero)}, o tocá "Cambiar número".`
+        $('qr').hidden = !e.qr
+        $('qrCargando').hidden = !!e.qr
+        // Escanearon con otro número: el servidor lo desvinculó y arma un QR nuevo.
+        const rechazado = !!e.rechazo && e.conexion !== 'conectado'
+        $('rechazo').hidden = !rechazado
+        if (rechazado) {
+          $('rechazo').replaceChildren()
+          const b = document.createElement('b')
+          b.textContent = 'Número equivocado. '
+          $('rechazo').append(b, `Se escaneó con ${telefonoLindo(e.rechazo.telefono)}, que no es el de esta línea (+54 9 ${formatear(e.numero)}). Se desvinculó solo: escaneá el código nuevo con el celular correcto, o tocá "Cambiar número".`)
         }
-        $('nombre').textContent = e.nombre || ''
-        $('espera').textContent = ESPERA[e.conexion] || e.texto
-        $('whatsapp').hidden = !e.crm
+        $('filaWhatsapp').hidden = !e.crm || e.conexion !== 'conectado'
       }
 
       // Aviso mientras se escribe (la validación de verdad la hace la app al iniciar).
       $('numero').addEventListener('input', async () => {
         const v = $('numero').value
         const r = v.trim() ? await window.nfApp.validarNumero(v) : { ok: true }
-        const largoOk = v.replace(/\D/g, '').length >= 10
-        $('errorNumero').hidden = r.ok || (!largoOk && !/[^\d\s-]/.test(v) && !/^\s*(0|54|9|\+)/.test(v))
+        const incompleto = v.replace(/\D/g, '').length < 10 && !/[^\d\s-]/.test(v) && !/^\s*(0|54|9|\+)/.test(v)
+        const mostrarError = !r.ok && !incompleto
+        $('errorNumero').hidden = !mostrarError
         $('errorNumero').textContent = r.error || ''
+        $('campoNumero').classList.toggle('invalido', mostrarError)
       })
 
       $('vistaInicio').addEventListener('submit', async (ev) => {
@@ -127,6 +200,7 @@
         if (!r.ok) {
           $('errorNumero').textContent = r.error
           $('errorNumero').hidden = false
+          $('campoNumero').classList.add('invalido')
           $('numero').select()
           return
         }
@@ -140,6 +214,7 @@
       })
       $('whatsapp').addEventListener('click', () => window.nfApp.abrirWhatsapp())
       $('cerrar').addEventListener('click', () => window.nfApp.ocultar())
+      $('verRegistros').addEventListener('click', () => window.nfApp.abrirRegistros())
 
       window.nfApp.alCambiarEstado(mostrar)
       window.nfApp.estadoLinea().then(mostrar)

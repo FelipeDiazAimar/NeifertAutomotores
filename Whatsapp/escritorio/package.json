@@ -26,6 +26,7 @@
       "main.cjs",
       "preload.cjs",
       "r2.cjs",
+      "registros.cjs",
       "ventana/**",
       "icono.png"
     ],
