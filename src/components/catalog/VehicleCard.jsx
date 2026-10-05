@@ -268,7 +268,7 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
   )
 }
 
-export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catalogo' }) {
+export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catalogo', groupLabel = null }) {
   const [isCardHovered, setIsCardHovered] = useState(false)
   const isSold = (vehicle.status || 'disponible') === 'vendido'
   const isReserved = (vehicle.status || 'disponible') === 'reservado'
@@ -352,10 +352,19 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:hidden">
             {vehicle.year}
           </span>
-          {isReserved && (
-            <span className="absolute left-2 top-2 z-10 rounded-full bg-ink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bg sm:left-3 sm:top-3">
-              Reservado
-            </span>
+          {(groupLabel || isReserved) && (
+            <div className="absolute left-2 top-2 z-10 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
+              {groupLabel && (
+                <span className="rounded-full bg-neifert px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                  {groupLabel.brand} · {groupLabel.count}
+                </span>
+              )}
+              {isReserved && (
+                <span className="rounded-full bg-ink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bg">
+                  Reservado
+                </span>
+              )}
+            </div>
           )}
           {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}
           <div className="absolute right-3 top-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">

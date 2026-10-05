@@ -13,7 +13,7 @@ const EMPTY_FILTERS = {
  *  se deriva de estos valores en useVehicles. */
 export const useCatalogStore = create((set, get) => ({
   category: 'todos',
-  sort: 'brand-asc',
+  sort: 'price-desc',
   search: '',
   viewMode: 'grid', // 'grid' | 'list'
   filters: { ...EMPTY_FILTERS },
@@ -48,5 +48,5 @@ export const useCatalogStore = create((set, get) => ({
   },
 
   reset: () =>
-    set({ category: 'todos', sort: 'brand-asc', search: '', filters: { ...EMPTY_FILTERS } }),
+    set({ category: 'todos', sort: 'price-desc', search: '', filters: { ...EMPTY_FILTERS } }),
 }))
