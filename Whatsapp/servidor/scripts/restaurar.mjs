@@ -31,7 +31,7 @@ const args = Object.fromEntries(
   }),
 )
 
-const { ARCHIVOS_EN_R2, ARCHIVOS_ENV, BACKUP_CLAVE, DATA_DIR } = await import('../src/config.js')
+const { ARCHIVOS_EN_R2, ARCHIVOS_ENV, BACKUP_CLAVE, LINEA_DIR } = await import('../src/config.js')
 if (!ARCHIVOS_EN_R2) {
   console.error('Falta configurar R2 en Whatsapp/servidor/.env (WA_R2_BUCKET, WA_R2_ENDPOINT, WA_R2_ACCESS_KEY_ID, WA_R2_SECRET_ACCESS_KEY).')
   process.exit(1)
@@ -42,7 +42,7 @@ if (!BACKUP_CLAVE) {
 }
 const { bajarRespaldo, CLAVE_ENV, CLAVE_SESION } = await import('../src/respaldo.js')
 
-const AUTH_DIR = path.join(DATA_DIR, 'sesion')
+const AUTH_DIR = path.join(LINEA_DIR, 'sesion') // la sesión de la línea configurada (WHATSAPP_NUMERO)
 const claveSesion = args.fecha ? `respaldo/historial/sesion-${args.fecha}.enc` : CLAVE_SESION
 
 // 1. Sesión

@@ -91,6 +91,11 @@ export const R2 = {
   secretAccessKey: env.WA_R2_SECRET_ACCESS_KEY || env.R2_SECRET_ACCESS_KEY || '',
 }
 export const ARCHIVOS_EN_R2 = Boolean(R2.bucket && R2.endpoint && R2.accessKeyId && R2.secretAccessKey)
+// Tope de espacio en R2 (GB). El plan gratuito incluye 10 GB: por defecto 9, para dejar
+// margen. Al 85 % se borran los archivos más viejos; nunca se sube algo que lo pase. 0: sin tope.
+const limiteGb = env.WA_R2_LIMITE_GB == null || String(env.WA_R2_LIMITE_GB).trim() === '' ? 9 : Number(env.WA_R2_LIMITE_GB)
+// Un valor que no es un número no apaga el tope: vale el de por defecto. Solo 0 lo apaga.
+export const R2_LIMITE_BYTES = (Number.isFinite(limiteGb) && limiteGb >= 0 ? limiteGb : 9) * 1024 ** 3
 
 /* ---------------- Respaldo de la sesión ---------------- */
 
@@ -136,11 +141,10 @@ export const ROLES_LINEA = lista(env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
 export const ROLES_LECTURA = lista(env.WHATSAPP_ROLES_LECTURA ?? '')
 
 /**
- * Único número que se acepta como línea (con código de país). Si alguien escanea el QR con
- * otro celular, se desvincula solo. Vacío: se acepta cualquiera.
- * Se lee en vivo de los .env (no solo al arrancar): cambiar el número no pide reiniciar.
+ * WHATSAPP_NUMERO tal como está ahora en el entorno o en los .env (se relee del archivo, para
+ * avisar si alguien lo cambia con el servidor andando).
  */
-export function numeroLinea() {
+export function numeroEnArchivos() {
   if (ENV_REAL.WHATSAPP_NUMERO !== undefined) return limpiarNumero(ENV_REAL.WHATSAPP_NUMERO)
   for (const archivo of ARCHIVOS_ENV) {
     try {
@@ -154,6 +158,22 @@ export function numeroLinea() {
 }
 // Lo que sigue a un # es comentario; del resto quedan solo los dígitos.
 const limpiarNumero = (valor) => String(valor).split('#')[0].replace(/\D/g, '')
+
+/**
+ * La línea (número de WhatsApp, con código de país) con la que corre el servidor. Es además
+ * la "llave" de los datos: cada número tiene sus propios chats y mensajes en Supabase
+ * (columna `linea`), sus archivos en R2 (lineas/<número>/…) y su sesión y diario en el disco
+ * (DATA_DIR/lineas/<número>). Así se puede probar con un número y usar otro en producción
+ * sin mezclar ni borrar nada.
+ *
+ * Se fija al arrancar: para cambiar de línea se reinicia el servidor (la app de escritorio
+ * lo hace sola). Si se escanea el QR con otro celular, se desvincula solo.
+ */
+export const LINEA = numeroEnArchivos()
+export const numeroLinea = () => LINEA
+// Sin número: sus datos van aparte, para no mezclarse con los de ninguna línea.
+export const CLAVE_LINEA = LINEA || 'sin-numero'
+export const LINEA_DIR = path.join(DATA_DIR, 'lineas', CLAVE_LINEA)
 // Firma de la cookie de sesión. Si no se define, se genera una y se guarda en DATA_DIR.
 export const SESION_SECRETO = env.SESION_SECRETO || ''
 export const SESION_HORAS = Number(env.SESION_HORAS) || 12

@@ -13,7 +13,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { HeadObjectCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3'
-import { ARCHIVOS_EN_R2, DATA_DIR, R2 } from '../src/config.js'
+import { ARCHIVOS_EN_R2, DATA_DIR, LINEA_DIR, R2 } from '../src/config.js'
 import { mimeDe } from '../src/tipos.js'
 
 if (!ARCHIVOS_EN_R2) {
@@ -39,7 +39,7 @@ function archivosDe(carpeta) {
       else todos.push(p)
     }
   }
-  recorrer(path.join(DATA_DIR, carpeta))
+  recorrer(path.join(LINEA_DIR, carpeta)) // los de esta línea; la clave queda lineas/<número>/…
   return todos
 }
 

@@ -42,6 +42,7 @@ import {
   MEDIA_RECIENTE_SEG,
   VENTANA_DIAS,
   VERSION_WA,
+  numeroEnArchivos,
   numeroLinea,
 } from './config.js'
 import { emitir, log } from './eventos.js'
@@ -53,7 +54,8 @@ import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
 import { aNotaDeVoz, formaDeOnda, miniatura } from './audio.js'
 import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
-import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos } from './archivos.js'
+import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos, medirR2 } from './archivos.js'
+import * as cuota from './cuota.js'
 import {
   AUTH_DIR,
   actualizarMensaje,
@@ -193,27 +195,20 @@ async function rechazarLinea(s, telefono, motivo) {
 }
 
 /**
- * Vigila los .env: si cambia WHATSAPP_NUMERO se toma en el momento, sin reiniciar. Si la
- * línea conectada ya no es la configurada, se desvincula.
+ * Vigila los .env: si alguien cambia WHATSAPP_NUMERO con el servidor andando, avisa. Cada
+ * número tiene sus propios datos, así que para pasar a otra línea hay que reiniciar (la app
+ * de escritorio lo hace sola al cambiar el número).
  */
 let numeroVigilado = null
 function vigilarNumero() {
   if (numeroVigilado !== null) return
-  numeroVigilado = numeroLinea()
+  numeroVigilado = numeroEnArchivos()
   for (const archivo of ARCHIVOS_ENV) {
     fs.watchFile(archivo, { interval: 2000 }, () => {
-      const nuevo = numeroLinea()
+      const nuevo = numeroEnArchivos()
       if (nuevo === numeroVigilado) return
       numeroVigilado = nuevo
-      log(
-        'info',
-        nuevo ? 'Cambió el número de la concesionaria' : 'Se sacó el número de la concesionaria',
-        nuevo ? `+${nuevo}` : 'Se acepta cualquier número',
-      )
-      emitirEstado()
-      if (nuevo && sock && conexion === 'conectado' && yo && !mismoNumero(yo.telefono, nuevo)) {
-        sinUsuario(() => rechazarLinea(sock, yo.telefono || yo.id, 'La línea conectada no es el número de la concesionaria'))
-      }
+      log('aviso', 'Cambió WHATSAPP_NUMERO en el .env', `Ahora dice ${nuevo ? `+${nuevo}` : '(vacío)'}, pero el servidor sigue con la línea ${numeroLinea() ? `+${numeroLinea()}` : 'sin número'}. Reinicialo para pasar a la otra línea (cada número tiene sus propios datos).`)
     }).unref()
   }
 }
@@ -773,6 +768,68 @@ function archivosEnUso() {
  * nada de menos de un día, ni carpetas con una mudanza pendiente, y si sobra demasiado
  * (señal de que algo no cargó bien) no borra y avisa.
  */
+/* ---------------- Tope de espacio en R2 (ver cuota.js) ---------------- */
+
+const gb = (n) => `${(n / 1024 ** 3).toFixed(2)} GB`
+let liberando = null
+
+/**
+ * Si el bucket pasó el 85 % del tope, borra los archivos más viejos (y sus miniaturas)
+ * hasta bajar al 75 %. Los mensajes quedan, con el aviso "archivo borrado para liberar
+ * espacio" (estado 'liberado'), y no se vuelven a bajar solos.
+ */
+export function liberarEspacio() {
+  if (!cuota.activa() || cuota.fraccion() < cuota.UMBRAL_LIMPIEZA) return Promise.resolve(null)
+  liberando ??= sinUsuario(async () => {
+    const objetivo = cuota.LIMITE * cuota.OBJETIVO_LIMPIEZA
+    let usado = cuota.estadoCuota().usado
+    const candidatos = []
+    recorrerMensajes((jid, m) => {
+      if (m.media?.estado === 'ok' && m.media.archivo) candidatos.push({ jid, id: m.id, ts: m.ts || 0 })
+    })
+    candidatos.sort((a, b) => a.ts - b.ts)
+    let borrados = 0
+    let bytes = 0
+    for (const c of candidatos) {
+      if (usado <= objetivo) break
+      const m = buscarMensaje(c.jid, c.id)
+      if (m?.media?.estado !== 'ok' || !m.media.archivo) continue
+      const tamano = m.media.tamano || 0
+      await borrarArchivo(claveMedia(c.jid, m.media.archivo)).catch(() => {})
+      if (m.media.miniatura) await borrarArchivo(m.media.miniatura).catch(() => {})
+      actualizarMensaje(c.jid, c.id, { media: { ...m.media, estado: 'liberado', archivo: null, miniatura: null } })
+      usado -= tamano
+      bytes += tamano
+      borrados++
+    }
+    await medirR2().catch(() => {})
+    if (borrados) {
+      const detalle = `${borrados} archivos (${gb(bytes)}), los más viejos · quedan ${gb(cuota.estadoCuota().usado || 0)} de ${gb(cuota.LIMITE)}`
+      log('aviso', 'Se borraron archivos viejos para no pasar el tope de R2', detalle)
+      alertar('Se borraron archivos viejos del WhatsApp', `${detalle}. Es para no pasar el plan gratuito de Cloudflare R2 (WA_R2_LIMITE_GB). Los mensajes quedan; solo se borró el archivo.`, { clave: 'r2-espacio', nivel: 'aviso' })
+    }
+    return { borrados, bytes }
+  }).finally(() => (liberando = null))
+  return liberando
+}
+
+/** Mide el bucket al arrancar y cada 6 horas; si hace falta, libera espacio. */
+export async function vigilarEspacio() {
+  if (!cuota.activa()) return null
+  const revisar = async () => {
+    try {
+      await medirR2()
+      await liberarEspacio()
+    } catch (err) {
+      log('aviso', 'No se pudo medir el espacio de R2', err.message)
+    }
+  }
+  await revisar()
+  setInterval(revisar, 6 * 3600e3).unref()
+  const { usado, limite } = cuota.estadoCuota()
+  return { usado, limite }
+}
+
 export async function reconciliarArchivos({ simular = false } = {}) {
   const usados = archivosEnUso()
   const enMudanza = (meta().mudanzasPendientes || []).map((m) => `${m.desde}/`)
@@ -842,7 +899,7 @@ export async function ponerAlDiaArchivos() {
   const faltan = []
   recorrerMensajes((chatId, m) => {
     const md = m.media
-    if (!md || !m.raw || md.estado === 'ok' || md.estado === 'grande' || (m.ts || 0) < corte) return
+    if (!md || !m.raw || md.estado === 'ok' || md.estado === 'grande' || md.estado === 'liberado' || (m.ts || 0) < corte) return
     faltan.push({ chatId, m })
   })
   faltan.sort((a, b) => (b.m.ts || 0) - (a.m.ts || 0))
@@ -943,7 +1000,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
     if (estaArchivado(chatId) && creds?.accountSettings?.unarchiveChats) setArchivado(chatId, false)
   }
 
-  if (guardado.media && guardado.media.estado !== 'ok' && config().descargarMedia) {
+  // 'liberado': se borró para no pasar el tope de R2 (ver liberarEspacio); no se vuelve a bajar solo.
+  if (guardado.media && !['ok', 'liberado'].includes(guardado.media.estado) && config().descargarMedia) {
     // Lo que acaba de llegar se baja en el momento; lo del historial va a la cola, para
     // no pedirle cientos de archivos a WhatsApp de golpe.
     if (ahora() - ts < MEDIA_RECIENTE_SEG) await descargarMedia(chatId, guardado)
@@ -1670,8 +1728,11 @@ async function descargarMedia(chatId, m) {
     const archivo = `${m.id}.${extensionDe(m.media.mime, m.media.nombre)}`
     await guardarMedia(chatId, archivo, buffer, m.media.mime)
     const extras = await extrasDeArchivo(chatId, m, buffer)
+    if (cuota.fraccion() >= cuota.UMBRAL_LIMPIEZA) liberarEspacio()
     return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0, ...extras } })
   } catch (err) {
+    // Sin espacio en R2: se libera lo más viejo y el archivo queda para reintentar.
+    if (err.code === 'SIN_ESPACIO') liberarEspacio()
     const error = mensajeDeError(err, huboReenvio)
     const actual = buscarMensaje(chatId, m.id)
     if (actual?.media?.estado === 'error' && actual.media.error === error) {
@@ -1723,7 +1784,7 @@ async function trabajarCola() {
       const { chatId, id } = colaMedia.shift()
       enColaMedia.delete(`${chatId}|${id}`)
       const m = buscarMensaje(chatId, id)
-      if (m?.media && m.media.estado !== 'ok' && m.raw) {
+      if (m?.media && !['ok', 'liberado'].includes(m.media.estado) && m.raw) {
         try {
           await descargarMedia(chatId, m)
         } catch {
@@ -1749,7 +1810,7 @@ export function descargarTodo(chatId, { reintentar = false } = {}) {
   let n = 0
   let perdidos = 0
   for (const m of listarMensajes(chatId)) {
-    if (!m.media || m.media.estado === 'ok' || !m.raw) continue
+    if (!m.media || m.media.estado === 'ok' || m.media.estado === 'liberado' || !m.raw) continue
     if (!reintentar && seDaPorPerdido(m)) {
       perdidos++
       continue
@@ -1970,6 +2031,7 @@ async function encolarSalida(chatId, p, buffer) {
     const mime = p.tipo === 'nota_voz' ? 'audio/ogg; codecs=opus' : p.mime
     const archivo = `${id}.${extensionDe(mime, p.nombre)}`
     await guardarMedia(chatId, archivo, buffer, mime)
+    if (cuota.fraccion() >= cuota.UMBRAL_LIMPIEZA) liberarEspacio()
     m.media = {
       mime,
       nombre: p.nombre || null,

@@ -6,8 +6,10 @@
  *     trae la app, y lo vuelve a levantar si se cae.
  *   - Si la configuración trae WA_TUNEL_TOKEN, corre Cloudflare Tunnel (cloudflared) para
  *     que el CRM llegue a esta PC por https (wa.<dominio>).
- *   - Ícono junto al reloj con el estado de la línea; la ventana abre el panel en esta PC.
- *   - Arranca sola con Windows (oculta, solo el ícono).
+ *   - Ícono junto al reloj y una ventanita de estado: muestra el QR cuando hay que vincular
+ *     la línea (se abre sola en ese caso) y, si no, el número conectado. El WhatsApp se usa
+ *     desde el CRM, en el navegador: esta app no lo muestra.
+ *   - Arranca sola con Windows (oculta, solo el ícono). Cerrar la ventana no la apaga.
  *
  * La configuración (el .env del servidor) se elige una vez desde un archivo y queda cifrada
  * con Windows (safeStorage/DPAPI) en %APPDATA%\Neifert WhatsApp. No viaja por internet.
@@ -15,13 +17,15 @@
  */
 const { app, BrowserWindow, Menu, Notification, Tray, dialog, ipcMain, nativeImage, safeStorage, shell } = require('electron')
 const { fork, spawn } = require('node:child_process')
+const crypto = require('node:crypto')
 const fs = require('node:fs')
 const path = require('node:path')
 const { parseEnv } = require('node:util')
 const { credencialesR2, r2Get } = require('./r2.cjs')
 
 // Datos en %APPDATA%Neifert WhatsApp (y no con el nombre interno del paquete).
-app.setPath('userData', path.join(app.getPath('appData'), 'Neifert WhatsApp'))
+// WA_DATOS_APP: otra carpeta (para pruebas, sin tocar la instalación de esta PC).
+app.setPath('userData', process.env.WA_DATOS_APP || path.join(app.getPath('appData'), 'Neifert WhatsApp'))
 
 const PUERTO = Number(process.env.WA_PUERTO_APP) || 3100
 const URL_PANEL = `http://127.0.0.1:${PUERTO}/`
@@ -37,6 +41,9 @@ const CLOUDFLARED = path.join(RECURSOS, 'bin', 'cloudflared.exe')
 const FFMPEG = path.join(RECURSOS, 'bin', 'ffmpeg.exe')
 const ICONO = path.join(__dirname, 'icono.png')
 const ARCHIVO_PID = path.join(DATOS, 'servidor.pid')
+// Clave de este arranque para pedirle al servidor el estado y el QR sin login del CRM
+// (ver /api/local/estado en el servidor). No se guarda en ningún lado.
+const CLAVE_LOCAL = crypto.randomBytes(24).toString('hex')
 // Versiones del servidor bajadas de R2 (ver scripts/publicar.mjs).
 const VERSIONES = path.join(DATOS, 'versiones')
 const ARCHIVO_ACTUAL = path.join(VERSIONES, 'actual.json')
@@ -52,7 +59,6 @@ const OBLIGATORIAS = [
 ]
 // Sin estas arranca, pero falta algo importante.
 const RECOMENDADAS = {
-  WHATSAPP_NUMERO: 'cualquier celular podría vincularse',
   CRM_URL: 'el CRM no va a poder mostrar el panel',
   WA_R2_BUCKET: 'los archivos quedan solo en esta PC',
   WA_TUNEL_TOKEN: 'el CRM no llega a esta PC desde internet',
@@ -96,6 +102,49 @@ function revisarConfig(texto) {
     .filter(([n]) => !config[n])
     .map(([n, efecto]) => `${n}: ${efecto}`)
   return { ok: faltan.length === 0, faltan, avisos, config }
+}
+
+/* ---------------- Número de la línea ---------------- */
+
+// El número no va en el archivo de configuración: se escribe en la app y queda guardado acá
+// (junto con si el servidor arranca solo al prender la PC).
+const ARCHIVO_AJUSTES = path.join(DATOS, 'ajustes.json')
+const leerAjustes = () => {
+  try {
+    return JSON.parse(fs.readFileSync(ARCHIVO_AJUSTES, 'utf8'))
+  } catch {
+    return {}
+  }
+}
+function guardarAjustes(cambios) {
+  fs.mkdirSync(DATOS, { recursive: true })
+  fs.writeFileSync(ARCHIVO_AJUSTES, JSON.stringify({ ...leerAjustes(), ...cambios }, null, 2))
+}
+
+/**
+ * El número se escribe como un celular argentino "local": característica sin el 0 y número
+ * sin el 15, 10 dígitos en total (3492 123456, 11 2345 6789). Nada de +54 ni 9: eso lo
+ * agrega la app (WhatsApp lo usa como 549 + característica + número).
+ */
+function validarNumero(texto) {
+  const crudo = String(texto ?? '').trim()
+  const mal = (error) => ({ ok: false, error })
+  if (!crudo) return mal('Escribí el número de la línea.')
+  if (/[^\d\s-]/.test(crudo)) return mal('Solo números (podés separar con espacios o guiones), sin + ni paréntesis.')
+  const d = crudo.replace(/\D/g, '')
+  if (d.startsWith('0')) return mal('Sin el 0 adelante: la característica va sin 0 (3492, no 03492).')
+  if (d.startsWith('54')) return mal('Sin el 54 (código de país): solo característica y número.')
+  if (d.startsWith('9')) return mal('Sin el 9 adelante: solo característica y número.')
+  if (d.length === 12 && /^\d{2,4}15/.test(d)) return mal('Sin el 15: el número va sin el 15 después de la característica.')
+  if (!/^[123]/.test(d)) return mal('La característica empieza con 1, 2 o 3 (por ejemplo 11, 341 o 3492).')
+  if (d.length !== 10) return mal(`Tienen que ser 10 dígitos entre característica y número; escribiste ${d.length}.`)
+  return { ok: true, numero: d, linea: `549${d}` }
+}
+
+/** La línea guardada, como la usa WhatsApp (549 + 10 dígitos), o '' si no hay. */
+const lineaGuardada = () => {
+  const r = validarNumero(leerAjustes().numero)
+  return r.ok ? r.linea : ''
 }
 
 /* ---------------- Servidor y túnel ---------------- */
@@ -146,13 +195,18 @@ function entornoServidor(config) {
     // Con el túnel, el https y la IP real los informa Cloudflare.
     WA_DETRAS_DE_PROXY: config.WA_TUNEL_TOKEN ? 'on' : config.WA_DETRAS_DE_PROXY || 'off',
     ...(fs.existsSync(FFMPEG) ? { WA_FFMPEG: FFMPEG } : {}),
+    WA_CLAVE_LOCAL: CLAVE_LOCAL,
+    // El número escrito en la app manda sobre cualquier WHATSAPP_NUMERO de la configuración.
+    WHATSAPP_NUMERO: lineaGuardada(),
   }
 }
 
+let iniciado = false // alguien tocó "Iniciar servidor" (o arrancó solo con la PC)
+
 function arrancarServidor() {
-  if (servidor || saliendo) return
+  if (servidor || saliendo || !iniciado) return
   const config = leerConfig()
-  if (!config) return
+  if (!config || !lineaGuardada()) return
   const { dir, version } = servidorActual()
   const carpeta = path.join(dir, 'servidor')
   const env = entornoServidor(config)
@@ -271,7 +325,7 @@ async function buscarYAvisar(manual = false) {
 }
 
 function arrancarTunel() {
-  if (tunel || saliendo) return
+  if (tunel || saliendo || !iniciado) return
   const token = leerConfig()?.WA_TUNEL_TOKEN
   if (!token) return
   if (!fs.existsSync(CLOUDFLARED)) return registrar(`Falta cloudflared en ${CLOUDFLARED}: el CRM no va a llegar a esta PC`)
@@ -332,11 +386,12 @@ async function reiniciarTodo() {
   arrancarTunel()
 }
 
-/* ---------------- Estado (ícono) ---------------- */
+/* ---------------- Estado de la línea ---------------- */
 
 const TEXTO_ESTADO = {
+  detenido: 'Servidor detenido',
   conectado: 'Conectado',
-  qr: 'Esperando que escaneen el QR',
+  qr: 'Hay que escanear el QR',
   conectando: 'Conectando…',
   desconectado: 'Sin conexión',
   iniciando: 'Iniciando…',
@@ -345,27 +400,96 @@ let estado = { conexion: 'iniciando', ok: false }
 let desconectadoDesde = null
 let avisado = false
 
-async function consultarSalud() {
+async function consultarEstado() {
+  const anterior = estado.conexion
   try {
-    const r = await fetch(`${URL_PANEL}api/salud`, { signal: AbortSignal.timeout(5000) })
-    estado = await r.json()
+    const r = await fetch(`${URL_PANEL}api/local/estado`, { headers: { 'x-nf-local': CLAVE_LOCAL }, signal: AbortSignal.timeout(5000) })
+    if (!r.ok) throw new Error(String(r.status))
+    const e = await r.json()
+    estado = { ...e, ok: e.conexion === 'conectado' }
   } catch {
-    estado = { conexion: servidor ? 'iniciando' : 'desconectado', ok: false }
+    estado = { conexion: !iniciado ? 'detenido' : servidor ? 'iniciando' : 'desconectado', ok: false }
   }
-  if (estado.ok) {
+  if (estado.ok || !iniciado) {
     reintentos = 0
     desconectadoDesde = null
     avisado = false
   } else {
     desconectadoDesde ??= Date.now()
-    // Aviso en Windows si la línea lleva 5 minutos sin conectar (las alertas por email las
-    // manda el servidor).
-    if (!avisado && Date.now() - desconectadoDesde > 5 * 60_000 && Notification.isSupported()) {
+    // Hay que vincular la línea: se abre la ventana con el QR y se avisa.
+    if (estado.conexion === 'qr' && anterior !== 'qr') {
+      abrirVentana()
+      if (Notification.isSupported()) new Notification({ title: 'WhatsApp de Neifert', body: 'Hay que escanear el QR con el celular de la concesionaria.' }).show()
+    } else if (!avisado && estado.conexion !== 'qr' && Date.now() - desconectadoDesde > 5 * 60_000 && Notification.isSupported()) {
+      // 5 minutos sin conectar (las alertas por email las manda el servidor).
       avisado = true
       new Notification({ title: 'WhatsApp de Neifert sin conexión', body: `${TEXTO_ESTADO[estado.conexion] || estado.conexion}. Abrí la app para ver qué pasa.` }).show()
     }
   }
+  if (anterior !== estado.conexion) actualizarIcono()
+  ventana?.webContents.send('estado', vistaEstado())
+}
+
+/** Lo que ve la ventanita: estado, QR, número conectado y versión. */
+function vistaEstado() {
+  const config = leerConfig() || {}
+  return {
+    conexion: estado.conexion,
+    texto: TEXTO_ESTADO[estado.conexion] || estado.conexion,
+    qr: estado.qr || null,
+    telefono: estado.telefono || null,
+    nombre: estado.nombre || null,
+    numeroLinea: estado.numeroLinea || null,
+    rechazo: estado.rechazo || null,
+    crm: config.CRM_URL || null,
+    version: servidorActual().version,
+    // Para la pantalla de inicio: número guardado (10 dígitos) y si arranca solo con la PC.
+    iniciado,
+    numero: leerAjustes().numero || '',
+    autoInicio: leerAjustes().autoInicio !== false,
+  }
+}
+
+/** "Iniciar servidor": valida y guarda el número, y arranca el servidor y el túnel. */
+async function iniciarServidor({ numero, autoInicio = true } = {}) {
+  const r = validarNumero(numero)
+  if (!r.ok) return r
+  const cambio = leerAjustes().numero !== r.numero
+  guardarAjustes({ numero: r.numero, autoInicio: !!autoInicio })
+  app.setLoginItemSettings({ openAtLogin: true, args: ['--oculto'] })
+  registrar(`Iniciar servidor con la línea +${r.linea}${cambio ? ' (número nuevo)' : ''}`)
+  iniciado = true
+  // Con otro número el servidor tiene que arrancar de nuevo: cada línea tiene sus datos.
+  if (cambio && servidor) await reiniciarTodo()
+  else {
+    reintentos = 0
+    arrancarServidor()
+    arrancarTunel()
+  }
   actualizarIcono()
+  setTimeout(consultarEstado, 1500)
+  return { ok: true, linea: r.linea }
+}
+
+/** Detiene el servidor (para cambiar el número); la app queda abierta. */
+async function detenerServidor() {
+  registrar('Servidor detenido desde la app')
+  iniciado = false
+  saliendo = true
+  await apagarServidor()
+  apagarTunel()
+  saliendo = false
+  estado = { conexion: 'detenido', ok: false }
+  actualizarIcono()
+  ventana?.webContents.send('estado', vistaEstado())
+}
+
+// Con la ventana abierta se consulta seguido (el QR cambia cada ~20 s); si no, cada 15 s.
+function programarConsulta() {
+  setTimeout(async () => {
+    await consultarEstado()
+    programarConsulta()
+  }, ventana?.isVisible() ? 2000 : 15_000)
 }
 
 /* ---------------- Ventanas ---------------- */
@@ -382,27 +506,19 @@ function abrirVentana() {
     return
   }
   ventana = new BrowserWindow({
-    width: 1320,
-    height: 860,
-    minWidth: 900,
-    minHeight: 600,
-    title: 'Neifert WhatsApp',
+    width: 440,
+    height: 780,
+    resizable: false,
+    maximizable: false,
+    title: 'Servidor de WhatsApp — Neifert',
     icon: ICONO,
     show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
   })
   ventana.removeMenu()
   ventana.once('ready-to-show', () => ventana.show())
-  // El servidor puede estar arrancando: se reintenta hasta que responda.
-  ventana.webContents.on('did-fail-load', () => setTimeout(() => ventana?.loadURL(URL_PANEL), 2000))
-  // Solo el panel local; los enlaces van al navegador.
-  ventana.webContents.setWindowOpenHandler(({ url }) => {
-    if (/^https?:/.test(url)) shell.openExternal(url)
-    return { action: 'deny' }
-  })
-  ventana.webContents.on('will-navigate', (e, url) => {
-    if (!url.startsWith(URL_PANEL)) e.preventDefault()
-  })
+  ventana.webContents.setWindowOpenHandler(() => ({ action: 'deny' }))
+  ventana.webContents.on('will-navigate', (e) => e.preventDefault())
   // Cerrar la ventana no apaga el servidor: queda el ícono junto al reloj.
   ventana.on('close', (e) => {
     if (saliendo) return
@@ -410,7 +526,13 @@ function abrirVentana() {
     ventana.hide()
   })
   ventana.on('closed', () => (ventana = null))
-  ventana.loadURL(URL_PANEL)
+  ventana.loadFile(path.join(__dirname, 'ventana', 'estado.html'))
+}
+
+/** Abre el WhatsApp (en el CRM) en el navegador. */
+function abrirWhatsappWeb() {
+  const url = leerConfig()?.CRM_URL
+  if (url && /^https?:\/\//.test(url)) shell.openExternal(url)
 }
 
 function abrirConfig() {
@@ -428,36 +550,6 @@ function abrirConfig() {
   ventanaConfig.loadFile(path.join(__dirname, 'ventana', 'config.html'))
 }
 
-/* Login con el usuario del CRM, para entrar al panel desde esta PC. */
-let login = null // { ventana, resolver }
-
-function pedirTokenCrm() {
-  if (login) {
-    login.ventana.focus()
-    return login.promesa
-  }
-  let resolver
-  const promesa = new Promise((r) => (resolver = r))
-  const v = new BrowserWindow({
-    width: 420,
-    height: 460,
-    resizable: false,
-    parent: ventana || undefined,
-    modal: !!ventana,
-    title: 'Entrar — Neifert WhatsApp',
-    icon: ICONO,
-    webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
-  })
-  v.removeMenu()
-  login = { ventana: v, resolver, promesa }
-  v.on('closed', () => {
-    login?.resolver(null)
-    login = null
-  })
-  v.loadFile(path.join(__dirname, 'ventana', 'login.html'))
-  return promesa
-}
-
 /* ---------------- Ícono junto al reloj ---------------- */
 
 function actualizarIcono() {
@@ -471,8 +563,11 @@ function actualizarIcono() {
       { label: `Versión del servidor: ${servidorActual().version}`, enabled: false },
       ...(ultimaBusqueda ? [{ label: `Última revisión: ${ultimaBusqueda.resultado}`.slice(0, 110), enabled: false }] : []),
       { type: 'separator' },
-      { label: 'Abrir WhatsApp', click: abrirVentana },
-      { label: 'Reiniciar el servidor', enabled: !!leerConfig(), click: () => reiniciarTodo() },
+      iniciado
+        ? { label: 'Ver estado de la línea', click: abrirVentana }
+        : { label: 'Iniciar servidor…', enabled: !!leerConfig(), click: abrirVentana },
+      { label: 'Abrir WhatsApp en el navegador', enabled: !!leerConfig()?.CRM_URL, click: abrirWhatsappWeb },
+      { label: 'Reiniciar el servidor', enabled: iniciado, click: () => reiniciarTodo() },
       { label: buscando ? 'Buscando actualización…' : 'Buscar actualización ahora', enabled: ACTUALIZA && !buscando && !!leerConfig(), click: () => buscarYAvisar(true) },
       { label: 'Ver registros', click: () => shell.openPath(fs.existsSync(path.join(DATA_DIR, 'logs')) ? path.join(DATA_DIR, 'logs') : DATOS) },
       { label: 'Cambiar configuración…', click: abrirConfig },
@@ -593,7 +688,7 @@ ipcMain.handle('config-elegir', async (e) => {
   const r = revisarConfig(texto)
   elegido = r.ok ? { ruta, texto } : null
   // Al navegador solo vuelve el diagnóstico, nunca los valores.
-  return { ok: r.ok, error: r.error, faltan: r.faltan, avisos: r.avisos, ruta, numero: r.config?.WHATSAPP_NUMERO || null, crm: r.config?.CRM_URL || null }
+  return { ok: r.ok, error: r.error, faltan: r.faltan, avisos: r.avisos, ruta, crm: r.config?.CRM_URL || null }
 })
 
 ipcMain.handle('config-guardar', async (e, { borrarOriginal } = {}) => {
@@ -611,43 +706,19 @@ ipcMain.handle('config-guardar', async (e, { borrarOriginal } = {}) => {
   registrar(`Configuración guardada (cifrada)${borrado ? '; se borró el archivo original' : ''}`)
   elegido = null
   app.setLoginItemSettings({ openAtLogin: true, args: ['--oculto'] })
-  await reiniciarTodo()
+  if (iniciado) await reiniciarTodo()
   ventanaConfig?.close()
-  setTimeout(abrirVentana, 1500)
+  setTimeout(abrirVentana, 500)
   actualizarIcono()
   return { ok: true, borrado }
 })
 
-ipcMain.handle('login', async (e, usuario, clave) => {
-  const config = leerConfig()
-  if (!config) return { ok: false, error: 'La app no está configurada.' }
-  const url = valor(config, OBLIGATORIAS[0]).replace(/\/+$/, '')
-  const anon = valor(config, OBLIGATORIAS[1])
-  // Mismo email sintético que usa el CRM (src/crm/lib/authEmail.js).
-  const email = String(usuario || '').includes('@')
-    ? String(usuario).trim()
-    : `${String(usuario || '').toLowerCase().replace(/[^a-z0-9]/g, '')}@crm-viejo.neifert.local`
-  try {
-    const r = await fetch(`${url}/auth/v1/token?grant_type=password`, {
-      method: 'POST',
-      headers: { apikey: anon, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ email, password: String(clave || '') }),
-      signal: AbortSignal.timeout(10_000),
-    })
-    const data = await r.json().catch(() => ({}))
-    if (!r.ok || !data.access_token) return { ok: false, error: r.status === 400 ? 'Usuario o contraseña incorrectos.' : `No se pudo entrar (${r.status}).` }
-    login?.resolver(data.access_token)
-    const v = login?.ventana
-    login = null
-    v?.close()
-    return { ok: true }
-  } catch (err) {
-    return { ok: false, error: `Sin conexión con el CRM: ${err.message}` }
-  }
-})
-
-ipcMain.on('login-cancelar', () => login?.ventana.close())
-ipcMain.handle('token-crm', () => pedirTokenCrm())
+ipcMain.handle('estado-linea', () => vistaEstado())
+ipcMain.handle('validar-numero', (e, numero) => validarNumero(numero))
+ipcMain.handle('iniciar-servidor', (e, opciones) => iniciarServidor(opciones))
+ipcMain.handle('detener-servidor', () => detenerServidor())
+ipcMain.on('abrir-whatsapp', abrirWhatsappWeb)
+ipcMain.on('ocultar', () => ventana?.hide())
 
 /* ---------------- Arranque ---------------- */
 
@@ -666,12 +737,20 @@ app.whenReady().then(async () => {
     abrirConfig()
   } else {
     await cerrarHuerfano()
-    arrancarServidor()
-    arrancarTunel()
-    if (!process.argv.includes('--oculto')) abrirVentana()
+    // Al prender la PC (--oculto) arranca solo con el número guardado, si así quedó elegido:
+    // después de un corte de luz el WhatsApp vuelve sin que nadie toque nada. Abriendo la
+    // app a mano, o sin número guardado, se muestra la pantalla con "Iniciar servidor".
+    const ajustes = leerAjustes()
+    if (process.argv.includes('--oculto') && lineaGuardada() && ajustes.autoInicio !== false) {
+      iniciado = true
+      arrancarServidor()
+      arrancarTunel()
+    } else {
+      abrirVentana()
+    }
   }
-  consultarSalud()
-  setInterval(consultarSalud, 15_000)
+  consultarEstado()
+  programarConsulta()
   // Versiones nuevas del servidor: al minuto de arrancar y después cada 30 minutos.
   setTimeout(() => buscarYAvisar(), 60_000)
   setInterval(() => buscarYAvisar(), 30 * 60_000)

@@ -4,7 +4,8 @@ import path from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { anotar, cerrarTramo, pendientesEnDiario, recuperar, tramoGuardado } from '../src/diario.js'
 
-const DIR = path.join(DIR_PRUEBA, 'diario')
+// Sin WHATSAPP_NUMERO el servidor usa la línea "sin-numero" (ver LINEA en config.js).
+const DIR = path.join(DIR_PRUEBA, 'lineas', 'sin-numero', 'diario')
 
 describe('diario local (sin pérdida ante un corte)', () => {
   it('lo anotado y no confirmado se recupera en orden al arrancar', () => {

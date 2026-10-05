@@ -9,12 +9,17 @@
  *     queda en la cola y se reintenta.
  *
  * Solo se usa con ALMACEN=supabase. Con ALMACEN=local el servidor trabaja con archivos.
+ *
+ * Cada fila lleva la línea (número de WhatsApp) a la que pertenece, y todo lo que se lee o
+ * se escribe acá es solo de la línea con la que corre el servidor (CLAVE_LINEA). Varias
+ * líneas (la de prueba y la de la concesionaria) comparten la base sin mezclarse.
  */
 import pg from 'pg'
-import { WA_DATABASE_URL } from './config.js'
+import { CLAVE_LINEA, WA_DATABASE_URL } from './config.js'
 import { log } from './eventos.js'
 import * as diario from './diario.js'
 
+const LINEA = CLAVE_LINEA
 const ESPERA_MS = 1500
 const TANDA = 500 // filas por consulta
 const MAX_PENDIENTES = 800 // con más que esto se escribe sin esperar
@@ -114,9 +119,9 @@ function chatDeFila(f) {
 export async function cargarTodo() {
   const db = base()
   const [kv, contactos, chats] = await Promise.all([
-    db.query('select clave, valor from wa.estado'),
-    db.query('select jid, nombre_agenda, nombre_propio from wa.contactos'),
-    db.query('select jid, nombre_grupo, no_leidos, ultimo_ts, ultimo, datos from wa.chats'),
+    db.query('select clave, valor from wa.estado where linea = $1', [LINEA]),
+    db.query('select jid, nombre_agenda, nombre_propio from wa.contactos where linea = $1', [LINEA]),
+    db.query('select jid, nombre_grupo, no_leidos, ultimo_ts, ultimo, datos from wa.chats where linea = $1', [LINEA]),
   ])
   const valor = Object.fromEntries(kv.rows.map((r) => [r.clave, r.valor]))
   const marcas = valor.marcas || {}
@@ -145,10 +150,10 @@ export async function cargarTodo() {
     const { rows } = await db.query(
       `select chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos
          from wa.mensajes
-        where (chat_jid, id) > ($1, $2)
+        where linea = $3 and (chat_jid, id) > ($1, $2)
         order by chat_jid, id
         limit 5000`,
-      desde,
+      [...desde, LINEA],
     )
     for (const f of rows) {
       if (!mensajes.has(f.chat_jid)) mensajes.set(f.chat_jid, new Map())
@@ -224,11 +229,11 @@ export function chatBorrado(jid) {
 }
 
 const SQL_MENSAJES = `
-  insert into wa.mensajes (chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos)
-  select chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos
+  insert into wa.mensajes (linea, chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos)
+  select $2, chat_jid, id, ts, de_mi, tipo, texto, autor_jid, enviado_por, estado, origen, eliminado_en, datos
     from jsonb_to_recordset($1::jsonb) as x(chat_jid text, id text, ts timestamptz, de_mi boolean, tipo text,
          texto text, autor_jid text, enviado_por jsonb, estado text, origen text, eliminado_en timestamptz, datos jsonb)
-  on conflict (chat_jid, id) do update set
+  on conflict (linea, chat_jid, id) do update set
     ts = excluded.ts, de_mi = excluded.de_mi, tipo = excluded.tipo, texto = excluded.texto,
     autor_jid = excluded.autor_jid, enviado_por = excluded.enviado_por, estado = excluded.estado,
     origen = excluded.origen, eliminado_en = excluded.eliminado_en, datos = excluded.datos`
@@ -237,38 +242,38 @@ const SQL_MENSAJES = `
 // leídos, archivado, último mensaje) queda por encima de lo que hagan los automatismos
 // de la base al insertar cada mensaje.
 const SQL_CHATS = `
-  insert into wa.chats (jid, nombre_grupo, archivado, fijado_en, silenciado_hasta, no_leidos, ultimo_ts, ultimo, datos)
-  select jid, nombre_grupo, archivado, fijado_en, silenciado_hasta, no_leidos, ultimo_ts, ultimo, datos
+  insert into wa.chats (linea, jid, nombre_grupo, archivado, fijado_en, silenciado_hasta, no_leidos, ultimo_ts, ultimo, datos)
+  select $2, jid, nombre_grupo, archivado, fijado_en, silenciado_hasta, no_leidos, ultimo_ts, ultimo, datos
     from jsonb_to_recordset($1::jsonb) as x(jid text, nombre_grupo text, archivado boolean, fijado_en timestamptz,
          silenciado_hasta timestamptz, no_leidos integer, ultimo_ts timestamptz, ultimo jsonb, datos jsonb)
-  on conflict (jid) do update set
+  on conflict (linea, jid) do update set
     nombre_grupo = excluded.nombre_grupo, archivado = excluded.archivado, fijado_en = excluded.fijado_en,
     silenciado_hasta = excluded.silenciado_hasta, no_leidos = excluded.no_leidos, ultimo_ts = excluded.ultimo_ts,
     ultimo = excluded.ultimo, datos = excluded.datos`
 
 const SQL_CONTACTOS = `
-  insert into wa.contactos (jid, nombre_agenda, nombre_propio, actualizado_en)
-  select jid, nombre_agenda, nombre_propio, now()
+  insert into wa.contactos (linea, jid, nombre_agenda, nombre_propio, actualizado_en)
+  select $2, jid, nombre_agenda, nombre_propio, now()
     from jsonb_to_recordset($1::jsonb) as x(jid text, nombre_agenda text, nombre_propio text)
-  on conflict (jid) do update set
+  on conflict (linea, jid) do update set
     nombre_agenda = excluded.nombre_agenda, nombre_propio = excluded.nombre_propio, actualizado_en = now()`
 
 const SQL_ESTADO = `
-  insert into wa.estado (clave, valor, actualizado_en)
-  select clave, valor, now() from jsonb_to_recordset($1::jsonb) as x(clave text, valor jsonb)
-  on conflict (clave) do update set valor = excluded.valor, actualizado_en = now()`
+  insert into wa.estado (linea, clave, valor, actualizado_en)
+  select $2, clave, valor, now() from jsonb_to_recordset($1::jsonb) as x(clave text, valor jsonb)
+  on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`
 
 const trozos = (lista) => Array.from({ length: Math.ceil(lista.length / TANDA) }, (_, i) => lista.slice(i * TANDA, (i + 1) * TANDA))
 
 /** Escribe en tandas lo que un volcado trae (se usa al escribir y al importar). */
 async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar, borrarAntesDe = 0, borrarMensajes = [] }, marcas) {
-  for (const t of trozos(mensajes)) await cliente.query(SQL_MENSAJES, [aJson(t)])
-  for (const t of trozos(chats.map((c) => filaChat(c, marcas)))) await cliente.query(SQL_CHATS, [aJson(t)])
-  for (const t of trozos(contactos)) await cliente.query(SQL_CONTACTOS, [aJson(t)])
-  if (estadoKv.length) await cliente.query(SQL_ESTADO, [aJson(estadoKv)])
-  if (borrar.length) await cliente.query('delete from wa.chats where jid = any($1)', [borrar])
-  if (borrarAntesDe) await cliente.query('delete from wa.mensajes where ts < to_timestamp($1)', [borrarAntesDe])
-  for (const [jid, id] of borrarMensajes) await cliente.query('delete from wa.mensajes where chat_jid = $1 and id = $2', [jid, id])
+  for (const t of trozos(mensajes)) await cliente.query(SQL_MENSAJES, [aJson(t), LINEA])
+  for (const t of trozos(chats.map((c) => filaChat(c, marcas)))) await cliente.query(SQL_CHATS, [aJson(t), LINEA])
+  for (const t of trozos(contactos)) await cliente.query(SQL_CONTACTOS, [aJson(t), LINEA])
+  if (estadoKv.length) await cliente.query(SQL_ESTADO, [aJson(estadoKv), LINEA])
+  if (borrar.length) await cliente.query('delete from wa.chats where linea = $2 and jid = any($1)', [borrar, LINEA])
+  if (borrarAntesDe) await cliente.query('delete from wa.mensajes where linea = $2 and ts < to_timestamp($1)', [borrarAntesDe, LINEA])
+  for (const [jid, id] of borrarMensajes) await cliente.query('delete from wa.mensajes where linea = $3 and chat_jid = $1 and id = $2', [jid, id, LINEA])
 }
 
 const kvDe = (estado) => [

@@ -56,7 +56,8 @@
         lista($('faltan'), r.faltan || [])
         $('avisosBox').hidden = !r.avisos?.length
         lista($('avisos'), r.avisos || [])
-        const datos = [r.numero ? `Número de la línea: +${String(r.numero).replace(/\D/g, '')}` : null, r.crm ? `CRM: ${r.crm}` : null].filter(Boolean)
+        // El número de la línea no va en este archivo: se escribe después, en la pantalla de inicio.
+        const datos = [r.crm ? `CRM: ${r.crm}` : null].filter(Boolean)
         $('detalle').textContent = datos.join(' · ')
         $('guardar').disabled = !r.ok
       })

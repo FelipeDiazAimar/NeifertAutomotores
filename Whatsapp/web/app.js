@@ -689,6 +689,10 @@ function mediaPendienteHtml(m) {
   if (md.estado === 'descargando') {
     return `<div class="media-missing"><span class="spinner" aria-hidden="true"></span><span class="mm-txt"><b>${esc(nombre)}</b><small>Descargando…</small></span></div>`
   }
+  if (md.estado === 'liberado') {
+    // Se borró para no pasar el tope de espacio de R2 (el plan gratuito). Se puede pedir de nuevo.
+    return `<div class="media-missing">${ic('archive')}<span class="mm-txt"><b>${esc(nombre)}</b><small>Archivo borrado para liberar espacio.</small></span><button class="btn ghost mm-btn" data-descargar="${esc(m.id)}">Bajar de nuevo</button></div>`
+  }
   const error = md.estado === 'error'
   const detalle = [esAudio(m) && md.segundos ? fmtDur(md.segundos) : null, md.tamano ? fmtBytes(md.tamano) : null].filter(Boolean).join(' · ')
   return `<div class="media-missing ${error ? 'is-error' : ''}">
@@ -999,9 +1003,6 @@ const sesion = { usuario: null, login: false }
 // El CRM muestra el panel dentro de su página. Ahí la sesión es la del usuario del CRM:
 // no hay "Ir al CRM" ni "Cerrar sesión", y si la sesión vence se le pide al CRM una nueva.
 const EMBEBIDO = window.parent !== window
-// La app de escritorio (la PC que hace de servidor) abre el panel en su propia ventana y le
-// da la sesión del usuario del CRM que entró en la app (ver Whatsapp/escritorio).
-const ESCRITORIO = typeof window.nfEscritorio?.tokenCrm === 'function'
 const avisarAlCrm = (datos) => EMBEBIDO && window.parent.postMessage({ origen: 'nf-wa', ...datos }, '*')
 
 // El CRM le pasa su tema (claro/oscuro) para que el panel no desentone.
@@ -1022,7 +1023,6 @@ const coincideOrigen = (origen, patron) =>
  * dirección, el historial ni los registros de ningún servidor.
  */
 async function tokenDelCrm() {
-  if (ESCRITORIO) return window.nfEscritorio.tokenCrm().catch(() => null)
   if (!EMBEBIDO) return null
   const { origenesCrm = [] } = await fetch('/api/publico').then((r) => r.json()).catch(() => ({}))
   return new Promise((resolve) => {
@@ -1056,7 +1056,7 @@ async function canjearToken(token) {
  */
 async function entrar() {
   let res = await fetch('/api/sesion')
-  if (res.status === 401 && (EMBEBIDO || ESCRITORIO)) {
+  if (res.status === 401 && EMBEBIDO) {
     const token = await tokenDelCrm()
     if (token) res = await canjearToken(token)
   }
@@ -1091,7 +1091,7 @@ let renovando = false
  * primero se intenta renovarla en silencio con la sesión del CRM.
  */
 async function pantallaSinSesion(data = {}, status = 0) {
-  if (status === 401 && (EMBEBIDO || ESCRITORIO) && !renovando) {
+  if (status === 401 && EMBEBIDO && !renovando) {
     renovando = true
     const token = await tokenDelCrm()
     if (token && (await canjearToken(token)).ok) return location.reload()
@@ -1099,7 +1099,7 @@ async function pantallaSinSesion(data = {}, status = 0) {
   const pane = $('#sinSesion')
   $('#sinSesionTxt').textContent = data.error || 'Entrá al WhatsApp desde el CRM.'
   const link = $('#sinSesionLink')
-  link.hidden = !data.crmUrl || EMBEBIDO || ESCRITORIO
+  link.hidden = !data.crmUrl || EMBEBIDO
   if (data.crmUrl) link.href = data.crmUrl
   pane.hidden = false
   avisarAlCrm({ tipo: 'nf-wa:sin-sesion' })
@@ -1126,7 +1126,7 @@ function renderYo() {
     <span class="yo-nombre" title="${otros.length ? `También conectados: ${esc(otros.map((a) => a.nombre).join(', '))}` : 'Nadie más conectado'}">
       ${ic('user')}${esc(sesion.usuario.nombre)}${otros.length ? `<em class="tnum">+${otros.length}</em>` : ''}
     </span>
-    ${EMBEBIDO || ESCRITORIO ? '' : `<button class="icon-btn" data-act="salir-sesion" aria-label="Cerrar sesión" title="Cerrar sesión">${ic('unlink')}</button>`}`
+    ${EMBEBIDO ? '' : `<button class="icon-btn" data-act="salir-sesion" aria-label="Cerrar sesión" title="Cerrar sesión">${ic('unlink')}</button>`}`
 }
 
 /** Compañeros que tienen abierto ese chat ahora mismo (sin contarme a mí). */
@@ -2319,7 +2319,7 @@ async function cargarUso() {
         <div class="fact"><span>Total (base + archivos)</span><b>${fmtBytes(total)}</b></div>
       </div>
       <div class="uso" style="margin-top:14px">${filas.map(([n, b]) => `<div class="uso-row"><span>${n}</span><div class="uso-bar"><i style="width:${((b / max) * 100).toFixed(1)}%"></i></div><b>${fmtBytes(b)}</b></div>`).join('')}</div>
-      ${u.bytes.r2 != null ? `<p class="path" style="margin-top:12px">Bucket de R2 en total (archivos, miniaturas, fotos de perfil y respaldo): <b>${fmtBytes(u.bytes.r2)}</b></p>` : ''}
+      ${u.bytes.r2 != null ? `<p class="path" style="margin-top:12px">Bucket de R2 en total (archivos, miniaturas, fotos de perfil y respaldo): <b>${fmtBytes(u.bytes.r2)}</b>${u.cuota?.limite ? ` de un tope de <b>${fmtBytes(u.cuota.limite)}</b> (${Math.round((u.bytes.r2 / u.cuota.limite) * 100)} %). Al 85 % se borran los archivos más viejos.` : ''}</p>` : ''}
       <p class="path">Respaldo de la sesión: ${respaldo}</p>
       ${u.pendientesDeGuardar ? `<p class="path">Pendientes de guardar en Supabase: ${fmtNum(u.pendientesDeGuardar)}</p>` : ''}
       <p class="path">Dónde: ${esc(u.carpeta)}</p>`

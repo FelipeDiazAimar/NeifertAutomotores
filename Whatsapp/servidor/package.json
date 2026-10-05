@@ -14,7 +14,8 @@
     "importar": "node scripts/importar-a-supabase.mjs",
     "subir-r2": "node scripts/subir-a-r2.mjs",
     "respaldar": "node scripts/respaldar.mjs",
-    "restaurar": "node scripts/restaurar.mjs"
+    "restaurar": "node scripts/restaurar.mjs",
+    "mudar-a-lineas": "node scripts/mudar-a-lineas.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1146.0",

@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:" />
+    <title>Servidor de WhatsApp — Neifert</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body class="estado">
+    <header class="cabecera">
+      <img src="../icono.png" alt="" class="logo" />
+      <div>
+        <h1>Servidor de WhatsApp</h1>
+        <p>Neifert Automotores</p>
+      </div>
+    </header>
+
+    <!-- Inicio: número de la línea + Iniciar servidor -->
+    <form class="tarjeta" id="vistaInicio" hidden>
+      <label for="numero">Número de la línea de WhatsApp</label>
+      <input type="text" id="numero" inputmode="numeric" autocomplete="off" placeholder="3492 123456" maxlength="20" />
+      <p class="ayuda">
+        <b>Característica sin el 0</b> + <b>número sin el 15</b>: 10 dígitos en total.<br />
+        Ej.: <b>3492 123456</b> · <b>341 1234567</b> · <b>11 2345 6789</b><br />
+        No va +54 ni 9: eso lo agrega la app.
+      </p>
+      <p class="error" id="errorNumero" hidden></p>
+      <label class="check"><input type="checkbox" id="autoInicio" checked /> Iniciar el servidor solo al prender la PC</label>
+      <p class="nota">Cada número tiene sus propios chats y archivos: cambiarlo no borra los de otro.</p>
+      <div class="fila final">
+        <button class="btn primario" id="iniciar">Iniciar servidor</button>
+      </div>
+    </form>
+
+    <!-- Servidor andando -->
+    <div id="vistaServidor" hidden>
+      <div class="tarjeta centro">
+        <span class="chip" id="chip">Iniciando…</span>
+        <p class="linea" id="linea"></p>
+
+        <!-- Hay que vincular la línea -->
+        <div id="vistaQr" hidden>
+          <p class="mt">Escaneá este código con el celular de esa línea:</p>
+          <p class="paso">WhatsApp → <b>Dispositivos vinculados</b> → <b>Vincular un dispositivo</b></p>
+          <img id="qr" class="qr" alt="Código QR para vincular WhatsApp" />
+          <p class="error" id="rechazo" hidden></p>
+          <p class="nota">Después de escanearlo dejá WhatsApp abierto en el celular unos minutos: ahí manda el historial.</p>
+        </div>
+
+        <!-- Conectada -->
+        <div id="vistaOk" hidden>
+          <p class="numero" id="nombre"></p>
+          <p class="mt">La línea está conectada. El WhatsApp se usa desde el CRM, en el navegador.</p>
+        </div>
+
+        <!-- Conectando / sin conexión -->
+        <div id="vistaEspera" hidden>
+          <div class="spinner" aria-hidden="true"></div>
+          <p class="mt" id="espera">Conectando con WhatsApp…</p>
+        </div>
+      </div>
+
+      <p class="nota centro">Podés cerrar esta ventana: el servidor sigue funcionando en segundo plano (ícono junto al reloj).</p>
+      <div class="fila final">
+        <button class="btn secundario" id="cambiar">Cambiar número</button>
+        <button class="btn secundario" id="whatsapp">Abrir WhatsApp</button>
+        <button class="btn primario" id="cerrar">Cerrar</button>
+      </div>
+    </div>
+
+    <p class="version" id="version"></p>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const ESPERA = {
+        iniciando: 'Arrancando el servidor…',
+        conectando: 'Conectando con WhatsApp…',
+        desconectado: 'Sin conexión con WhatsApp. Revisá que la PC tenga internet; se reintenta solo.',
+      }
+      const formatear = (d) => (d && d.length === 10 ? `${d.slice(0, d.length - 6)} ${d.slice(-6)}` : d || '')
+      let numeroCargado = false
+
+      function mostrar(e) {
+        $('version').textContent = `Versión del servidor: ${e.version}`
+        $('vistaInicio').hidden = e.iniciado
+        $('vistaServidor').hidden = !e.iniciado
+        if (!e.iniciado) {
+          if (!numeroCargado) {
+            $('numero').value = formatear(e.numero)
+            $('autoInicio').checked = e.autoInicio
+            numeroCargado = true
+            $('numero').focus()
+          }
+          return
+        }
+        numeroCargado = false
+        $('chip').textContent = e.texto
+        $('chip').className = `chip est-${e.conexion}`
+        $('linea').textContent = e.numero ? `Línea: ${formatear(e.numero)}` : ''
+        $('vistaQr').hidden = e.conexion !== 'qr'
+        $('vistaOk').hidden = e.conexion !== 'conectado'
+        $('vistaEspera').hidden = e.conexion === 'qr' || e.conexion === 'conectado'
+        if (e.conexion === 'qr' && e.qr && $('qr').src !== e.qr) $('qr').src = e.qr
+        $('rechazo').hidden = !e.rechazo
+        if (e.rechazo) {
+          $('rechazo').textContent = `Se escaneó con ${e.rechazo.telefono || 'otro número'}, que no es el de esta línea. Escaneá con el celular de ${formatear(e.numero)}, o tocá "Cambiar número".`
+        }
+        $('nombre').textContent = e.nombre || ''
+        $('espera').textContent = ESPERA[e.conexion] || e.texto
+        $('whatsapp').hidden = !e.crm
+      }
+
+      // Aviso mientras se escribe (la validación de verdad la hace la app al iniciar).
+      $('numero').addEventListener('input', async () => {
+        const v = $('numero').value
+        const r = v.trim() ? await window.nfApp.validarNumero(v) : { ok: true }
+        const largoOk = v.replace(/\D/g, '').length >= 10
+        $('errorNumero').hidden = r.ok || (!largoOk && !/[^\d\s-]/.test(v) && !/^\s*(0|54|9|\+)/.test(v))
+        $('errorNumero').textContent = r.error || ''
+      })
+
+      $('vistaInicio').addEventListener('submit', async (ev) => {
+        ev.preventDefault()
+        $('iniciar').disabled = true
+        const r = await window.nfApp.iniciarServidor({ numero: $('numero').value, autoInicio: $('autoInicio').checked })
+        $('iniciar').disabled = false
+        if (!r.ok) {
+          $('errorNumero').textContent = r.error
+          $('errorNumero').hidden = false
+          $('numero').select()
+          return
+        }
+        mostrar(await window.nfApp.estadoLinea())
+      })
+
+      $('cambiar').addEventListener('click', async () => {
+        if (!confirm('Para cambiar el número se detiene el servidor. Mientras esté detenido, nadie puede usar el WhatsApp desde el CRM. ¿Seguir?')) return
+        await window.nfApp.detenerServidor()
+        mostrar(await window.nfApp.estadoLinea())
+      })
+      $('whatsapp').addEventListener('click', () => window.nfApp.abrirWhatsapp())
+      $('cerrar').addEventListener('click', () => window.nfApp.ocultar())
+
+      window.nfApp.alCambiarEstado(mostrar)
+      window.nfApp.estadoLinea().then(mostrar)
+    </script>
+  </body>
+</html>

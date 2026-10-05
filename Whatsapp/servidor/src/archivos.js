@@ -8,6 +8,11 @@
  *                               contacto y su número (ver claveMedia en almacen.js)
  *   fotos/<chat>.jpg            fotos de perfil
  *
+ * Cada línea (número de WhatsApp) tiene lo suyo aparte: estas claves "lógicas" se guardan
+ * bajo lineas/<número>/ (en R2 y en el disco). El resto del servidor no se entera: usa
+ * media/…, fotos/…, respaldo/… y acá se les agrega el prefijo. Lo único común a todas las
+ * líneas es app/ (los paquetes de actualización del servidor).
+ *
  * El navegador nunca habla con R2: el servidor trae cada archivo y lo entrega solo a
  * quien entró desde el CRM, así el bucket puede (y tiene que) quedar cerrado.
  * Un archivo que todavía está en el disco se sirve desde ahí aunque R2 esté activo:
@@ -24,8 +29,9 @@ import {
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3'
-import { ARCHIVOS_EN_R2, DATA_DIR, R2 } from './config.js'
+import { ARCHIVOS_EN_R2, CLAVE_LINEA, DATA_DIR, R2 } from './config.js'
 import { mimeDe } from './tipos.js'
+import * as cuota from './cuota.js'
 
 const cliente = ARCHIVOS_EN_R2
   ? new S3Client({
@@ -37,16 +43,26 @@ const cliente = ARCHIVOS_EN_R2
 
 export const DONDE = ARCHIVOS_EN_R2 ? `Cloudflare R2 (bucket ${R2.bucket})` : DATA_DIR
 
+const PREFIJO_LINEA = `lineas/${CLAVE_LINEA}/`
+const COMUN = /^app\//
+/** Clave lógica (media/…) → clave real en R2 y en el disco (lineas/<número>/media/…). */
+export const fisica = (clave) => (COMUN.test(clave) ? clave : PREFIJO_LINEA + clave)
+const logica = (clave) => (clave.startsWith(PREFIJO_LINEA) ? clave.slice(PREFIJO_LINEA.length) : clave)
+
+const enDiscoFisico = (clave) => path.join(DATA_DIR, ...clave.split('/'))
 /** Ruta en el disco de una clave (media/…, fotos/…). */
-export const enDisco = (clave) => path.join(DATA_DIR, ...clave.split('/'))
+export const enDisco = (clave) => enDiscoFisico(fisica(clave))
 
 const noEncontrado = (texto) => Object.assign(new Error(texto), { status: 404 })
 
 export async function guardar(clave, buffer, mime) {
   if (cliente) {
+    // Tope del plan gratuito de R2 (ver cuota.js): corta antes de subir.
+    cuota.permitir(clave, buffer.length)
     await cliente.send(
-      new PutObjectCommand({ Bucket: R2.bucket, Key: clave, Body: buffer, ContentType: mime || 'application/octet-stream' }),
+      new PutObjectCommand({ Bucket: R2.bucket, Key: fisica(clave), Body: buffer, ContentType: mime || 'application/octet-stream' }),
     )
+    cuota.sumar(buffer.length)
     return
   }
   const ruta = enDisco(clave)
@@ -60,7 +76,7 @@ export async function leer(clave) {
   if (fs.existsSync(local)) return fs.readFileSync(local)
   if (!cliente) return null
   try {
-    const obj = await cliente.send(new GetObjectCommand({ Bucket: R2.bucket, Key: clave }))
+    const obj = await cliente.send(new GetObjectCommand({ Bucket: R2.bucket, Key: fisica(clave) }))
     return Buffer.from(await obj.Body.transformToByteArray())
   } catch (err) {
     if (err?.name === 'NoSuchKey' || err?.$metadata?.httpStatusCode === 404) return null
@@ -71,7 +87,7 @@ export async function leer(clave) {
 /** Borra un archivo (de R2 y del disco, esté donde esté). */
 export async function borrar(clave) {
   fs.rmSync(enDisco(clave), { force: true })
-  if (cliente) await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: clave }))
+  if (cliente) await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: fisica(clave) }))
 }
 
 /**
@@ -91,7 +107,7 @@ export async function servir(req, res, clave, { mime, nombre, descargar = false,
 
   let obj
   try {
-    obj = await cliente.send(new GetObjectCommand({ Bucket: R2.bucket, Key: clave, Range: req.headers.range }))
+    obj = await cliente.send(new GetObjectCommand({ Bucket: R2.bucket, Key: fisica(clave), Range: req.headers.range }))
   } catch (err) {
     const status = err?.$metadata?.httpStatusCode
     if (err?.name === 'NoSuchKey' || status === 404) throw noEncontrado(faltante)
@@ -110,8 +126,8 @@ export async function servir(req, res, clave, { mime, nombre, descargar = false,
   await pipeline(obj.Body, res).catch(() => {})
 }
 
-/** Todas las claves bajo un prefijo, con su tamaño. */
-async function listar(prefijo) {
+/** Todas las claves reales de R2 bajo un prefijo real, con su tamaño. */
+async function listarR2(prefijo) {
   const todas = []
   let token
   do {
@@ -124,7 +140,7 @@ async function listar(prefijo) {
   return todas
 }
 
-function listarDisco(prefijo) {
+function listarDiscoFisico(prefijo) {
   const todas = []
   const recorrer = (dir) => {
     if (!fs.existsSync(dir)) return
@@ -137,18 +153,21 @@ function listarDisco(prefijo) {
       }
     }
   }
-  recorrer(enDisco(prefijo))
+  recorrer(enDiscoFisico(prefijo))
   return todas
 }
 
+/** Mide lo que ocupa el bucket entero, todas las líneas juntas (para el tope de espacio). */
+export const medirR2 = () => cuota.medir(() => (cliente ? listarR2('') : Promise.resolve([])))
+
 /**
- * Archivos bajo un prefijo (media/ o fotos/), en R2 y en el disco. Si una clave está en
- * los dos lados se cuenta una sola vez.
+ * Archivos de esta línea bajo un prefijo lógico (media/ o fotos/), en R2 y en el disco, con
+ * su clave lógica. Si una clave está en los dos lados se cuenta una sola vez.
  */
 export async function listarArchivos(prefijo) {
-  const porClave = new Map(listarDisco(prefijo).map((a) => [a.clave, a]))
-  if (cliente) for (const a of await listar(prefijo)) porClave.set(a.clave, a)
-  return [...porClave.values()]
+  const porClave = new Map(listarDiscoFisico(fisica(prefijo)).map((a) => [a.clave, a]))
+  if (cliente) for (const a of await listarR2(fisica(prefijo))) porClave.set(a.clave, a)
+  return [...porClave.values()].map((a) => ({ ...a, clave: logica(a.clave) }))
 }
 
 /**
@@ -164,22 +183,25 @@ export const fuenteCopia = (clave) => `${R2.bucket}/${clave.split('/').map(encod
  * tamaño y recién ahí se borran los originales. Si algo falla en el medio, los originales
  * quedan y se puede reintentar (las copias ya hechas se pisan sin problema).
  */
-export async function moverPrefijo(desde, hacia) {
-  const viejo = enDisco(desde)
+export const moverPrefijo = (desde, hacia) => moverCrudo(fisica(desde), fisica(hacia))
+
+/** Lo mismo con prefijos reales (lo usa la mudanza de los datos viejos a lineas/<número>/). */
+export async function moverCrudo(desde, hacia) {
+  const viejo = enDiscoFisico(desde)
   if (fs.existsSync(viejo)) {
-    const nuevo = enDisco(hacia)
+    const nuevo = enDiscoFisico(hacia)
     fs.mkdirSync(nuevo, { recursive: true })
     for (const f of fs.readdirSync(viejo)) fs.renameSync(path.join(viejo, f), path.join(nuevo, f))
     fs.rmSync(viejo, { recursive: true, force: true })
   }
   if (!cliente) return
-  const originales = await listar(`${desde}/`)
+  const originales = await listarR2(`${desde}/`)
   if (!originales.length) return
   const destinoDe = (clave) => `${hacia}/${clave.slice(desde.length + 1)}`
   for (const { clave } of originales) {
     await cliente.send(new CopyObjectCommand({ Bucket: R2.bucket, Key: destinoDe(clave), CopySource: fuenteCopia(clave) }))
   }
-  const copiados = new Map((await listar(`${hacia}/`)).map((a) => [a.clave, a.tamano]))
+  const copiados = new Map((await listarR2(`${hacia}/`)).map((a) => [a.clave, a.tamano]))
   const faltan = originales.filter((o) => copiados.get(destinoDe(o.clave)) !== o.tamano)
   if (faltan.length) throw new Error(`${faltan.length} archivos no se copiaron bien a ${hacia}: los originales quedan en ${desde}`)
   for (const { clave } of originales) await cliente.send(new DeleteObjectCommand({ Bucket: R2.bucket, Key: clave }))

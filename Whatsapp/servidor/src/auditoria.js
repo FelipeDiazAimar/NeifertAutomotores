@@ -8,15 +8,16 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ALMACEN, DATA_DIR, DETRAS_DE_PROXY } from './config.js'
+import { ALMACEN, CLAVE_LINEA, DATA_DIR, DETRAS_DE_PROXY } from './config.js'
 import { consultar } from './nube.js'
 
 const PENDIENTE = path.join(DATA_DIR, 'auditoria.jsonl')
 const EN_BASE = ALMACEN === 'supabase'
 
-const SQL = `insert into wa.auditoria (ts, usuario_id, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip)
-  select ts, usuario_id, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip
-    from jsonb_to_recordset($1::jsonb) as x(ts timestamptz, usuario_id text, usuario_nombre text, rol text,
+// Cada registro lleva la línea (número de WhatsApp) con la que corría el servidor.
+const SQL = `insert into wa.auditoria (linea, ts, usuario_id, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip)
+  select coalesce(linea, $2), ts, usuario_id, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip
+    from jsonb_to_recordset($1::jsonb) as x(linea text, ts timestamptz, usuario_id text, usuario_nombre text, rol text,
          accion text, resultado text, chat_jid text, detalle jsonb, ip text)`
 
 /** IP de quien hace el pedido. Detrás de un proxy (Cloudflare Tunnel) la informa el proxy. */
@@ -60,7 +61,7 @@ async function subirPendientes() {
         }
       })
       .filter(Boolean)
-    if (filas.length) await consultar(SQL, [JSON.stringify(filas)])
+    if (filas.length) await consultar(SQL, [JSON.stringify(filas), CLAVE_LINEA])
     fs.rmSync(enviando)
   } catch {
     // Sigue sin poder: vuelve al archivo para el próximo intento.
@@ -81,6 +82,7 @@ async function subirPendientes() {
  */
 export function auditar({ req = null, usuario = req?.usuario || null, accion, resultado = 'ok', chatId = null, detalle = {} }) {
   const fila = {
+    linea: CLAVE_LINEA,
     ts: new Date().toISOString(),
     usuario_id: usuario?.id || null,
     usuario_nombre: usuario?.nombre || null,
@@ -92,7 +94,7 @@ export function auditar({ req = null, usuario = req?.usuario || null, accion, re
     ip: ipDe(req),
   }
   if (!EN_BASE) return aLocal([fila])
-  consultar(SQL, [JSON.stringify([fila])])
+  consultar(SQL, [JSON.stringify([fila]), CLAVE_LINEA])
     .then(() => subirPendientes())
     .catch(() => aLocal([fila]))
 }
@@ -107,8 +109,8 @@ export async function ultimasAcciones(limite = 100) {
     }
   }
   const { rows } = await consultar(
-    'select ts, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip from wa.auditoria order by ts desc limit $1',
-    [limite],
+    'select ts, usuario_nombre, rol, accion, resultado, chat_jid, detalle, ip from wa.auditoria where linea = $2 order by ts desc limit $1',
+    [limite, CLAVE_LINEA],
   )
   return rows
 }

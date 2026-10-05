@@ -20,21 +20,57 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { ALMACEN, ARCHIVOS_EN_R2, DATA_DIR } from './config.js'
+import { ALMACEN, ARCHIVOS_EN_R2, DATA_DIR, LINEA, LINEA_DIR } from './config.js'
 import { emitir, log } from './eventos.js'
 import * as nube from './nube.js'
 import * as diario from './diario.js'
 import { DONDE, enDisco, guardar, listarArchivos, moverPrefijo } from './archivos.js'
 import { categoriaDe } from './tipos.js'
+import { estadoCuota } from './cuota.js'
 
 export const EN_SUPABASE = ALMACEN === 'supabase'
 
-export const AUTH_DIR = path.join(DATA_DIR, 'sesion')
-const MSG_DIR = path.join(DATA_DIR, 'mensajes')
-const MEDIA_DIR = path.join(DATA_DIR, 'media')
-const ESTADO_FILE = path.join(DATA_DIR, 'estado.json')
+// Todo lo local es de la línea con la que corre el servidor (ver LINEA en config.js).
+export const AUTH_DIR = path.join(LINEA_DIR, 'sesion')
+const MSG_DIR = path.join(LINEA_DIR, 'mensajes')
+const ESTADO_FILE = path.join(LINEA_DIR, 'estado.json')
 
-for (const dir of [DATA_DIR, MSG_DIR, MEDIA_DIR]) fs.mkdirSync(dir, { recursive: true })
+/**
+ * Antes las cosas locales iban sueltas en DATA_DIR (una sola línea). La primera vez se mudan
+ * a la carpeta de la línea: la sesión solo si es de este número; el diario y los archivos
+ * del modo local, a la línea actual.
+ */
+function mudarCarpetasViejas() {
+  if (!LINEA) return
+  const vieja = (n) => path.join(DATA_DIR, n)
+  const sesion = vieja('sesion')
+  if (fs.existsSync(path.join(sesion, 'creds.json')) && !fs.existsSync(AUTH_DIR)) {
+    const id = leerJson(path.join(sesion, 'creds.json'), {})?.me?.id || ''
+    if (id.startsWith(LINEA)) mudar(sesion, AUTH_DIR)
+  }
+  for (const n of ['diario', 'mensajes', 'estado.json', 'media', 'fotos']) {
+    if (fs.existsSync(vieja(n)) && !fs.existsSync(path.join(LINEA_DIR, n))) mudar(vieja(n), path.join(LINEA_DIR, n))
+  }
+}
+
+/** Mueve una carpeta o archivo. Si no se puede renombrar (OneDrive la tiene tomada), copia y borra. */
+function mudar(desde, hacia) {
+  fs.mkdirSync(path.dirname(hacia), { recursive: true })
+  try {
+    fs.renameSync(desde, hacia)
+  } catch {
+    try {
+      fs.cpSync(desde, hacia, { recursive: true })
+      fs.rmSync(desde, { recursive: true, force: true })
+    } catch (err) {
+      // No frena el arranque: lo que quedó en el lugar viejo se puede mover a mano.
+      console.error(`No se pudo mover ${desde} a ${hacia}: ${err.message}`)
+    }
+  }
+}
+mudarCarpetasViejas()
+
+for (const dir of [DATA_DIR, LINEA_DIR, MSG_DIR]) fs.mkdirSync(dir, { recursive: true })
 
 const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false }
 
@@ -769,6 +805,8 @@ export async function usoAlmacenamiento() {
     pendientesDeGuardar: EN_SUPABASE ? nube.pendientesDeGuardar() : 0,
     // Último respaldo cifrado de la sesión en R2 ({ ts, bytes, error }), o null si está apagado.
     respaldo: estado.meta.respaldo || null,
+    // Tope de espacio de R2 (ver cuota.js): { activa, usado, limite, medidoEn }.
+    cuota: estadoCuota(),
   }
 }
 

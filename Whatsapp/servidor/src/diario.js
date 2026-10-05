@@ -21,9 +21,9 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { DATA_DIR } from './config.js'
+import { LINEA_DIR } from './config.js'
 
-const DIR = path.join(DATA_DIR, 'diario')
+const DIR = path.join(LINEA_DIR, 'diario') // el diario es de la línea con la que corre el servidor
 const ACTUAL = path.join(DIR, 'actual.jsonl')
 const tsDeTramo = (f) => Number(/^tramo-(\d+)/.exec(f)?.[1] || 0)
 

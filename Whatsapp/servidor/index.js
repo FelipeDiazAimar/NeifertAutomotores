@@ -1,3 +1,4 @@
+import crypto from 'node:crypto'
 import express from 'express'
 import {
   CONSERVAR_EDICIONES,
@@ -106,6 +107,20 @@ app.get('/api/salud', (req, res) => {
 app.get('/api/publico', (req, res) => res.json({ origenesCrm: ORIGENES_CRM }))
 app.post('/api/sesion', iniciarSesion)
 app.post('/api/sesion/salir', cerrarSesion)
+
+// Solo para la app de escritorio de esta PC (Whatsapp/escritorio): estado de la línea y el
+// QR, sin login del CRM. Exige la clave que la app genera en cada arranque (WA_CLAVE_LOCAL)
+// y que el pedido salga de esta misma PC, no por el túnel. Para cualquier otro no existe.
+const CLAVE_LOCAL = Buffer.from(process.env.WA_CLAVE_LOCAL || '')
+app.get('/api/local/estado', (req, res) => {
+  const deEstaPc = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
+  const clave = Buffer.from(String(req.get('x-nf-local') || ''))
+  if (!CLAVE_LOCAL.length || !deEstaPc || clave.length !== CLAVE_LOCAL.length || !crypto.timingSafeEqual(clave, CLAVE_LOCAL)) {
+    return res.status(404).json({ error: 'Ruta inexistente' })
+  }
+  const { conexion, desde, qr, numeroLinea: linea, rechazo, yo } = wa.estadoConexion({ linea: true })
+  res.json({ conexion, desde, qr, numeroLinea: linea, rechazo, telefono: yo?.telefono || null, nombre: yo?.nombre || null })
+})
 
 // Todo lo demás exige haber entrado desde el CRM.
 app.use('/api', exigirSesion)
@@ -255,6 +270,10 @@ const servidor = app.listen(PUERTO, HOST, () => {
     .then((n) => n && log('ok', 'Mensajes para ver una vez', `${n} archivos borrados; queda solo el aviso en el chat`))
     .catch((err) => log('aviso', 'No se pudieron borrar los mensajes para ver una vez', err.message))
     .then(() => limpiarVentana())
+    // Tope de espacio en R2: se mide el bucket y, si pasó el 85 %, se borra lo más viejo.
+    .then(() => wa.vigilarEspacio())
+    .then((e) => e && log('info', 'Espacio en R2', `${(e.usado / 1024 ** 3).toFixed(2)} GB usados de un tope de ${(e.limite / 1024 ** 3).toFixed(0)} GB (WA_R2_LIMITE_GB)`))
+    .catch((err) => log('aviso', 'No se pudo revisar el espacio de R2', err.message))
     .finally(() => wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message)))
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
