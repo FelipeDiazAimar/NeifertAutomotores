@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -11,7 +11,10 @@ const { default: WhatsappPage } = await import('../pages/WhatsappPage.jsx')
 
 const montar = () => render(<MemoryRouter><WhatsappPage /></MemoryRouter>)
 
-afterEach(() => vi.unstubAllGlobals())
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
 
 describe('WhatsappPage', () => {
   it('si el servidor no responde, lo dice en vez de mostrar el error del navegador', async () => {
@@ -47,8 +50,19 @@ describe('WhatsappPage', () => {
 
     await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
     expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, 'http://localhost:3100')
-    await userEvent.click(screen.getByRole('button', { name: /traer chats y grupos/i }))
+    await userEvent.click(screen.getByRole('button', { name: 'Recargar' }))
     expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:actualizar' }, 'http://localhost:3100')
+  })
+
+  it('si el panel nunca termina de cargar, vuelve a probar en vez de quedar cargando', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = vi.fn().mockResolvedValue({})
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    await screen.findByTitle('WhatsApp de la concesionaria')
+    expect(fetch).toHaveBeenCalledTimes(1)
+    await act(() => vi.advanceTimersByTimeAsync(25_000))
+    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
   })
 
   it('un mensaje que no viene del panel no cambia nada', async () => {

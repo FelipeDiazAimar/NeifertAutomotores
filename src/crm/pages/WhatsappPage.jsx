@@ -10,6 +10,8 @@ import { useUiStore } from '@/store/useUiStore'
 const PANEL_URL = (import.meta.env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
 const PANEL_ORIGEN = PANEL_URL ? new URL(PANEL_URL).origin : ''
 const REINTENTO_MS = 15_000
+// Lo que puede tardar el panel en avisar que cargó (pide el token y lo canjea).
+const ESPERA_PANEL_MS = 25_000
 
 const VISTAS = [
   { id: 'inbox', label: 'Bandeja' },
@@ -90,6 +92,15 @@ export default function WhatsappPage() {
     const t = setTimeout(probar, REINTENTO_MS)
     return () => clearTimeout(t)
   }, [servidor, probar])
+
+  // El servidor respondió pero el panel nunca avisó que cargó (por ejemplo, la app se
+  // reinició justo mientras se abría y el iframe quedó con la página de error): en vez de
+  // quedar cargando para siempre, se vuelve a probar desde cero.
+  useEffect(() => {
+    if (servidor !== 'panel' || listo) return undefined
+    const t = setTimeout(probar, ESPERA_PANEL_MS)
+    return () => clearTimeout(t)
+  }, [servidor, listo, probar])
 
   // Al panel solo se le habla cuando ya avisó que cargó: antes, adentro del iframe puede
   // haber otra cosa (una página de error) y el navegador rechaza el mensaje.
@@ -186,11 +197,11 @@ export default function WhatsappPage() {
                 type="button"
                 onClick={() => enviar({ tipo: 'nf-wa:actualizar' })}
                 disabled={!estado.actualizarHabilitado || estado.actualizando}
-                aria-label="Traer chats y grupos de WhatsApp"
-                title="Traer chats y grupos de WhatsApp"
-                className="glass grid h-9 w-9 place-items-center rounded-full text-ink transition-colors hover:text-[#1a9e52] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-whatsapp"
+                title="Trae del celular los chats (archivados, fijados, silenciados) y los grupos"
+                className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-whatsapp"
               >
                 <RefreshCw size={16} className={estado.actualizando ? 'animate-spin' : ''} />
+                {estado.actualizando ? 'Recargando…' : 'Recargar'}
               </button>
             )}
           </div>

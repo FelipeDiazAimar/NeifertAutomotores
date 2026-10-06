@@ -406,6 +406,9 @@ async function iniciarConexion() {
   s.ev.on('messages.update', seguro('actualizaciones de mensajes', async (updates) => {
     for (const u of updates) await procesarActualizacion(u)
   }))
+  s.ev.on('message-receipt.update', seguro('recibos de lectura', async (recibos) => {
+    for (const r of recibos) await procesarRecibo(r)
+  }))
   s.ev.on('messages.reaction', seguro('reacciones', async (reacciones) => {
     for (const r of reacciones) await procesarReaccion(r)
   }))
@@ -1053,7 +1056,32 @@ async function procesarActualizacion({ key, update }) {
       return
     }
     if (m.deMi) aplicarEstado(chatId, m, nuevo)
+    // Un "leído" de un mensaje recibido lo manda otro dispositivo de la línea (el celular):
+    // se leyó allá, así que acá tampoco queda sin leer.
+    else if (nuevo === 'leido') leidoEnOtroDispositivo(chatId, m)
   }
+}
+
+/**
+ * El chat se leyó en el celular (u otro dispositivo vinculado a la línea) hasta el mensaje
+ * `m`: quedan sin leer solo los recibidos después, como en WhatsApp.
+ */
+function leidoEnOtroDispositivo(chatId, m) {
+  const chat = buscarChat(chatId)
+  if (!chat?.noLeidos) return
+  const despues = listarMensajes(chatId).filter((x) => !x.deMi && (x.ts || 0) > (m.ts || 0)).length
+  if (despues < chat.noLeidos) upsertChat(chatId, { noLeidos: despues })
+}
+
+/** En un grupo, el "leído" del celular llega como recibo con el número de la línea. */
+async function procesarRecibo({ key, receipt }) {
+  if (!receipt?.readTimestamp || !key?.remoteJid || ignorar(key.remoteJid)) return
+  const quien = jidNormalizedUser(receipt.userJid || '')
+  const propios = [yo?.id, yo?.lid].filter(Boolean).map((j) => jidNormalizedUser(j))
+  if (!propios.includes(quien)) return
+  const chatId = await jidDelChat(key)
+  const m = buscarMensaje(chatId, key.id)
+  if (m && !m.deMi) leidoEnOtroDispositivo(chatId, m)
 }
 
 /** Sube el estado de un mensaje propio (nunca lo baja: un "leído" no vuelve a "enviado"). */
@@ -1358,8 +1386,11 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
     const cambiaFijado = 'pinned' in ch
     const cambiaSilencio = 'muteEndTime' in ch
     const cambiaNombre = !!ch.name
+    // "Marcar como leído / no leído" en el celular (o abrir el chat ahí): 0 = leído, -1 = no
+    // leído. Los números positivos son la cuenta de mensajes nuevos, que se lleva acá.
+    const cambiaLectura = ch.unreadCount === 0 || ch.unreadCount === -1
     const grupoNuevo = crearGrupos && isJidGroup(ch.id) && !existeChat(ch.id)
-    if (!cambiaArchivo && !cambiaFijado && !cambiaSilencio && !cambiaNombre && !grupoNuevo) continue
+    if (!cambiaArchivo && !cambiaFijado && !cambiaSilencio && !cambiaNombre && !cambiaLectura && !grupoNuevo) continue
     if (ch.pnJid && ch.lidJid) registrarLid(jidNormalizedUser(ch.lidJid), jidNormalizedUser(ch.pnJid))
     if (ignorar(ch.id)) continue
     const id = ch.pnJid ? jidNormalizedUser(ch.pnJid) : await jidDelChat({ remoteJid: ch.id })
@@ -1372,6 +1403,10 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
     if (cambiaArchivo) setArchivado(id, archivadoVigente(ch, id))
     if (cambiaFijado) setFijado(id, ch.pinned ? toNumber(ch.pinned) : null)
     if (cambiaSilencio) setSilenciado(id, ch.muteEndTime ? toNumber(ch.muteEndTime) : null)
+    if (cambiaLectura && existeChat(id)) {
+      if (ch.unreadCount === 0) marcarLeido(id)
+      else if (!buscarChat(id)?.noLeidos) sumarNoLeido(id)
+    }
   }
 }
 
@@ -2259,9 +2294,21 @@ export async function abrirChat(telefono) {
   return id
 }
 
+/**
+ * Se abrió el chat en el panel. En el celular también queda leído (es lo que hace "Marcar
+ * como leído" en WhatsApp Web: no le manda nada al contacto). El tilde azul al contacto
+ * sale solo con la preferencia "Confirmar lectura".
+ */
 export async function confirmarLectura(chatId) {
+  const teniaSinLeer = !!buscarChat(chatId)?.noLeidos
   marcarLeido(chatId)
-  if (!config().confirmarLectura || !sock || conexion !== 'conectado') return
+  if (!sock || conexion !== 'conectado') return
+  if (teniaSinLeer) {
+    sock.chatModify({ markRead: true, lastMessages: ultimosMensajes(chatId) }, chatId).catch((err) => {
+      log('aviso', 'No se pudo marcar el chat como leído en el celular', `${nombreDe(chatId)} · ${err.message}`)
+    })
+  }
+  if (!config().confirmarLectura) return
   const recibidos = listarMensajes(chatId).filter((m) => !m.deMi && m.tipo !== 'desconocido').slice(-20)
   if (recibidos.length) await sock.readMessages(recibidos.map((m) => claveMensaje(chatId, m)))
 }
