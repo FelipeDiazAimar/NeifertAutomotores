@@ -107,7 +107,7 @@ function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
 
 export async function listarPublicos({
   category = 'todos',
-  sort = 'brand-asc',
+  sort = 'price-desc',
   search = '',
   filters = null,
   condition = 'todos',
@@ -140,7 +140,7 @@ export async function listarPublicos({
       return asc ? a.price_usd - b.price_usd : b.price_usd - a.price_usd
     })
   } else if (ordenaAlfabetico) {
-    // brand-asc (default): marca A-Z → modelo A-Z → año desc → versión A-Z.
+    // brand-asc: marca A-Z → modelo A-Z → año desc → versión A-Z.
     // model-asc: modelo A-Z → marca A-Z → año desc.
     // La grilla agrupa visualmente por marca (grupos A-Z) y conserva este
     // orden dentro de cada grupo.

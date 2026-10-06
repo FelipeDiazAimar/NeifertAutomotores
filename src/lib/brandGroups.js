@@ -18,3 +18,24 @@ export function groupVehiclesByBrand(vehicles) {
     a.localeCompare(b, 'es', { sensitivity: 'base' })
   )
 }
+
+/** Parte los grupos en páginas sin cortar marcas: cada página acumula
+ *  marcas enteras hasta `maxVehiculos` (una marca grande puede superarlo
+ *  sola, pero nunca se parte a la mitad). */
+export function paginarPorMarcas(groups, maxVehiculos = 20) {
+  const paginas = []
+  let actual = []
+  let total = 0
+  for (const entry of groups) {
+    const [, items] = entry
+    if (actual.length > 0 && total + items.length > maxVehiculos) {
+      paginas.push(actual)
+      actual = []
+      total = 0
+    }
+    actual.push(entry)
+    total += items.length
+  }
+  if (actual.length > 0) paginas.push(actual)
+  return paginas
+}

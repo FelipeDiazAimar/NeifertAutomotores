@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { brandKeyOf, groupVehiclesByBrand } from '../brandGroups'
+import { brandKeyOf, groupVehiclesByBrand, paginarPorMarcas } from '../brandGroups'
 
 describe('brandGroups', () => {
   it('brandKeyOf normaliza vacías a "Sin marca"', () => {
@@ -25,5 +25,22 @@ describe('brandGroups', () => {
 
   it('lista vacía → sin grupos', () => {
     expect(groupVehiclesByBrand([])).toEqual([])
+  })
+
+  it('paginarPorMarcas acumula marcas enteras hasta el tope (nunca parte una)', () => {
+    const groups = [
+      ['Audi', new Array(2).fill({})],
+      ['BMW', new Array(3).fill({})],
+      ['Fiat', new Array(1).fill({})],
+      ['Ford', new Array(30).fill({})],
+      ['Honda', new Array(2).fill({})],
+    ]
+    const paginas = paginarPorMarcas(groups, 5)
+    expect(paginas.map((p) => p.map(([b]) => b))).toEqual([
+      ['Audi', 'BMW'],
+      ['Fiat'],
+      ['Ford'],
+      ['Honda'],
+    ])
   })
 })
