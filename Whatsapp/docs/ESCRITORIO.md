@@ -72,7 +72,7 @@ Dónde guarda las cosas en la PC (`%APPDATA%\Neifert WhatsApp`):
 ## Actualizaciones: el instalador no se toca
 
 El instalador trae una versión inicial del servidor. Las siguientes se **publican** y la PC
-servidor las baja sola (revisa al minuto de arrancar y cada 30 minutos):
+servidor las baja sola (revisa a los 5 segundos de arrancar y cada 10 minutos):
 
 ```sh
 cd Whatsapp/escritorio
@@ -87,7 +87,7 @@ npm run publicar
 - **Si la versión nueva se cae al arrancar tres veces seguidas, vuelve sola a la anterior**
   y la marca como mala (no la vuelve a intentar).
 - Antes de publicar: `npm test` y `npm run lint` en la raíz del repo. Lo que se publica
-  corre en producción en menos de 30 minutos.
+  corre en producción en menos de 10 minutos.
 
 El instalador solo hay que rearmarlo si cambia la app en sí (`main.cjs`, ventanas,
 versión de Electron o de cloudflared).

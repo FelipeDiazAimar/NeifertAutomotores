@@ -1,6 +1,6 @@
 /*
  * Publica una versión nueva del servidor de WhatsApp para que la PC servidor la baje sola
- * (revisa cada 30 minutos). No hace falta tocar el instalador ni la PC.
+ * (revisa al arrancar y cada 10 minutos). No hace falta tocar el instalador ni la PC.
  *
  *   cd Whatsapp/escritorio
  *   npm run publicar
@@ -61,7 +61,7 @@ try {
   for (const v of viejas) await borrar(v.clave)
 
   console.log(`\nPublicada la versión ${ficha.version}.`)
-  console.log('La PC servidor la toma en menos de 30 minutos (o ya: ícono → "Buscar actualización ahora").')
+  console.log('La PC servidor la toma en menos de 10 minutos (o ya: ícono → "Buscar actualización ahora").')
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true })
 }
