@@ -1055,11 +1055,16 @@ async function canjearToken(token) {
  * usuario del CRM y la canjea por la cookie del panel.
  */
 async function entrar() {
-  let res = await fetch('/api/sesion')
-  if (res.status === 401 && EMBEBIDO) {
+  let res = null
+  // Dentro del CRM se entra SIEMPRE con el usuario que está logueado ahí, aunque quede una
+  // sesión anterior en este navegador: si alguien cambió de usuario en el CRM (de Bruno a
+  // Admin, por ejemplo), el panel tiene que ser el del usuario nuevo, con sus permisos.
+  if (EMBEBIDO) {
     const token = await tokenDelCrm()
     if (token) res = await canjearToken(token)
   }
+  // Sin respuesta del CRM (o fuera del CRM): la sesión que haya en este navegador.
+  if (!res) res = await fetch('/api/sesion')
   const data = await res.json().catch(() => ({}))
   if (!res.ok) {
     pantallaSinSesion(data, res.status)
