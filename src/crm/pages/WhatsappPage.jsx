@@ -161,7 +161,7 @@ export default function WhatsappPage() {
                   onClick={() => enviar({ tipo: 'nf-wa:vista', vista: v.id })}
                   className={cn(
                     'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                    estado.vista === v.id ? 'bg-ink text-surface' : 'text-ink-2 hover:text-ink',
+                    estado.vista === v.id ? 'bg-ink text-surface-solid' : 'text-ink-2 hover:text-ink',
                   )}
                 >
                   {v.label}
