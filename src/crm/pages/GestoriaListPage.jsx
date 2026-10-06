@@ -37,7 +37,10 @@ function ordenar(filas, orden) {
   } else if (orden === 'faltantes') {
     out.sort((a, b) => hechos(a) - hechos(b))
   } else {
-    out.sort((a, b) => (a.vehiculo?.marca ?? '').localeCompare(b.vehiculo?.marca ?? ''))
+    out.sort((a, b) =>
+      (a.vehiculo?.marca ?? '').localeCompare(b.vehiculo?.marca ?? '', 'es', { sensitivity: 'base' }) ||
+      (a.vehiculo?.modelo ?? '').localeCompare(b.vehiculo?.modelo ?? '', 'es', { sensitivity: 'base' }),
+    )
   }
   return out
 }
@@ -51,20 +54,27 @@ export default function GestoriaListPage() {
   const { data: todas = [], isLoading } = useGestoriasTodas()
   const viewMode = useViewModeStore((s) => s.viewMode)
 
-  const tiposDisponibles = useMemo(
-    () => [...new Set(todas.map((g) => g.vehiculo?.tipo).filter(Boolean))].sort(),
+  // Los dados de baja no se muestran (el servicio ya los excluye; esto cubre
+  // datos en caché anteriores).
+  const vigentes = useMemo(
+    () => todas.filter((g) => g.vehiculo?.estado !== 'baja'),
     [todas],
   )
 
+  const tiposDisponibles = useMemo(
+    () => [...new Set(vigentes.map((g) => g.vehiculo?.tipo).filter(Boolean))].sort(),
+    [vigentes],
+  )
+
   const counts = useMemo(() => {
-    const c = { total: todas.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
-    for (const g of todas) c[g.estado] = (c[g.estado] ?? 0) + 1
+    const c = { total: vigentes.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
+    for (const g of vigentes) c[g.estado] = (c[g.estado] ?? 0) + 1
     return c
-  }, [todas])
+  }, [vigentes])
 
   const visibles = useMemo(() => {
     const t = q.trim().toLowerCase()
-    let out = todas.filter((g) => {
+    let out = vigentes.filter((g) => {
       if (estado && g.estado !== estado) return false
       if (tipos.length && !tipos.includes(g.vehiculo?.tipo)) return false
       if (!t) return true
@@ -72,13 +82,13 @@ export default function GestoriaListPage() {
       return `${v.marca ?? ''} ${v.modelo ?? ''} ${v.patente ?? ''}`.toLowerCase().includes(t)
     })
     return ordenar(out, orden)
-  }, [todas, estado, tipos, q, orden])
+  }, [vigentes, estado, tipos, q, orden])
 
   return (
     <div className="space-y-4">
       <div>
         <h1 className="font-display text-2xl font-bold text-ink">Gestoría</h1>
-        <p className="text-sm text-ink-3">{counts.total} vehículos con trámites</p>
+        <p className="text-sm text-ink-3">{counts.total} vehículos</p>
       </div>
 
       <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
@@ -163,12 +173,12 @@ export default function GestoriaListPage() {
       ) : visibles.length === 0 ? (
         <GlassCard className="p-10 text-center">
           <p className="font-display font-bold text-ink">
-            {q.trim() || estado ? 'Sin resultados' : 'Sin gestorías'}
+            {q.trim() || estado ? 'Sin resultados' : 'Sin vehículos'}
           </p>
           <p className="mt-1 text-sm text-ink-3">
             {q.trim() || estado
               ? 'Probá con otro filtro o búsqueda.'
-              : 'Se arman desde la ficha de cada vehículo, pestaña Gestoría.'}
+              : 'Todavía no hay vehículos para mostrar.'}
           </p>
         </GlassCard>
       ) : viewMode === 'card' ? (

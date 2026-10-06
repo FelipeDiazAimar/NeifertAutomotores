@@ -82,4 +82,19 @@ describe('PeritajesListPage', () => {
     expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
     expect(screen.getByText(/31 ok · 0 obs · 1 falta/)).toBeInTheDocument()
   })
+
+  it('no muestra los vehículos en baja', () => {
+    const conBaja = [
+      ...filas,
+      {
+        vehiculo: { id: 'v3', marca: 'Fiat', modelo: 'Cronos', patente: 'EE5', estado: 'baja' },
+        peritaje: null, cantidad: 0, estadoPeritaje: 'sin_iniciar',
+      },
+    ]
+    usePeritajesVehiculos.mockReturnValue({ data: conBaja, isLoading: false })
+    render(<MemoryRouter><PeritajesListPage /></MemoryRouter>)
+    expect(screen.getByText('Toyota Hilux')).toBeInTheDocument()
+    expect(screen.queryByText('Fiat Cronos')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /todos/i })).toHaveTextContent('2')
+  })
 })

@@ -42,6 +42,15 @@ describe('listar', () => {
     expect(or[1]).toContain('marca.ilike.%hilux%')
     expect(or[1]).toContain('patente.ilike.%hilux%')
   })
+
+  it('ordena por defecto por marca A-Z con desempate por modelo', async () => {
+    const { client, calls } = makeSupabase({ 'select:vehiculos': { data: [], error: null, count: 0 } })
+    holder.client = client
+    await svc.listar({ pagina: 1, pageSize: 20 })
+    const orders = calls.find((c) => c.table === 'vehiculos').filters.filter((f) => f[0] === 'order')
+    expect(orders[0]).toEqual(['order', 'marca', { ascending: true }])
+    expect(orders.some(([, c]) => c === 'modelo')).toBe(true)
+  })
 })
 
 describe('contarPorEstado', () => {
@@ -49,21 +58,42 @@ describe('contarPorEstado', () => {
     const { client, calls } = makeSupabase({
       'select:vehiculos': {
         data: [
-          { estado: 'disponible' }, { estado: 'disponible' },
-          { estado: 'reservado' }, { estado: 'vendido' }, { estado: 'baja' },
+          { estado: 'disponible', peritajes: [{ id: 'p1' }], gestoria: { estado: 'completo' } },
+          { estado: 'disponible', peritajes: [], gestoria: null },
+          { estado: 'reservado', peritajes: [], gestoria: { estado: 'sin_iniciar' } },
+          { estado: 'vendido', peritajes: [{ id: 'p2' }], gestoria: { estado: 'en_proceso' } },
+          { estado: 'baja', peritajes: [], gestoria: null },
         ],
         error: null,
       },
     })
     holder.client = client
     const r = await svc.contarPorEstado({ busqueda: 'hilux', filtros: { estado: ['disponible'] } })
-    expect(r).toEqual({ disponible: 2, reservado: 1, vendido: 1, baja: 1 })
+    expect(r).toEqual({ disponible: 2, reservado: 1, vendido: 1, baja: 1, sinPeritar: 3, sinGestoria: 3 })
     const call = calls.find((c) => c.table === 'vehiculos')
-    expect(call.select).toBe('estado')
+    expect(call.select).toContain('estado')
+    expect(call.select).toContain('peritajes(')
+    expect(call.select).toContain('gestoria(')
     // aplica búsqueda pero no filtra por estado ni pagina
     expect(call.filters.some((f) => f[0] === 'or')).toBe(true)
     expect(call.filters.some((f) => f[0] === 'in' && f[1] === 'estado')).toBe(false)
     expect(call.filters.some((f) => f[0] === 'range')).toBe(false)
+  })
+
+  it('cuenta sinGestoria con gestoria en forma de arreglo', async () => {
+    const { client } = makeSupabase({
+      'select:vehiculos': {
+        data: [
+          { estado: 'disponible', peritajes: [], gestoria: [] },
+          { estado: 'disponible', peritajes: [], gestoria: [{ estado: 'completo' }] },
+        ],
+        error: null,
+      },
+    })
+    holder.client = client
+    const r = await svc.contarPorEstado({})
+    expect(r.sinGestoria).toBe(1)
+    expect(r.sinPeritar).toBe(2)
   })
 })
 

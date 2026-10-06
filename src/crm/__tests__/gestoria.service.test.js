@@ -40,20 +40,50 @@ describe('gestoria.service.guardarCampos', () => {
 })
 
 describe('gestoria.service.listarTodas', () => {
-  it('sin estado no filtra; con estado agrega eq', async () => {
-    const { client, calls } = makeSupabase({ 'select:gestoria': { data: [{ id: 1 }], error: null } })
-    holder.client = client
-    await svc.listarTodas()
-    let c = calls.find((x) => x.table === 'gestoria')
-    expect(c.select).toContain('vehiculo:vehiculos!inner')
-    expect(c.filters).not.toEqual(expect.arrayContaining([['eq', 'estado', 'en_proceso']]))
+  const dataset = {
+    'select:vehiculos': {
+      data: [
+        {
+          id: 'v1', marca: 'VW', modelo: 'Amarok', patente: 'AA1',
+          estado: 'disponible', tipo: 'Pickup', fotos: [],
+          gestoria: [{
+            id: 'g1', vehiculo_id: 'v1', estado: 'en_proceso',
+            form08_hecho: true, verif_policial_hecho: true,
+          }],
+        },
+        {
+          id: 'v2', marca: 'Ford', modelo: 'Ka', patente: 'BB2',
+          estado: 'disponible', tipo: 'Hatchback', fotos: [],
+          gestoria: [],
+        },
+      ],
+      error: null,
+    },
+  }
 
-    const m2 = makeSupabase({ 'select:gestoria': { data: [], error: null } })
-    holder.client = m2.client
-    await svc.listarTodas({ estado: 'en_proceso' })
-    expect(m2.calls.find((x) => x.table === 'gestoria').filters).toEqual(
-      expect.arrayContaining([['eq', 'estado', 'en_proceso']]),
-    )
+  it('trae todos los vehículos (salvo baja) ordenados por marca A-Z', async () => {
+    const { client, calls } = makeSupabase(dataset)
+    holder.client = client
+    const r = await svc.listarTodas()
+    expect(r.map((g) => [g.vehiculo.id, g.estado])).toEqual([
+      ['v1', 'en_proceso'],
+      ['v2', 'sin_iniciar'],
+    ])
+    // el que no tiene fila llega como sin_iniciar sintético
+    expect(r[1].id).toBe('sin-v2')
+    const c = calls.find((x) => x.table === 'vehiculos')
+    expect(c.select).toContain('gestoria(')
+    expect(c.filters).toEqual(expect.arrayContaining([['neq', 'estado', 'baja']]))
+    const orders = c.filters.filter((f) => f[0] === 'order')
+    expect(orders[0]).toEqual(['order', 'marca', { ascending: true }])
+    expect(orders.some(([, col]) => col === 'modelo')).toBe(true)
+  })
+
+  it('con estado filtra client-side por ese estado', async () => {
+    const { client } = makeSupabase(dataset)
+    holder.client = client
+    const r = await svc.listarTodas({ estado: 'en_proceso' })
+    expect(r.map((g) => g.vehiculo.id)).toEqual(['v1'])
   })
 })
 

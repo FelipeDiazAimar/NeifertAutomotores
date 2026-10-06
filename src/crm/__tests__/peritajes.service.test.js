@@ -108,6 +108,11 @@ describe('peritajes.service.listarVehiculos', () => {
     const c = calls.find((x) => x.table === 'vehiculos')
     expect(c.select).toContain('peritajes(')
     expect(c.filters.some((f) => f[1] === 'archivado_en')).toBe(false)
+    // excluye baja y ordena marca A-Z (con modelo como desempate)
+    expect(c.filters).toEqual(expect.arrayContaining([['neq', 'estado', 'baja']]))
+    const orders = c.filters.filter((f) => f[0] === 'order')
+    expect(orders[0]).toEqual(['order', 'marca', { ascending: true }])
+    expect(orders.some(([, col]) => col === 'modelo')).toBe(true)
   })
 
   it('filtra por estado derivado', async () => {

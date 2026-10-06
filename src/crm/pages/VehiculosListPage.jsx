@@ -50,7 +50,7 @@ export default function VehiculosListPage() {
   const total = data?.total ?? 0
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const { data: conteo } = useConteoVehiculos({ busqueda, filtros })
-  const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
+  const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0, sinPeritar: 0, sinGestoria: 0 }
 
   /** Descarga la planilla DOCX del stock con los filtros/búsqueda actuales,
    *  con las mismas columnas de la planilla en papel + logo y fecha. */
@@ -110,6 +110,12 @@ export default function VehiculosListPage() {
             </span>
             <span>
               <span className="font-bold text-neifert">{c.baja}</span> en baja
+            </span>
+            <span>
+              <span className="font-bold text-ink">{c.sinPeritar ?? 0}</span> sin peritar
+            </span>
+            <span>
+              <span className="font-bold text-ink">{c.sinGestoria ?? 0}</span> sin gestoría
             </span>
           </p>
         </div>

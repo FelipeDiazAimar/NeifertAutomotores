@@ -11,7 +11,7 @@ export const FILTROS_VACIOS = {
   precioMax: '',
 }
 
-const ORDEN_INICIAL = { campo: 'creado_en', dir: 'desc' }
+const ORDEN_INICIAL = { campo: 'marca', dir: 'asc' }
 
 /** Estado de UI de la lista de vehículos (búsqueda, filtros, orden, página). */
 export const useVehiculosFiltros = create((set) => ({

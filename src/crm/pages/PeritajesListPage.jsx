@@ -31,7 +31,10 @@ function ordenar(filas, orden) {
   } else if (orden === 'pendientes') {
     out.sort((a, b) => (b.peritaje?.items_falta ?? 999) - (a.peritaje?.items_falta ?? 999))
   } else {
-    out.sort((a, b) => (a.vehiculo.marca ?? '').localeCompare(b.vehiculo.marca ?? ''))
+    out.sort((a, b) =>
+      (a.vehiculo.marca ?? '').localeCompare(b.vehiculo.marca ?? '', 'es', { sensitivity: 'base' }) ||
+      (a.vehiculo.modelo ?? '').localeCompare(b.vehiculo.modelo ?? '', 'es', { sensitivity: 'base' }),
+    )
   }
   return out
 }
@@ -52,22 +55,26 @@ export default function PeritajesListPage() {
 
   const { data: todas = [], isLoading } = usePeritajesVehiculos({ busqueda })
 
+  // Los dados de baja no se muestran en esta sección (el servicio ya los
+  // excluye; esto cubre datos en caché anteriores).
+  const vigentes = useMemo(() => todas.filter((f) => f.vehiculo?.estado !== 'baja'), [todas])
+
   const tiposDisponibles = useMemo(
-    () => [...new Set(todas.map((f) => f.vehiculo.tipo).filter(Boolean))].sort(),
-    [todas],
+    () => [...new Set(vigentes.map((f) => f.vehiculo.tipo).filter(Boolean))].sort(),
+    [vigentes],
   )
 
   const counts = useMemo(() => {
-    const c = { total: todas.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
-    for (const f of todas) c[f.estadoPeritaje] = (c[f.estadoPeritaje] ?? 0) + 1
+    const c = { total: vigentes.length, sin_iniciar: 0, en_proceso: 0, completo: 0 }
+    for (const f of vigentes) c[f.estadoPeritaje] = (c[f.estadoPeritaje] ?? 0) + 1
     return c
-  }, [todas])
+  }, [vigentes])
 
   const filas = useMemo(() => {
-    let out = estado ? todas.filter((f) => f.estadoPeritaje === estado) : todas
+    let out = estado ? vigentes.filter((f) => f.estadoPeritaje === estado) : vigentes
     if (tipos.length) out = out.filter((f) => tipos.includes(f.vehiculo.tipo))
     return ordenar(out, orden)
-  }, [todas, estado, tipos, orden])
+  }, [vigentes, estado, tipos, orden])
 
   return (
     <div className="space-y-4">

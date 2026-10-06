@@ -7,12 +7,12 @@ const BUSQUEDA_CAMPOS = ['marca', 'modelo', 'version', 'patente', 'duenio_nombre
 
 /** Lista paginada + filtrada. `filtros`: { estado[], tipo[], moneda, condicion
  *  ('cero' | 'usados' | ''), anioMin, anioMax, precioMin, precioMax }.
- *  `orden`: { campo, dir }. Sin filtro de archivados: todo vehículo se ve
- *  en la lista y se da de baja con estado='baja'. */
+ *  `orden`: { campo, dir } — por defecto marca A-Z. Sin filtro de archivados:
+ *  todo vehículo se ve en la lista y se da de baja con estado='baja'. */
 export async function listar({
   busqueda = '',
   filtros = {},
-  orden = { campo: 'creado_en', dir: 'desc' },
+  orden = { campo: 'marca', dir: 'asc' },
   pagina = 1,
   pageSize = 20,
 } = {}) {
@@ -38,7 +38,11 @@ export async function listar({
 
   q = q
     .order(orden.campo, { ascending: orden.dir === 'asc' })
-    .order('fecha', { referencedTable: 'peritajes', ascending: false })
+  // Desempates estables: marca A-Z y luego modelo A-Z, para que la lista
+  // quede agrupada por marca aunque haya marcas iguales.
+  if (orden.campo !== 'marca') q = q.order('marca', { ascending: true })
+  if (orden.campo !== 'modelo') q = q.order('modelo', { ascending: true })
+  q = q.order('fecha', { referencedTable: 'peritajes', ascending: false })
 
   const from = (pagina - 1) * pageSize
   q = q.range(from, from + pageSize - 1)
@@ -72,7 +76,7 @@ export async function listarTodoStock({ busqueda = '', filtros = {} } = {}) {
     if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
     if (filtros.precioMax != null && filtros.precioMax !== '') q = q.lte('precio_contado', Number(filtros.precioMax))
 
-    q = q.order('marca', { ascending: true }).range(from, from + CHUNK - 1)
+    q = q.order('marca', { ascending: true }).order('modelo', { ascending: true }).range(from, from + CHUNK - 1)
     const { data, error } = await q
     if (error) throw error
     todas.push(...(data ?? []))
@@ -81,11 +85,13 @@ export async function listarTodoStock({ busqueda = '', filtros = {} } = {}) {
   return todas
 }
 
-/** Recuento por estado para el encabezado de la lista. Aplica la misma
- *  búsqueda y filtros que `listar`, salvo el propio filtro de estado (para
- *  que los números sean estables al filtrar por estado). */
+/** Recuento por estado + pendientes para el encabezado de la lista. Aplica la
+ *  misma búsqueda y filtros que `listar`, salvo el propio filtro de estado
+ *  (para que los números sean estables al filtrar por estado).
+ *  - sinPeritar: vehículos sin fila en `peritajes`.
+ *  - sinGestoria: vehículos sin fila en `gestoria` o con estado 'sin_iniciar'. */
 export async function contarPorEstado({ busqueda = '', filtros = {} } = {}) {
-  let q = db().from('vehiculos').select('estado')
+  let q = db().from('vehiculos').select('estado, peritajes(id), gestoria(estado)')
 
   const b = busqueda.trim()
   if (b) q = q.or(BUSQUEDA_CAMPOS.map((c) => `${c}.ilike.%${b}%`).join(','))
@@ -101,9 +107,15 @@ export async function contarPorEstado({ busqueda = '', filtros = {} } = {}) {
 
   const { data, error } = await q
   if (error) throw error
-  const conteo = { disponible: 0, reservado: 0, vendido: 0, baja: 0 }
+  const conteo = { disponible: 0, reservado: 0, vendido: 0, baja: 0, sinPeritar: 0, sinGestoria: 0 }
   for (const f of data ?? []) {
     if (f.estado in conteo) conteo[f.estado]++
+    const per = f.peritajes
+    const tienePeritaje = Array.isArray(per) ? per.length > 0 : Boolean(per?.id ?? per)
+    if (!tienePeritaje) conteo.sinPeritar++
+    let g = f.gestoria
+    if (Array.isArray(g)) g = g[0] ?? null
+    if (!g || !g.estado || g.estado === 'sin_iniciar') conteo.sinGestoria++
   }
   return conteo
 }

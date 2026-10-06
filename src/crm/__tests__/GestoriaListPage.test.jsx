@@ -67,4 +67,17 @@ describe('GestoriaListPage', () => {
     expect(screen.getByText('VW Amarok')).toBeInTheDocument()
     expect(screen.getByText('2/8 trámites')).toBeInTheDocument()
   })
+
+  it('no muestra los vehículos en baja', () => {
+    const baja = {
+      id: 'g3', estado: 'en_proceso',
+      form08_hecho: true,
+      vehiculo: { id: 'v3', marca: 'Fiat', modelo: 'Cronos', patente: 'CC3', estado: 'baja' },
+    }
+    useGestoriasTodas.mockReturnValue({ data: [g1, baja], isLoading: false })
+    render(<MemoryRouter><GestoriaListPage /></MemoryRouter>)
+    expect(screen.getByText('VW Amarok')).toBeInTheDocument()
+    expect(screen.queryByText('Fiat Cronos')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /todas/i })).toHaveTextContent('1')
+  })
 })
