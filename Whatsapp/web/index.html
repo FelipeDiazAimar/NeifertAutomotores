@@ -67,6 +67,7 @@
     <div class="topbar-actions">
       <div class="yo glass" id="yo" hidden></div>
       <button class="line-pill glass" id="linePill" data-view="connect"><span class="dot info"></span>Conectando con el servicio…</button>
+      <button class="icon-btn actualizar-btn" id="btnActualizar" data-act="actualizar" aria-label="Traer chats y grupos de WhatsApp" title="Traer chats y grupos de WhatsApp" hidden><svg class="i"><use href="#i-refresh"/></svg></button>
       <button class="theme-btn" data-act="theme" aria-label="Cambiar tema"><svg class="i"><use href="#i-moon"/></svg></button>
     </div>
   </header>
@@ -124,37 +125,25 @@
     </div>
     <div class="col">
       <div class="card glass shadow">
-        <div class="card-head">
-          <h2>Espacio usado</h2>
-          <button class="btn ghost" data-act="uso"><svg class="i"><use href="#i-refresh"/></svg>Actualizar</button>
-        </div>
-        <div id="usoCard"><p class="path">Calculando…</p></div>
-      </div>
-      <div class="card glass shadow">
         <h2>Preferencias</h2>
         <div>
           <div class="toggle-row"><div>Descargar fotos, audios y documentos al llegar<span>Si el contacto los borra, siguen disponibles acá. Apagado: se descargan al abrirlos.</span></div><button class="switch" role="switch" aria-checked="true" data-pref="descargarMedia" aria-label="Descargar multimedia al llegar"></button></div>
           <div class="toggle-row"><div>Confirmar lectura al abrir un chat<span>Apagado: el contacto no ve el tilde azul por abrir el chat en este panel.</span></div><button class="switch" role="switch" aria-checked="false" data-pref="confirmarLectura" aria-label="Confirmar lectura al abrir un chat"></button></div>
-          <div class="toggle-row"><div>Chats archivados, fijados y silenciados<span>Se copian del celular al vincular. Si en el celular cambiaste algo y acá no se ve igual, sincronizá de nuevo.</span></div><button class="btn ghost" data-act="sincronizar-chats"><svg class="i"><use href="#i-refresh"/></svg>Sincronizar</button></div>
-          <div class="toggle-row"><div>Grupos<span>Trae todos los grupos en los que está la línea y los muestra en la bandeja. WhatsApp no reenvía el historial viejo, así que los mensajes van apareciendo a medida que escriben.</span></div><button class="btn ghost" data-act="sincronizar-grupos"><svg class="i"><use href="#i-refresh"/></svg>Traer grupos</button></div>
+          <div class="toggle-row solo-linea"><div>Exportar todos los chats<span>Un .zip con un .txt por chat, como "Exportar chat" del celular. Las fotos y los audios no van adentro.</span></div><button class="btn ghost" data-act="exportar-todo"><svg class="i"><use href="#i-download"/></svg>Exportar</button></div>
         </div>
-      </div>
-      <div class="card glass shadow">
-        <h2>Actividad</h2>
-        <ul class="log" id="logList"></ul>
       </div>
       <div class="card glass shadow">
         <h2>Privacidad</h2>
         <div id="privacidadCard"><p class="path">Cargando…</p></div>
       </div>
-      <div class="card glass shadow solo-linea">
-        <div class="card-head">
-          <h2>Auditoría</h2>
-          <button class="btn ghost" data-act="auditoria"><svg class="i"><use href="#i-refresh"/></svg>Actualizar</button>
-        </div>
-        <p class="card-sub">Quién hizo qué desde el panel: entradas, envíos, cambios y pedidos rechazados por falta de permiso.</p>
-        <ul class="log" id="auditoriaList"><li style="display:block">Cargando…</li></ul>
+    </div>
+    <div class="card glass shadow actividad-card solo-linea">
+      <div class="card-head">
+        <h2>Actividad del servidor</h2>
+        <div class="chips" id="logFiltros"></div>
       </div>
+      <p class="card-sub">Lo que pasó con la línea y el servidor, lo más nuevo arriba. Solo la ven los administradores.</p>
+      <div class="log-tabla" id="logList"></div>
     </div>
   </section>
 </div>

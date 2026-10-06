@@ -7,6 +7,8 @@ import {
   HOST,
   LOGIN_CONFIGURADO,
   MEDIA_MAX_BYTES,
+  SUBIDA_MAX_BYTES,
+  SUBIDA_MAX_MB,
   MEDIA_MAX_MB,
   numeroLinea,
   ORIGENES_CRM,
@@ -18,11 +20,12 @@ import {
 import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
-import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, servir } from './src/archivos.js'
+import { crearZip, nombreArchivo, textoDeChat } from './src/exportar.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
 // podría escribir con el número de la concesionaria. En ese caso no se arranca.
@@ -86,7 +89,7 @@ const accion = (nombre, fn, detalle = () => ({})) =>
     }
   })
 
-const binario = express.raw({ type: () => true, limit: MEDIA_MAX_BYTES })
+const binario = express.raw({ type: () => true, limit: SUBIDA_MAX_BYTES })
 function archivoDe(req) {
   if (!Buffer.isBuffer(req.body) || !req.body.length) throw new Error('No llegó ningún archivo')
   return req.body
@@ -136,9 +139,9 @@ app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.
 app.get('/api/eventos', (req, res) => suscribir(req, res))
 // Lo que el panel necesita saber de la configuración del servidor (límite de archivos y
 // la definición de privacidad: si se conservan los eliminados y las ediciones).
-const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO })
+const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, subidaMaxMb: SUBIDA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO })
 app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: configPublica() })))
-app.get('/api/log', ruta(() => ultimosLogs()))
+app.get('/api/log', exigirLinea, ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
 app.post('/api/config', exigirLinea, accion('preferencias', (req) => {
@@ -171,6 +174,20 @@ app.get('/api/chats/:id/mensajes/:msgId', ruta((req) => {
   if (!m) throw Object.assign(new Error('El mensaje no está guardado'), { status: 404 })
   return vistaMensaje(m)
 }))
+// Exportar: un chat como .txt (cualquiera que lo puede ver) o todos en un .zip (solo administradores).
+// El contenido no va a la auditoría: solo queda quién exportó y cuándo.
+app.get('/api/chats/:id/exportar', accion('exportar_chat', (req, res) => {
+  const jid = chatId(req)
+  const chat = listarChats().find((c) => c.id === jid)
+  if (!chat) throw Object.assign(new Error('El chat no está guardado'), { status: 404 })
+  res.attachment(nombreArchivo(`Chat de WhatsApp con ${chat.nombre}`, 'txt')).type('text/plain; charset=utf-8').send(textoDeChat(chat, listarMensajes(jid)))
+}))
+app.get('/api/exportar', exigirLinea, accion('exportar_chats', (req, res) => {
+  const chats = listarChats()
+  const zip = crearZip(chats.map((c) => ({ nombre: nombreArchivo(c.nombre, 'txt'), datos: textoDeChat(c, listarMensajes(c.id)) })))
+  const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
+  res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
+}, () => ({})))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))

@@ -40,10 +40,15 @@ export const DETRAS_DE_PROXY = encendido(env.WA_DETRAS_DE_PROXY, false)
 
 /* ---------------- Archivos multimedia ---------------- */
 
-// Un solo límite para todo: lo que se baja solo, lo que se puede mandar desde el panel y
-// lo que acepta el navegador. Lo más grande queda como "grande" y se baja a mano.
-export const MEDIA_MAX_MB = Number(env.WA_MEDIA_MAX_MB) || 64
+// El mismo límite que WhatsApp: 2 GB por archivo (documentos, videos, zip y demás), para
+// bajar y para mandar. Lo más grande queda como "grande".
+export const MEDIA_MAX_MB = Number(env.WA_MEDIA_MAX_MB) || 2048
 export const MEDIA_MAX_BYTES = MEDIA_MAX_MB * 1024 * 1024
+// Lo que se manda desde el navegador. Detrás del túnel de Cloudflare (plan gratis) cada
+// pedido puede pesar hasta 100 MB (se deja margen: 95): lo más grande Cloudflare lo corta.
+// Lo que llega de WhatsApp no pasa por el túnel, así que bajar sigue siendo hasta 2 GB.
+export const SUBIDA_MAX_MB = Math.min(MEDIA_MAX_MB, Number(env.WA_SUBIDA_MAX_MB) || (DETRAS_DE_PROXY ? 95 : MEDIA_MAX_MB))
+export const SUBIDA_MAX_BYTES = SUBIDA_MAX_MB * 1024 * 1024
 // Lo que llega en vivo (más nuevo que esto) se baja en el momento; lo del historial va a
 // la cola de descargas, de a uno.
 export const MEDIA_RECIENTE_SEG = 15 * 60

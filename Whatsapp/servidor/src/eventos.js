@@ -10,7 +10,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { usuarioActual } from './auth.js'
+import { manejaLinea, usuarioActual } from './auth.js'
 import { LOG_DIAS, LOG_DIR } from './config.js'
 
 const clientes = new Map() // res → { usuario, pestana }
@@ -40,11 +40,17 @@ export function suscribir(req, res) {
   })
 }
 
-/** `datos` puede ser una función (usuario) → datos, para lo que no todos pueden ver (el QR). */
+/**
+ * `datos` puede ser una función (usuario) → datos, para lo que no todos pueden ver (el QR).
+ * Si devuelve undefined, a ese usuario no se le manda nada.
+ */
 export function emitir(evento, datos) {
   const armar = (d) => `event: ${evento}\ndata: ${JSON.stringify(d)}\n\n`
   if (typeof datos === 'function') {
-    for (const [res, { usuario }] of clientes) res.write(armar(datos(usuario)))
+    for (const [res, { usuario }] of clientes) {
+      const d = datos(usuario)
+      if (d !== undefined) res.write(armar(d))
+    }
     return
   }
   const payload = armar(datos)
@@ -123,7 +129,8 @@ export function log(nivel, texto, detalle = '') {
   } catch (err) {
     console.error(`No se pudo escribir el registro: ${err.message}`)
   }
-  emitir('log', item)
+  // La actividad del servidor la ven solo los administradores (los que manejan la línea).
+  emitir('log', (usuario) => (manejaLinea(usuario) ? item : undefined))
   for (const fn of oyentes) {
     try {
       fn(item)

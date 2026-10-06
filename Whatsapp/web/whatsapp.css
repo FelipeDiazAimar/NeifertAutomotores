@@ -441,3 +441,41 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .sin-servidor .search,
 .sin-servidor .new-chat { opacity: 0.45; pointer-events: none; filter: grayscale(0.4); transition: opacity 0.2s; }
 .sin-servidor .composer { display: none !important; }
+
+/* ---------- Embebido en el CRM: sin encabezado propio y a todo el espacio ---------- */
+/* El logo, las pestañas, el estado de la línea y el botón de actualizar los muestra el CRM arriba. */
+.embebido .topbar { display: none; }
+.embebido .shell { max-width: none; padding: 0; gap: 8px; }
+.embebido .shadow { box-shadow: none; }
+
+/* Botón + (chat nuevo) redondo y botón de actualizar */
+.new-chat { border-radius: 50%; }
+.actualizar-btn.girando svg.i { animation: girar 0.9s linear infinite; }
+@keyframes girar { to { transform: rotate(360deg); } }
+
+/* ---------- Conexión: actividad a todo el ancho ---------- */
+.actividad-card { grid-column: 1 / -1; }
+.actividad-card .card-head { flex-wrap: wrap; }
+.log-tabla { display: flex; flex-direction: column; max-height: 520px; overflow-y: auto; border: 1px solid var(--line); border-radius: 14px; }
+.log-fila { display: grid; grid-template-columns: 76px 96px minmax(0, 1fr) 150px; gap: 12px; align-items: start; padding: 9px 14px; border-top: 1px solid var(--line); font-size: 13px; }
+.log-fila time { color: var(--ink-3); font-size: 12.5px; padding-top: 1px; }
+.log-cabeza { position: sticky; top: 0; z-index: 1; border-top: 0; background: var(--solid); font-size: 11px; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; color: var(--ink-3); }
+.log-dia { position: sticky; top: 33px; padding: 6px 14px; font-size: 12px; font-weight: 600; color: var(--ink-2); background: color-mix(in srgb, var(--solid) 92%, var(--line)); border-top: 1px solid var(--line); }
+.log-nivel { display: inline-flex; align-items: center; gap: 7px; font-size: 12px; color: var(--ink-2); }
+.log-texto { min-width: 0; overflow-wrap: anywhere; }
+.log-texto small { display: block; margin-top: 2px; color: var(--ink-3); font-size: 12px; }
+.log-quien { color: var(--ink-3); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.log-fila.error { background: color-mix(in srgb, var(--red-soft) 60%, transparent); }
+.log-fila.error .log-nivel { color: var(--red); font-weight: 600; }
+.log-fila.aviso .log-nivel { font-weight: 600; }
+.log-vacio { margin: 0; padding: 18px; text-align: center; color: var(--ink-3); font-size: 13px; }
+@media (max-width: 720px) {
+  .log-fila { grid-template-columns: 64px minmax(0, 1fr); }
+  .log-cabeza { display: none; }
+  .log-dia { top: 0; }
+  .log-nivel { display: none; }
+  .log-quien { grid-column: 2; margin-top: -6px; }
+}
+
+/* Grupo: los integrantes debajo del nombre, en una línea */
+.conv-head .who .integrantes { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

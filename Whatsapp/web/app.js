@@ -32,8 +32,10 @@ function guardarLocal(clave, valor) {
   } catch {}
 }
 
-/** Límite de archivos (lo informa el servidor: WA_MEDIA_MAX_MB). */
-const limiteMb = () => state.config?.mediaMaxMb || 64
+/** Límites de archivos (los informa el servidor): bajar, como WhatsApp (2 GB); mandar desde acá. */
+const limiteMb = () => state.config?.mediaMaxMb || 2048
+const limiteSubidaMb = () => state.config?.subidaMaxMb || limiteMb()
+const textoMb = (mb) => (mb >= 1024 && mb % 1024 === 0 ? `${mb / 1024} GB` : `${mb} MB`)
 
 function fmtBytes(b) {
   if (!b) return '0 KB'
@@ -91,6 +93,23 @@ async function api(ruta, { method = 'GET', json, body, headers } = {}) {
   if ((res.status === 401 || res.status === 403) && data.login) pantallaSinSesion(data, res.status)
   if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
   return data
+}
+
+/** Baja un archivo de la API (que exige la cabecera) con el nombre que le pone el servidor. */
+async function bajarArchivo(ruta, porDefecto) {
+  const res = await fetch(ruta, { headers: CABECERA })
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}))
+    throw new Error(data.error || `Error ${res.status}`)
+  }
+  const disp = res.headers.get('content-disposition') || ''
+  const m = /filename\*=UTF-8''([^;]+)/i.exec(disp) || /filename="([^"]+)"/i.exec(disp)
+  const url = URL.createObjectURL(await res.blob())
+  const a = Object.assign(document.createElement('a'), { href: url, download: m ? decodeURIComponent(m[1]) : porDefecto })
+  document.body.append(a)
+  a.click()
+  a.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 10000)
 }
 
 let toastTimer
@@ -151,6 +170,7 @@ function soloEmojis(texto) {
 const FILTROS = [
   { id: 'todos', label: 'Todos', test: () => true },
   { id: 'no-leidos', label: 'No leídos', test: (c) => c.noLeidos > 0 },
+  { id: 'grupos', label: 'Grupos', test: (c) => c.esGrupo },
 ]
 const PREVIA = {
   imagen: ['image', 'Foto'], video: ['video', 'Video'], gif: ['video', 'GIF'], nota_voz: ['mic', 'Nota de voz'],
@@ -295,6 +315,7 @@ function renderList() {
     if (q) vacio = 'Ningún chat coincide con la búsqueda.'
     else if (state.verArchivados) vacio = 'No hay chats archivados.'
     else if (state.filter === 'no-leidos') vacio = 'No hay chats sin leer.'
+    else if (state.filter === 'grupos') vacio = 'No hay grupos en la bandeja. Traelos con el botón de actualizar, arriba a la derecha.'
     else vacio = 'Todavía no hay chats. Cuando la línea reciba o envíe un mensaje, aparece acá.'
   }
   const res = resultadosHtml()
@@ -338,6 +359,8 @@ async function abrirChat(id) {
   renderList()
   renderHead()
   renderComposer()
+  // En un grupo, debajo del nombre van los integrantes (como en WhatsApp).
+  if (chat?.esGrupo) cargarIntegrantes(id).then(() => state.activo === id && renderHead())
   $('#msgList').innerHTML = '<div class="sys">Cargando mensajes…</div>'
   api(`/api/chats/${enc(id)}/presencia`, { method: 'POST' })
     .then((p) => p && state.activo === id && onPresencia({ chatId: id, ...p }))
@@ -382,13 +405,48 @@ function tituloChat(c) {
   return rotuloChat(c).titulo
 }
 
+// Características de 2 y 3 cifras de Argentina; el resto son de 4 (como 3564).
+const CARACTERISTICAS_AR = new Set(['11', '220', '221', '223', '230', '236', '237', '249', '260', '261', '263', '264', '266', '280', '291', '294', '297', '298', '299', '336', '341', '342', '343', '345', '348', '351', '353', '358', '362', '364', '370', '376', '379', '380', '381', '383', '385', '387', '388'])
+
+/** "+5493564361422" → "+54 9 3564 36-1422", como lo muestra WhatsApp. Otros países, tal cual. */
+function telefonoLegible(tel) {
+  const m = /^\+?549(\d{10})$/.exec(String(tel || '').replace(/\s/g, ''))
+  if (!m) return tel || ''
+  const n = m[1]
+  const largo = CARACTERISTICAS_AR.has(n.slice(0, 2)) ? 2 : CARACTERISTICAS_AR.has(n.slice(0, 3)) ? 3 : 4
+  const area = n.slice(0, largo)
+  const resto = n.slice(largo)
+  return `+54 9 ${area} ${resto.slice(0, -4)}-${resto.slice(-4)}`
+}
+
+/**
+ * "Alejo, Nico, Vale, +54 9 3564 36-1422, Tú": primero los que tienen nombre (por orden
+ * alfabético), después los números y al final la línea.
+ */
+function nombresIntegrantes(lista) {
+  if (!lista?.length) return ''
+  const conNombre = []
+  const numeros = []
+  for (const p of lista) {
+    const sinNombre = !p.nombre || p.nombre === p.telefono || /^\+?\d[\d\s-]*$/.test(p.nombre)
+    if (sinNombre) numeros.push(telefonoLegible(p.telefono || p.nombre || p.jid.split('@')[0]))
+    else conNombre.push(p.nombre)
+  }
+  conNombre.sort((a, b) => a.localeCompare(b, 'es', { sensitivity: 'base' }))
+  return [...conNombre, ...numeros, 'Tú'].join(', ')
+}
+
 function subtituloChat(c) {
   const actividad = actividadDe(c.id)
   if (actividad) return `<span class="estado-escribiendo">${actividad}</span>`
   const p = state.presencias.get(c.id)
   if (p && ['available', 'composing', 'recording', 'paused'].includes(p.estado)) return '<span class="estado-en-linea">en línea</span>'
   if (p?.visto) return `<span class="tnum">últ. vez ${diaDe(p.visto).toLowerCase()} a las ${hora(p.visto)}</span>`
-  if (c.esGrupo) return `<span class="tnum">${esc(c.grupoNombre ? 'Grupo' : 'Grupo · WhatsApp todavía no mandó el nombre')}</span>`
+  if (c.esGrupo) {
+    const nombres = integrantesChat.chat === c.id ? nombresIntegrantes(integrantesChat.lista) : ''
+    if (nombres) return `<span class="integrantes" title="${esc(nombres)}">${esc(nombres)}</span>`
+    return `<span class="tnum">${esc(c.grupoNombre ? 'Grupo' : 'Grupo · WhatsApp todavía no mandó el nombre')}</span>`
+  }
   const r = rotuloChat(c)
   const partes = []
   if (r.sub) partes.push(r.sub)
@@ -684,8 +742,9 @@ const ICONO_MEDIA = { imagen: 'image', sticker: 'image', video: 'video', gif: 'v
 function mediaPendienteHtml(m) {
   const md = m.media
   const nombre = md.nombre || NOMBRE_MEDIA[m.tipo] || 'Archivo'
-  if (md.estado === 'grande') {
-    return `<div class="media-missing">${ic('alert')}<span class="mm-txt"><b>${esc(nombre)}</b><small>${fmtBytes(md.tamano)}: supera el límite de descarga (${limiteMb()} MB).</small></span></div>`
+  // Los que quedaron "grandes" con un límite anterior (64 MB) ahora se pueden bajar a mano.
+  if (md.estado === 'grande' && (md.tamano || 0) > limiteMb() * 1024 * 1024) {
+    return `<div class="media-missing">${ic('alert')}<span class="mm-txt"><b>${esc(nombre)}</b><small>${fmtBytes(md.tamano)}: supera el límite de descarga (${textoMb(limiteMb())}).</small></span></div>`
   }
   if (md.estado === 'descargando') {
     return `<div class="media-missing"><span class="spinner" aria-hidden="true"></span><span class="mm-txt"><b>${esc(nombre)}</b><small>Descargando…</small></span></div>`
@@ -1006,12 +1065,26 @@ const sesion = { usuario: null, login: false }
 const EMBEBIDO = window.parent !== window
 const avisarAlCrm = (datos) => EMBEBIDO && window.parent.postMessage({ origen: 'nf-wa', ...datos }, '*')
 
-// El CRM le pasa su tema (claro/oscuro) para que el panel no desentone.
-window.addEventListener('message', (e) => {
-  if (e.source !== window.parent || e.data?.tipo !== 'nf-wa:tema') return
-  if (e.data.tema !== 'dark' && e.data.tema !== 'light') return
-  document.documentElement.dataset.theme = e.data.tema
-  syncTema()
+// Desde qué sitios puede hablarle el CRM al panel (lo informa el servidor).
+const origenesCrm = EMBEBIDO
+  ? fetch('/api/publico').then((r) => r.json()).then((d) => d.origenesCrm || []).catch(() => [])
+  : Promise.resolve([])
+const delCrm = async (e) => e.source === window.parent && (await origenesCrm).some((p) => coincideOrigen(e.origin, p))
+
+// Embebido, el encabezado (pestañas, estado de la línea y actualizar) lo dibuja el CRM:
+// el CRM le pasa su tema y lo que se toca arriba; el panel le avisa cómo está la línea.
+window.addEventListener('message', async (e) => {
+  if (e.source !== window.parent) return
+  const { tipo } = e.data || {}
+  if (tipo === 'nf-wa:tema') {
+    if (e.data.tema !== 'dark' && e.data.tema !== 'light') return
+    document.documentElement.dataset.theme = e.data.tema
+    syncTema()
+  } else if (tipo === 'nf-wa:vista' && (await delCrm(e))) {
+    if (e.data.vista === 'inbox' || e.data.vista === 'connect') setView(e.data.vista)
+  } else if (tipo === 'nf-wa:actualizar' && (await delCrm(e))) {
+    actualizarTodo()
+  }
 })
 
 /** 'http://localhost:*' → acepta cualquier puerto de localhost. */
@@ -1025,7 +1098,7 @@ const coincideOrigen = (origen, patron) =>
  */
 async function tokenDelCrm() {
   if (!EMBEBIDO) return null
-  const { origenesCrm = [] } = await fetch('/api/publico').then((r) => r.json()).catch(() => ({}))
+  const permitidos = await origenesCrm
   return new Promise((resolve) => {
     const fin = (token) => {
       clearTimeout(timer)
@@ -1034,7 +1107,7 @@ async function tokenDelCrm() {
     }
     const alMensaje = (e) => {
       if (e.source !== window.parent || e.data?.tipo !== 'nf-wa:token') return
-      if (!origenesCrm.some((p) => coincideOrigen(e.origin, p))) return
+      if (!permitidos.some((p) => coincideOrigen(e.origin, p))) return
       fin(typeof e.data.token === 'string' ? e.data.token : null)
     }
     const timer = setTimeout(() => fin(null), 10000)
@@ -1076,6 +1149,7 @@ async function entrar() {
   renderYo()
   aplicarPermisos()
   avisarAlCrm({ tipo: 'nf-wa:listo' })
+  renderPill()
   return true
 }
 
@@ -1278,7 +1352,6 @@ async function irAResultado(chatId, msgId) {
 /* ---------------- Ficha del chat ---------------- */
 
 const fechaLarga = (ms) => new Date(ms).toLocaleDateString('es-AR', { day: 'numeric', month: 'long', year: 'numeric' })
-const fechaHora = (ms) => new Date(ms).toLocaleString('es-AR', { day: 'numeric', month: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false })
 
 const SECCIONES_MEDIA = [
   ['fotos', 'image', 'Fotos'],
@@ -1506,6 +1579,7 @@ function vistaFicha(f) {
         ? `<button class="info-fila" data-chat-act="activar-sonido">${ic('mute')}<span>Reactivar avisos</span></button>`
         : `<button class="info-fila" data-chat-act="silenciar" data-valor="siempre">${ic('mute')}<span>Silenciar notificaciones</span></button>`
     }
+    ${f.sinChat ? '' : `<button class="info-fila" data-chat-act="exportar">${ic('download')}<span>Exportar chat</span></button>`}
   </div>`)
 
   // Solo quien maneja la línea: borra el chat del respaldo (mensajes, archivos y foto). En
@@ -1802,7 +1876,8 @@ function abrirMenuChat(id, ancla) {
       : `<button class="item" role="menuitem" data-chat-act="silenciar" data-valor="8h">${ic('mute')}Silenciar 8 horas</button>
          <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="1s">${ic('mute')}Silenciar 1 semana</button>
          <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="siempre">${ic('mute')}Silenciar siempre</button>`}
-    ${c.noLeidos ? '' : `<button class="item" role="menuitem" data-chat-act="no-leido">${ic('chat')}Marcar como no leído</button>`}`
+    ${c.noLeidos ? '' : `<button class="item" role="menuitem" data-chat-act="no-leido">${ic('chat')}Marcar como no leído</button>`}
+    <button class="item" role="menuitem" data-chat-act="exportar">${ic('download')}Exportar chat</button>`
   menu.dataset.chat = id
   menu.hidden = false
   ubicarMenu(menu, ancla)
@@ -1837,6 +1912,17 @@ async function accionChat(id, accion, valor) {
     try {
       const r = await api(`/api/chats/${enc(id)}/borrar`, { method: 'POST' })
       toast(`Chat borrado del respaldo: ${r.mensajes} mensajes y ${r.archivos} archivos.`, 5000)
+    } catch (err) {
+      toast(err.message)
+    }
+    return
+  }
+  if (accion === 'exportar') {
+    // Como "Exportar chat" del celular: un .txt con todos los mensajes guardados.
+    toast('Preparando el chat…', 30000)
+    try {
+      await bajarArchivo(`/api/chats/${enc(id)}/exportar`, 'chat.txt')
+      toast('Chat exportado.')
     } catch (err) {
       toast(err.message)
     }
@@ -2129,7 +2215,11 @@ async function enviarTexto() {
 
 async function enviarArchivo(file) {
   if (!file || !state.activo) return
-  if (file.size > limiteMb() * 1024 * 1024) return toast(`El archivo supera ${limiteMb()} MB.`)
+  if (file.size > limiteSubidaMb() * 1024 * 1024) {
+    // Más grande que lo que deja pasar el túnel: se manda desde el celular de la línea.
+    const porTunel = limiteSubidaMb() < limiteMb()
+    return toast(`El archivo supera ${textoMb(limiteSubidaMb())}${porTunel ? ', lo máximo que se puede mandar desde el CRM. Mandalo desde el celular de la línea (WhatsApp acepta hasta 2 GB).' : '.'}`, 7000)
+  }
   const input = $('#msgInput')
   const texto = input?.value.trim() || ''
   const params = new URLSearchParams({ nombre: file.name })
@@ -2208,11 +2298,53 @@ const TEXTO_CONEXION = {
   servicio: ['off', 'Servidor sin conexión'],
 }
 
+let actualizando = false
+const puedeActualizar = () => puede.escribir() && state.conn.conexion === 'conectado'
+
+/**
+ * El botón de actualizar: trae del celular los chats (archivados, fijados, silenciados) y
+ * los grupos en los que está la línea, todo de una vez.
+ */
+async function actualizarTodo() {
+  if (actualizando || !puedeActualizar()) return
+  actualizando = true
+  renderPill()
+  toast('Trayendo chats y grupos de WhatsApp…', 120000)
+  try {
+    const chats = await api('/api/sincronizar-chats', { method: 'POST' })
+    const grupos = await api('/api/sincronizar-grupos', { method: 'POST' })
+    toast(`Listo: ${chats.archivados} archivados, ${chats.fijados} fijados y ${grupos.grupos} grupos${grupos.nuevos ? ` (${grupos.nuevos} nuevos)` : ''}.`, 5000)
+    sincronizar()
+  } catch (err) {
+    toast(err.message)
+  } finally {
+    actualizando = false
+    renderPill()
+  }
+}
+
 function renderPill() {
   const { conexion, yo } = state.conn
   const [cls, texto] = TEXTO_CONEXION[conexion] || TEXTO_CONEXION.iniciando
   const etiqueta = conexion === 'conectado' ? `Conectada · ${yo?.telefono || ''}` : conexion === 'qr' ? 'Sin vincular' : texto
   $('#linePill').innerHTML = `<span class="dot ${cls}"></span><span class="tnum">${esc(etiqueta)}</span>`
+  const btn = $('#btnActualizar')
+  btn.hidden = !puede.escribir()
+  btn.disabled = actualizando || !puedeActualizar()
+  btn.classList.toggle('girando', actualizando)
+  // Embebido, el encabezado lo dibuja el CRM con estos datos.
+  avisarAlCrm({
+    tipo: 'nf-wa:estado',
+    conexion,
+    clase: cls,
+    texto: conexion === 'conectado' ? 'Conectada' : etiqueta,
+    telefono: conexion === 'conectado' ? yo?.telefono || null : null,
+    vista: state.view,
+    hayLinea: hayLinea(),
+    puedeActualizar: puede.escribir(),
+    actualizarHabilitado: puedeActualizar(),
+    actualizando,
+  })
 
   const banner = $('#banner')
   if (conexion === 'conectado' || state.view === 'connect') {
@@ -2279,59 +2411,40 @@ function renderConexion() {
   $('#vincularCard').innerHTML = `<h2>Vincular WhatsApp</h2>${cuerpo}`
 }
 
-function renderLog() {
-  const clase = { ok: '', info: 'info', aviso: 'wait', error: 'off' }
-  $('#logList').innerHTML = state.logs.length
-    ? state.logs.slice(0, 100).map((l) => {
-        const d = new Date(l.ts)
-        return `<li><time>${pad(d.getHours())}:${pad(d.getMinutes())}</time><span class="dot ${clase[l.nivel] ?? 'info'}"></span><div>${esc(l.texto)}${l.detalle || l.quien ? `<small>${esc([l.detalle, l.quien].filter(Boolean).join(' · '))}</small>` : ''}</div></li>`
-      }).join('')
-    : '<li style="display:block">Sin actividad todavía.</li>'
-}
+const NIVEL_LOG = { ok: ['', 'Listo'], info: ['info', 'Info'], aviso: ['wait', 'Aviso'], error: ['off', 'Error'] }
+const esProblema = (l) => l.nivel === 'aviso' || l.nivel === 'error'
 
-async function cargarUso() {
-  // Sin línea vinculada no hay nada que contar: al desvincular se borra la sesión y lo
-  // que quedó en disco es de una cuenta que este panel ya no maneja.
-  if (!hayLinea()) {
-    $('#usoCard').innerHTML = `
-      <div class="vacio-card">${ic('unlink')}
-        <div><b>No hay ninguna línea vinculada</b>
-        <span>Vinculá un teléfono desde el recuadro de arriba para ver los chats y el espacio que ocupan.</span></div>
-      </div>`
+/** Actividad del servidor (solo administradores): por día, con hora, tipo, qué pasó y quién. */
+function renderLog() {
+  if (!puede.linea()) return
+  const filtro = state.logFiltro || 'todo'
+  const problemas = state.logs.filter(esProblema).length
+  $('#logFiltros').innerHTML = [['todo', 'Todo', state.logs.length], ['problemas', 'Avisos y errores', problemas]]
+    .map(([id, label, n]) => `<button class="chip" data-act="log-filtro" data-valor="${id}" aria-pressed="${filtro === id}">${label}<em class="tnum">${n}</em></button>`)
+    .join('')
+  const logs = (filtro === 'todo' ? state.logs : state.logs.filter(esProblema)).slice(0, 200)
+  if (!logs.length) {
+    $('#logList').innerHTML = `<p class="log-vacio">${filtro === 'todo' ? 'Sin actividad todavía.' : 'Sin avisos ni errores: todo en orden.'}</p>`
     return
   }
-  try {
-    const u = await api('/api/almacenamiento')
-    const filas = [
-      ['Fotos', u.bytes.media.fotos], ['Videos', u.bytes.media.videos], ['Audios', u.bytes.media.audios],
-      ['Documentos', u.bytes.media.documentos], ['Mensajes', u.bytes.mensajes], ['Sesión', u.bytes.sesion],
-    ]
-    const max = Math.max(1, ...filas.map((f) => f[1]))
-    // Total = lo que ocupa la base (mensajes) + todo lo del bucket de R2 (archivos,
-    // miniaturas, fotos de perfil y respaldo). Sin R2, los archivos del disco.
-    const archivos = u.bytes.r2 ?? Object.values(u.bytes.media).reduce((s, b) => s + b, 0)
-    const total = u.bytes.mensajes + archivos
-    const r = u.respaldo
-    const respaldo = !r
-      ? '<span class="aviso-txt">Apagado: definí WA_BACKUP_CLAVE para poder restaurar la línea sin QR.</span>'
-      : r.error && (!r.ts || r.errorTs > r.ts)
-        ? `<span class="aviso-txt">Falló: ${esc(r.error)}</span>`
-        : `Último: ${fechaHora(r.ts)} · ${fmtBytes(r.bytes)} cifrados`
-    $('#usoCard').innerHTML = `
-      <div class="facts">
-        <div class="fact"><span>Chats</span><b>${fmtNum(u.chats)}</b></div>
-        <div class="fact"><span>Mensajes</span><b>${fmtNum(u.mensajes)}</b></div>
-        <div class="fact"><span>Eliminados conservados</span><b>${fmtNum(u.eliminados)}</b></div>
-        <div class="fact"><span>Total (base + archivos)</span><b>${fmtBytes(total)}</b></div>
-      </div>
-      <div class="uso" style="margin-top:14px">${filas.map(([n, b]) => `<div class="uso-row"><span>${n}</span><div class="uso-bar"><i style="width:${((b / max) * 100).toFixed(1)}%"></i></div><b>${fmtBytes(b)}</b></div>`).join('')}</div>
-      ${u.bytes.r2 != null ? `<p class="path" style="margin-top:12px">Bucket de R2 en total (archivos, miniaturas, fotos de perfil y respaldo): <b>${fmtBytes(u.bytes.r2)}</b>${u.cuota?.limite ? ` de un tope de <b>${fmtBytes(u.cuota.limite)}</b> (${Math.round((u.bytes.r2 / u.cuota.limite) * 100)} %). Al 85 % se borran los archivos más viejos.` : ''}</p>` : ''}
-      <p class="path">Respaldo de la sesión: ${respaldo}</p>
-      ${u.pendientesDeGuardar ? `<p class="path">Pendientes de guardar en Supabase: ${fmtNum(u.pendientesDeGuardar)}</p>` : ''}
-      <p class="path">Dónde: ${esc(u.carpeta)}</p>`
-  } catch (err) {
-    $('#usoCard').innerHTML = `<p class="path">${esc(err.message)}</p>`
+  const filas = ['<div class="log-fila log-cabeza"><span>Hora</span><span>Tipo</span><span>Qué pasó</span><span>Quién</span></div>']
+  let dia = null
+  for (const l of logs) {
+    const d = new Date(l.ts)
+    const esteDia = diaDe(l.ts / 1000)
+    if (esteDia !== dia) {
+      dia = esteDia
+      filas.push(`<div class="log-dia">${esc(dia)}</div>`)
+    }
+    const [cls, nivel] = NIVEL_LOG[l.nivel] || NIVEL_LOG.info
+    filas.push(`<div class="log-fila ${esc(l.nivel)}">
+      <time class="tnum">${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}</time>
+      <span class="log-nivel"><span class="dot ${cls}"></span>${nivel}</span>
+      <div class="log-texto">${esc(l.texto)}${l.detalle ? `<small>${esc(l.detalle)}</small>` : ''}</div>
+      <span class="log-quien">${esc(l.quien || 'Servidor')}</span>
+    </div>`)
   }
+  $('#logList').innerHTML = filas.join('')
 }
 
 function renderPrefs() {
@@ -2440,9 +2553,7 @@ function setView(view) {
     renderConexion()
     renderLog()
     renderPrefs()
-    cargarUso()
     renderPrivacidad()
-    if (puede.linea()) cargarAuditoria()
   }
   renderPill()
 }
@@ -2463,36 +2574,6 @@ function renderPrivacidad() {
     <p class="card-sub">Lo define la concesionaria en la configuración del servidor. Todo lo que se hace desde el panel queda registrado con el nombre de quien lo hizo.</p>`
 }
 
-const ACCIONES_AUDITORIA = {
-  sesion: 'Entró al panel', desvincular: 'Desvinculó la línea', reconectar: 'Reconectó', preferencias: 'Cambió preferencias',
-  enviar_texto: 'Mandó un mensaje', enviar_archivo: 'Mandó un archivo', enviar_nota_voz: 'Mandó una nota de voz',
-  reenviar: 'Reenvió mensajes', eliminar_mensaje: 'Eliminó un mensaje', marca: 'Archivó, fijó o silenció', reaccion: 'Reaccionó',
-  destacar: 'Destacó un mensaje', abrir_chat: 'Abrió un chat nuevo', salir_grupo: 'Salió de un grupo',
-  sincronizar_chats: 'Sincronizó chats', sincronizar_grupos: 'Sincronizó grupos', rechazo_numero: 'Rechazo de número equivocado',
-  borrar_chat: 'Borró un chat del respaldo', reintentar_envio: 'Reintentó un envío', descartar_envio: 'Descartó un envío',
-  crm_vincular: 'Vinculó un chat a un cliente', crm_crear_cliente: 'Creó un cliente en el CRM', crm_seguimiento: 'Registró un seguimiento', crm_tarea: 'Creó una tarea en el CRM',
-}
-
-/** Registro de auditoría (solo quien maneja la línea): quién hizo qué, cuándo y desde qué IP. */
-async function cargarAuditoria() {
-  const lista = $('#auditoriaList')
-  try {
-    const filas = await api('/api/auditoria?limite=100')
-    lista.innerHTML = filas.length
-      ? filas.map((f) => {
-          const d = new Date(f.ts)
-          const cls = f.resultado === 'ok' ? '' : f.resultado === 'denegado' ? 'wait' : 'off'
-          const que = ACCIONES_AUDITORIA[f.accion] || f.accion
-          const chat = f.chat_jid ? state.chats.get(f.chat_jid)?.nombre || f.chat_jid.split('@')[0] : ''
-          const extra = [f.resultado !== 'ok' ? (f.resultado === 'denegado' ? 'sin permiso' : f.detalle?.error || 'error') : '', chat, f.ip].filter(Boolean).join(' · ')
-          return `<li><time>${pad(d.getDate())}/${pad(d.getMonth() + 1)} ${pad(d.getHours())}:${pad(d.getMinutes())}</time><span class="dot ${cls}"></span><div>${esc(f.usuario_nombre || 'Servidor')}: ${esc(que)}${extra ? `<small>${esc(extra)}</small>` : ''}</div></li>`
-        }).join('')
-      : '<li style="display:block">Sin acciones registradas todavía.</li>'
-  } catch (err) {
-    lista.innerHTML = `<li style="display:block">${esc(err.message)}</li>`
-  }
-}
-
 function esOscuro() {
   const t = document.documentElement.dataset.theme
   return t ? t === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
@@ -2503,7 +2584,8 @@ function syncTema() {
 
 async function sincronizar() {
   try {
-    const [estado, chats, logs] = await Promise.all([api('/api/estado'), api('/api/chats'), api('/api/log')])
+    // La actividad del servidor es solo para administradores.
+    const [estado, chats, logs] = await Promise.all([api('/api/estado'), api('/api/chats'), puede.linea() ? api('/api/log') : []])
     state.config = estado.config
     state.logs = logs
     state.chats = new Map(chats.map((c) => [c.id, c]))
@@ -2598,6 +2680,13 @@ document.addEventListener('contextmenu', (e) => {
 })
 
 document.addEventListener('click', async (e) => {
+  // El panel de información del chat se cierra con un clic afuera. Se mira el recorrido del
+  // clic (composedPath) porque lo de adentro puede redibujarse antes de llegar acá. No
+  // cuentan el encabezado del chat (lo abre y lo cierra), los menús, los diálogos ni el visor.
+  if (!$('#infoPane').hidden) {
+    const dentro = e.composedPath().some((n) => n instanceof Element && n.matches('#infoPane, .who-btn, .menu-msg, dialog, #lightbox, #emojiPanel, #toast'))
+    if (!dentro) cerrarInfo()
+  }
   if (seleccion.activa) {
     const burbuja = e.target.closest('.msg')
     if (burbuja && !e.target.closest('[data-act]')) return alternarSeleccion(burbuja.dataset.id)
@@ -2927,33 +3016,23 @@ document.addEventListener('click', async (e) => {
         api('/api/desvincular', { method: 'POST' }).then(() => toast('Línea desvinculada.')).catch((err) => toast(err.message))
       }
       break
-    case 'sincronizar-grupos':
+    case 'actualizar': actualizarTodo(); break
+    case 'exportar-todo':
       t.disabled = true
-      toast('Trayendo los grupos de WhatsApp…', 60000)
+      toast('Preparando todos los chats… puede tardar un poco.', 120000)
       try {
-        const r = await api('/api/sincronizar-grupos', { method: 'POST' })
-        toast(r.nuevos ? `Listo: ${r.grupos} grupos, ${r.nuevos} nuevos en la bandeja.` : `Listo: ${r.grupos} grupos, ninguno nuevo.`)
-        sincronizar()
+        await bajarArchivo('/api/exportar', 'chats.zip')
+        toast('Chats exportados: un .txt por chat dentro del .zip.', 5000)
       } catch (err) {
         toast(err.message)
       } finally {
         t.disabled = false
       }
       break
-    case 'sincronizar-chats':
-      t.disabled = true
-      toast('Sincronizando chats con WhatsApp…', 120000)
-      try {
-        const r = await api('/api/sincronizar-chats', { method: 'POST' })
-        toast(`Listo: ${r.archivados} archivados y ${r.fijados} fijados.`)
-      } catch (err) {
-        toast(err.message)
-      } finally {
-        t.disabled = false
-      }
+    case 'log-filtro':
+      state.logFiltro = t.dataset.valor
+      renderLog()
       break
-    case 'uso': cargarUso(); break
-    case 'auditoria': cargarAuditoria(); break
     case 'lb-close':
       $('#lightbox').hidden = true
       $('#lbFig').innerHTML = ''

@@ -14,7 +14,6 @@ import fs from 'node:fs'
 import QRCode from 'qrcode'
 import pino from 'pino'
 import makeWASocket, {
-  Browsers,
   BufferJSON,
   DisconnectReason,
   WAMessageStubType,
@@ -107,6 +106,9 @@ import {
  * sync action"). El logger la captura acá, antes de que llegue el evento del chat.
  */
 const rangoArchivado = new Map() // id del chat (como lo manda WhatsApp) → ids de los mensajes de corte
+
+// Cómo aparece el servidor en "Dispositivos vinculados" del celular de la línea.
+const NOMBRE_DISPOSITIVO = 'Whatsapp Neifert'
 
 const NIVELES = { trace: 10, debug: 20, info: 30, warn: 40, error: 50, fatal: 60, silent: Infinity }
 const logger = pino({
@@ -369,7 +371,10 @@ async function iniciarConexion() {
     // Presentarse como "WhatsApp de escritorio" (Browsers.windows('Desktop')) haría que el
     // celular mande todo el historial, pero WhatsApp corta esa conexión (error 428) y no
     // llega a mostrar el QR. Queda como Chrome, pidiendo el historial completo al vincular.
-    browser: Browsers.windows('Chrome'),
+    // El primer valor es el nombre que el celular muestra en "Dispositivos vinculados" (y
+    // al bajar el historial): así nadie lo confunde con otro WhatsApp Web. Se toma al
+    // vincular; un dispositivo ya vinculado conserva el nombre que tenía.
+    browser: [NOMBRE_DISPOSITIVO, 'Chrome', '10.0.22631'],
     // Si se marca "en línea", el celular deja de recibir notificaciones.
     markOnlineOnConnect: false,
     syncFullHistory: true,

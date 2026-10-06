@@ -321,7 +321,7 @@ demo con la línea y la PC titular reales.
 | 10 | Usuario inactivo o sin rol pierde el acceso en < 60 s | Desactivar un usuario en el CRM: en menos de un minuto el panel le dice que no tiene acceso | ✅ (y `auth.test.js`) |
 | 11 | `HOST=0.0.0.0` sin login no arranca | Sacar `SUPABASE_*` y poner `HOST=0.0.0.0`: el servidor sale con el error explicado | ✅ |
 | 12 | Desvincular desde el celular → QR, chats conservados, sin duplicar | Desvincular en el celular: aparece el QR (y llega la alerta); al volver a vincular, los chats siguen y no se duplican | ✅ |
-| 13 | Archivo mayor al límite → "grande" con mensaje claro | Recibir un video de más de `WA_MEDIA_MAX_MB`: se ve el nombre con "X MB: supera el límite de descarga (64 MB)" | ✅ |
+| 13 | Archivo mayor al límite → "grande" con mensaje claro | Recibir un video de más de `WA_MEDIA_MAX_MB`: se ve el nombre con "X GB: supera el límite de descarga (2 GB)" | ✅ |
 | 14 | Espacio usado = R2 + base; `subir-r2` y `--borrar` | Conexión → Espacio usado; `npm run subir-r2` y `npm run subir-r2 -- --borrar` | ✅ |
 | 15 | Retención efectiva en base y R2 | `WA_VENTANA_DIAS`: la purga diaria borra mensajes y archivos anteriores (Actividad: "Ventana de N días") | ✅ |
 | 16 | Bucket R2 privado y dedicado; la URL directa da error | Abrir `https://<cuenta>.r2.cloudflarestorage.com/neifert-whatsapp/media/...` sin firma → 400/403 | ✅ |

@@ -145,7 +145,8 @@ esté definido en el entorno tiene prioridad.
 | `WA_DETRAS_DE_PROXY` | `off` | `on` con Cloudflare Tunnel o nginx: toma de ahí el https y la IP |
 | `WA_BACKUP_CLAVE` | — | Cifra el respaldo de la sesión y los `.env` en R2 (ver OPERACION.md) |
 | `WA_ALERTA_EMAIL`, `RESEND_API_KEY`, `WA_ALERTA_WEBHOOK` | — | Destino de las alertas (ver OPERACION.md) |
-| `WA_MEDIA_MAX_MB` | `64` | Tamaño máximo de archivo, para bajar y para mandar |
+| `WA_MEDIA_MAX_MB` | `2048` | Tamaño máximo de archivo, igual que WhatsApp (2 GB), para bajar y para mandar |
+| `WA_SUBIDA_MAX_MB` | `95` con túnel / `WA_MEDIA_MAX_MB` sin | Lo que se manda desde el navegador (Cloudflare gratis corta los pedidos de más de 100 MB) |
 | `WA_VERSION` | — | Versión fija del protocolo de WhatsApp Web |
 | `WHATSAPP_NUMERO` | — | Número de la concesionaria, con código de país. Si se escanea el QR con otro, se rechaza. Vacío: se acepta cualquiera |
 | `SESION_HORAS` | `12` | Cuánto dura la sesión del panel |
@@ -228,8 +229,10 @@ En la ficha del contacto (clic en el nombre del chat) aparece **Cliente del CRM*
 
 ### Multimedia
 
-- **Un solo límite** de tamaño para todo (`WA_MEDIA_MAX_MB`, 64 MB): lo que se baja solo, lo
-  que se puede mandar y lo que acepta el panel. Lo más grande queda como "grande".
+- **Límite de tamaño igual al de WhatsApp** (`WA_MEDIA_MAX_MB`, 2 GB): lo que se baja y lo
+  que se puede mandar. Lo más grande queda como "grande". Desde el navegador, por el túnel,
+  se puede mandar hasta 95 MB (`WA_SUBIDA_MAX_MB`; Cloudflare gratis corta en 100 MB): lo
+  más pesado se manda desde el celular de la línea.
 - **Miniaturas:** al bajar o mandar una foto o un video se guarda una vista previa de
   480 px en `miniaturas/` (R2). La lista muestra esa; el archivo completo baja solo al
   abrirlo. Si todavía no se bajó, se usa la miniatura chiquita que trae el mensaje.
