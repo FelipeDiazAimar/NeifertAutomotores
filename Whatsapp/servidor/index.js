@@ -47,7 +47,9 @@ app.use((req, res, next) => {
   res.setHeader('Content-Security-Policy', `frame-ancestors 'self' ${ORIGENES_CRM.join(' ')}`.trim())
   next()
 })
-app.use(express.static(WEB_DIR))
+// El panel siempre se pide de nuevo: tras una actualización del servidor nadie queda con
+// el app.js viejo guardado en el navegador.
+app.use(express.static(WEB_DIR, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }))
 app.use('/api', exigirCabecera)
 
 /** Envuelve un handler: devuelve JSON con lo que retorna, o { error } con el mensaje. */

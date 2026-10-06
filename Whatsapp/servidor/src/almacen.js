@@ -772,11 +772,29 @@ export function borrarSesion() {
   const apartada = `${AUTH_DIR}-borrar-${Date.now()}`
   try {
     fs.renameSync(AUTH_DIR, apartada)
-  } catch (err) {
-    log('aviso', 'No se pudo borrar la sesión anterior', err.message)
+  } catch {
+    // Ni borrar ni apartar (Windows no deja renombrar una carpeta con algo abierto adentro):
+    // se borra archivo por archivo lo que se pueda. Lo que importa es que no queden las
+    // credenciales, para que la conexión nueva pida QR y no vuelva a entrar con la vieja.
+    borrarArchivosDe(AUTH_DIR)
+    if (fs.existsSync(path.join(AUTH_DIR, 'creds.json'))) log('aviso', 'No se pudo borrar la sesión anterior', 'creds.json sigue en uso')
     return
   }
   setTimeout(() => fs.rm(apartada, { recursive: true, force: true, maxRetries: 10, retryDelay: 500 }, () => {}), 5000).unref?.()
+}
+
+function borrarArchivosDe(dir) {
+  let archivos
+  try {
+    archivos = fs.readdirSync(dir)
+  } catch {
+    return
+  }
+  for (const f of archivos) {
+    try {
+      fs.rmSync(path.join(dir, f), { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+    } catch {}
+  }
 }
 
 /** Sesiones apartadas que quedaron de un borrado que no se pudo terminar: se borran al arrancar. */

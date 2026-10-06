@@ -320,6 +320,7 @@ function limpiarVersiones() {
 
 async function buscarYAvisar(manual = false) {
   const resultado = await buscarActualizacion()
+  if (manual || !/^Está al día/.test(resultado)) registrar(`Actualización: ${resultado}`)
   ultimaBusqueda = { ts: Date.now(), resultado }
   actualizarIcono()
   if (manual) dialog.showMessageBox({ type: 'info', title: 'Actualización del servidor', message: resultado })
@@ -808,9 +809,10 @@ app.whenReady().then(async () => {
   }
   consultarEstado()
   programarConsulta()
-  // Versiones nuevas del servidor: al minuto de arrancar y después cada 30 minutos.
-  setTimeout(() => buscarYAvisar(), 60_000)
-  setInterval(() => buscarYAvisar(), 30 * 60_000)
+  // Versiones nuevas del servidor: apenas arranca (para no quedar con una vieja) y después
+  // cada 10 minutos (cada consulta es una lectura chica de R2).
+  setTimeout(() => buscarYAvisar(), 5000)
+  setInterval(() => buscarYAvisar(), 10 * 60_000)
 })
 
 // Cerrar sesión o apagar Windows: se apaga el servidor ordenadamente antes de salir.
