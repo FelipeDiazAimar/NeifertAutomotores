@@ -7,6 +7,20 @@ import { useUiStore } from '@/store/useUiStore'
 // Dirección del servidor de WhatsApp.
 const PANEL_URL = (import.meta.env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
 const PANEL_ORIGEN = PANEL_URL ? new URL(PANEL_URL).origin : ''
+const REINTENTO_MS = 15_000
+
+/**
+ * ¿Responde el servidor de WhatsApp? Se pregunta sin leer la respuesta (no-cors): alcanza
+ * con saber si llega. Si la PC servidor está apagada o la app cerrada, falla la conexión.
+ */
+async function servidorResponde() {
+  try {
+    await fetch(`${PANEL_URL}/api/salud`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(6000) })
+    return true
+  } catch {
+    return false
+  }
+}
 
 /**
  * El WhatsApp de la concesionaria dentro del CRM. El panel entra solo con el usuario
@@ -18,15 +32,46 @@ export default function WhatsappPage() {
   const theme = useUiStore((s) => s.theme)
   const navigate = useNavigate()
   const iframeRef = useRef(null)
+  // probando → (responde) panel | (no responde) caido
+  const [servidor, setServidor] = useState('probando')
   const [listo, setListo] = useState(false)
   const [error, setError] = useState('')
 
+  // Cada intento (al entrar, con "Reintentar" o solo cada 15 s) pregunta si el servidor llega.
+  const [intento, setIntento] = useState(0)
+  const probar = useCallback(() => {
+    setServidor('probando')
+    setListo(false)
+    setIntento((n) => n + 1)
+  }, [])
+
+  useEffect(() => {
+    if (!PANEL_URL) return undefined
+    let vigente = true
+    servidorResponde().then((ok) => {
+      if (vigente) setServidor(ok ? 'panel' : 'caido')
+    })
+    return () => {
+      vigente = false
+    }
+  }, [intento])
+
+  // Caído: se vuelve a probar solo cada tanto (la PC servidor puede estar arrancando).
+  useEffect(() => {
+    if (servidor !== 'caido') return undefined
+    const t = setTimeout(probar, REINTENTO_MS)
+    return () => clearTimeout(t)
+  }, [servidor, probar])
+
+  // Al panel solo se le habla cuando ya avisó que cargó: antes, adentro del iframe puede
+  // haber otra cosa (una página de error) y el navegador rechaza el mensaje.
   const enviar = useCallback((datos) => {
     iframeRef.current?.contentWindow?.postMessage(datos, PANEL_ORIGEN)
   }, [])
 
-  const enviarTema = useCallback(() => enviar({ tipo: 'nf-wa:tema', tema: theme }), [enviar, theme])
-  useEffect(enviarTema, [enviarTema])
+  useEffect(() => {
+    if (listo) enviar({ tipo: 'nf-wa:tema', tema: theme })
+  }, [listo, theme, enviar])
 
   useEffect(() => {
     async function alMensaje(e) {
@@ -37,12 +82,9 @@ export default function WhatsappPage() {
         const token = await tokenActual()
         if (!token) return setError('Tu sesión del CRM venció. Volvé a iniciar sesión.')
         enviar({ tipo: 'nf-wa:token', token })
-      } else if (tipo === 'nf-wa:listo') {
+      } else if (tipo === 'nf-wa:listo' || tipo === 'nf-wa:sin-sesion') {
         setListo(true)
-        setError('')
-        enviarTema()
-      } else if (tipo === 'nf-wa:sin-sesion') {
-        setListo(true)
+        if (tipo === 'nf-wa:listo') setError('')
       } else if (tipo === 'nf-wa:abrir' && typeof e.data.ruta === 'string' && /^\/crm\//.test(e.data.ruta)) {
         // "Ver ficha" en el panel: abre la pantalla del CRM (solo rutas del CRM).
         navigate(e.data.ruta)
@@ -50,7 +92,7 @@ export default function WhatsappPage() {
     }
     window.addEventListener('message', alMensaje)
     return () => window.removeEventListener('message', alMensaje)
-  }, [enviar, enviarTema, navigate])
+  }, [enviar, navigate])
 
   if (!PANEL_URL) {
     return (
@@ -74,20 +116,42 @@ export default function WhatsappPage() {
       )}
 
       <div className="glass relative min-h-0 flex-1 overflow-hidden rounded-2xl">
-        {!listo && !error && (
-          <div className="absolute inset-0 grid place-items-center">
-            <Spinner />
+        {servidor === 'caido' ? (
+          <div className="grid h-full place-items-center p-6">
+            <div className="max-w-sm text-center">
+              <p className="font-display text-lg font-bold text-ink">El servidor de WhatsApp no responde</p>
+              <p className="mt-2 text-sm text-ink-2">
+                La PC que hace de servidor está apagada, sin internet, o la app &quot;Neifert WhatsApp&quot; está cerrada o con el
+                servidor detenido. Se vuelve a intentar solo.
+              </p>
+              <button
+                type="button"
+                onClick={probar}
+                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+              >
+                Reintentar ahora
+              </button>
+            </div>
           </div>
+        ) : (
+          <>
+            {(servidor === 'probando' || (!listo && !error)) && (
+              <div className="absolute inset-0 grid place-items-center">
+                <Spinner />
+              </div>
+            )}
+            {servidor === 'panel' && (
+              <iframe
+                ref={iframeRef}
+                src={`${PANEL_URL}/`}
+                title="WhatsApp de la concesionaria"
+                // Micrófono para las notas de voz; clipboard para copiar mensajes.
+                allow="microphone; clipboard-write"
+                className="h-full w-full border-0"
+              />
+            )}
+          </>
         )}
-        <iframe
-          ref={iframeRef}
-          src={`${PANEL_URL}/`}
-          title="WhatsApp de la concesionaria"
-          // Micrófono para las notas de voz; clipboard para copiar mensajes.
-          allow="microphone; clipboard-write"
-          className="h-full w-full border-0"
-          onLoad={enviarTema}
-        />
       </div>
     </div>
   )
