@@ -13,7 +13,7 @@ import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
-import { groupVehiclesByBrand } from '@/lib/brandGroups'
+import { groupVehiclesByBrand, paginarPorMarcas } from '@/lib/brandGroups'
 import { useCatalogStore } from '@/store/useCatalogStore'
 import { useVehicles } from '@/hooks/useVehicles'
 
@@ -44,17 +44,20 @@ const VARIANT_COPY = {
   },
 }
 
-const BRANDS_INITIAL = 4
-const BRANDS_STEP = 4
+const MAX_AUTOS_POR_PAGINA = 20
 
 export default function CatalogPage({ variant = 'usados' }) {
   const copy = VARIANT_COPY[variant] || VARIANT_COPY.usados
   const { data: vehicles = [], isLoading } = useVehicles(copy.condition)
   // Paginación por MARCAS (no por vehículos) para no cortar nunca una
-  // marca a la mitad: se muestran grupos completos.
-  const [visibleBrands, setVisibleBrands] = useState(BRANDS_INITIAL)
+  // marca a la mitad: cada página acumula marcas enteras hasta ~20 autos.
+  const [paginasVisibles, setPaginasVisibles] = useState(1)
   const groups = useMemo(() => groupVehiclesByBrand(vehicles), [vehicles])
-  const shownGroups = groups.slice(0, visibleBrands)
+  const paginas = useMemo(
+    () => paginarPorMarcas(groups, MAX_AUTOS_POR_PAGINA),
+    [groups]
+  )
+  const shownGroups = paginas.slice(0, paginasVisibles).flat()
   const shownCount = shownGroups.reduce((n, [, items]) => n + items.length, 0)
   const shown = shownGroups.flatMap(([, items]) => items)
 
@@ -67,7 +70,7 @@ export default function CatalogPage({ variant = 'usados' }) {
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey)
   if (queryKey !== prevQueryKey) {
     setPrevQueryKey(queryKey)
-    setVisibleBrands(BRANDS_INITIAL)
+    setPaginasVisibles(1)
   }
 
   return (
@@ -136,11 +139,11 @@ export default function CatalogPage({ variant = 'usados' }) {
             {groups.length === 1 ? 'marca' : 'marcas'} · {shownCount} de{' '}
             {vehicles.length} {copy.countLabel}
           </p>
-          {visibleBrands < groups.length && (
+          {paginasVisibles < paginas.length && (
             <Button
               variant="glass"
               className="mt-4"
-              onClick={() => setVisibleBrands((v) => v + BRANDS_STEP)}
+              onClick={() => setPaginasVisibles((v) => v + 1)}
             >
               Cargar más marcas
             </Button>
