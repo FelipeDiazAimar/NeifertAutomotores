@@ -435,3 +435,9 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .crm-res:hover { background: var(--hover); }
 .crm-res span { color: var(--ink-3); font-size: 12.5px; }
 .solo-lectura .solo-escritura { display: none; }
+
+/* Servidor caído: la lista queda a la vista pero bloqueada hasta que vuelva */
+.sin-servidor #chatList,
+.sin-servidor .search,
+.sin-servidor .new-chat { opacity: 0.45; pointer-events: none; filter: grayscale(0.4); transition: opacity 0.2s; }
+.sin-servidor .composer { display: none !important; }

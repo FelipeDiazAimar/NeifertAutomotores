@@ -311,6 +311,7 @@ function renderList() {
 /* ---------------- Conversación ---------------- */
 
 async function abrirChat(id) {
+  if (state.conn.conexion === 'servicio') return toast('El servidor de WhatsApp no responde: esperá a que vuelva para abrir un chat.')
   const chat = state.chats.get(id)
   if (state.activo !== id) avisarViendo(id)
   state.activo = id
@@ -2204,7 +2205,7 @@ const TEXTO_CONEXION = {
   qr: ['off', 'Esperando que escanees el código'],
   conectado: ['', 'Conectada · recibiendo y enviando mensajes'],
   desconectado: ['off', 'Desconectada'],
-  servicio: ['off', 'El servicio local no responde'],
+  servicio: ['off', 'Servidor sin conexión'],
 }
 
 function renderPill() {
@@ -2219,7 +2220,7 @@ function renderPill() {
     return
   }
   let mensaje
-  if (conexion === 'servicio') mensaje = 'No hay conexión con el servicio local. Revisá que <b>npm start</b> siga corriendo en Whatsapp/servidor.'
+  if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
   else if (conexion === 'qr') mensaje = 'La línea no está vinculada: podés ver los chats guardados, pero no enviar.'
   else mensaje = `${esc(texto)} Mientras tanto podés ver los chats guardados.`
   banner.innerHTML = `<span>${mensaje}</span>${conexion === 'servicio' ? '' : '<button class="btn ghost" data-view="connect">Ir a Conexión</button>'}`
@@ -2341,6 +2342,11 @@ function onEstado(nuevo) {
   const antes = state.conn
   const habiaLinea = !!antes.yo
   state.conn = nuevo
+  // Sin servidor no se puede leer ni mandar nada: se vuelve a la bandeja, se cierra el chat
+  // y la lista queda bloqueada hasta que vuelva (ver servidorCaido / .sin-servidor).
+  const caido = nuevo.conexion === 'servicio'
+  document.documentElement.classList.toggle('sin-servidor', caido)
+  if (caido && antes.conexion !== 'servicio') servidorCaido()
   renderPill()
 
   if (habiaLinea && !nuevo.yo) {
@@ -2364,6 +2370,13 @@ function onEstado(nuevo) {
   }
   $('#tabInbox').disabled = !hayLinea()
   actualizarComposer()
+}
+
+/** El servidor dejó de responder: fuera del chat abierto y a la bandeja (si hay línea). */
+function servidorCaido() {
+  cerrarChat()
+  if (state.view !== 'inbox' && hayLinea()) setView('inbox')
+  toast('Se perdió la conexión con el servidor de WhatsApp. Los chats se vuelven a habilitar solos cuando vuelva.', 6000)
 }
 
 /** Sale del chat abierto y vuelve a la pantalla de bienvenida, como Esc en WhatsApp Web. */
@@ -2518,7 +2531,10 @@ function conectarEventos() {
     if (state.activo) renderHead()
   })
   es.addEventListener('error', () => {
-    if (es.readyState !== EventSource.OPEN) onEstado({ ...state.conn, conexion: 'servicio' })
+    // El navegador reintenta solo; un microcorte no tiene que cerrar el chat que se está usando.
+    setTimeout(() => {
+      if (es.readyState !== EventSource.OPEN) onEstado({ ...state.conn, conexion: 'servicio' })
+    }, 4000)
   })
   es.addEventListener('estado', (e) => onEstado(JSON.parse(e.data)))
   es.addEventListener('chat', (e) => {
