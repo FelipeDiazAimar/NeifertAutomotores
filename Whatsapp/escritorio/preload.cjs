@@ -25,5 +25,23 @@ if (location.protocol === 'file:') {
     registros: () => ipcRenderer.invoke('registros'),
     copiar: (texto) => ipcRenderer.send('copiar', texto),
     abrirCarpetaRegistros: () => ipcRenderer.send('abrir-carpeta-registros'),
+    // Ajustes: inicio con la PC, configuración, respaldo, actualización y apagado
+    ajustes: () => ipcRenderer.invoke('ajustes'),
+    alCambiarAjustes: (fn) => ipcRenderer.on('ajustes', (_e, ajustes) => fn(ajustes)),
+    alPedirAjustes: (fn) => ipcRenderer.on('ver-ajustes', () => fn()),
+    ponerInicioConLaPc: (si) => ipcRenderer.invoke('ajuste-inicio-pc', !!si),
+    ponerTema: (tema) => ipcRenderer.invoke('ajuste-tema', tema),
+    abrirConfig: () => ipcRenderer.send('abrir-config'),
+    restaurarSesion: () => ipcRenderer.invoke('restaurar-sesion'),
+    buscarActualizacion: () => ipcRenderer.invoke('buscar-actualizacion'),
+    reiniciarServidor: () => ipcRenderer.invoke('reiniciar-servidor'),
+    apagarYSalir: () => ipcRenderer.send('apagar-y-salir'),
+    // Diálogos propios: los que pide el proceso principal adentro de esta ventana…
+    alPedirDialogo: (fn) => ipcRenderer.on('dialogo', (_e, id, opciones) => fn(id, opciones)),
+    responderDialogoEnVentana: (id, acepta) => ipcRenderer.send('dialogo-en-ventana', id, !!acepta),
+    // …y la ventanita suelta (dialogo.html)
+    dialogo: () => ipcRenderer.invoke('dialogo-opciones'),
+    dialogoListo: (alto) => ipcRenderer.send('dialogo-listo', alto),
+    dialogoResponder: (acepta) => ipcRenderer.send('dialogo-respuesta', !!acepta),
   })
 }

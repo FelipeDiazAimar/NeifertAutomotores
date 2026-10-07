@@ -121,6 +121,39 @@ function toast(texto, ms = 3200) {
   toastTimer = setTimeout(() => (el.hidden = true), ms)
 }
 
+/**
+ * Pregunta con un diálogo del panel (no el confirm() del navegador). Devuelve una promesa:
+ * true si se tocó `aceptar`. Esc o tocar afuera es cancelar.
+ */
+function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancelar' } = {}) {
+  return new Promise((resolve) => {
+    const dlg = document.createElement('dialog')
+    dlg.className = 'dlg confirmar-dlg'
+    dlg.innerHTML = `${titulo ? `<h2>${esc(titulo)}</h2>` : ''}<p class="confirmar-texto">${esc(texto)}</p>
+      <div class="btn-row">
+        <button type="button" class="btn ghost" data-r="no">${esc(cancelar)}</button>
+        <button type="button" class="btn primary" data-r="si" autofocus>${esc(aceptar)}</button>
+      </div>`
+    let respuesta = false
+    dlg.addEventListener('click', (e) => {
+      const r = e.target.closest('[data-r]')?.dataset.r
+      // Un clic en el fondo cae sobre el propio <dialog>, pero fuera de su recuadro.
+      const c = dlg.getBoundingClientRect()
+      const afuera = e.target === dlg && (e.clientX < c.left || e.clientX > c.right || e.clientY < c.top || e.clientY > c.bottom)
+      if (r || afuera) {
+        respuesta = r === 'si'
+        dlg.close()
+      }
+    })
+    dlg.addEventListener('close', () => {
+      dlg.remove()
+      resolve(respuesta)
+    })
+    document.body.append(dlg)
+    dlg.showModal()
+  })
+}
+
 /* ---------------- Formato de WhatsApp ---------------- */
 
 /**
@@ -1037,7 +1070,10 @@ async function confirmarReenvio() {
 /** Destacar o eliminar todo lo seleccionado, de a uno. */
 async function accionEnLote(accion) {
   const ids = [...seleccion.ids]
-  if (accion === 'eliminar' && !confirm(`¿Eliminar ${ids.length === 1 ? 'este mensaje' : `estos ${ids.length} mensajes`} para todos? Acá queda guardado el original.`)) return
+  if (accion === 'eliminar') {
+    const titulo = ids.length === 1 ? '¿Eliminar este mensaje para todos?' : `¿Eliminar estos ${ids.length} mensajes para todos?`
+    if (!(await confirmar('Desaparece del chat del contacto. Acá queda guardado el original.', { titulo, aceptar: 'Eliminar' }))) return
+  }
   let ok = 0
   for (const id of ids) {
     try {
@@ -1907,8 +1943,8 @@ async function accionChat(id, accion, valor) {
   const c = state.chats.get(id)
   if (!c) return
   if (accion === 'borrar-respaldo') {
-    const pregunta = `¿Borrar "${c.nombre}" del respaldo?\n\nSe borran sus mensajes, fotos, audios y documentos guardados (también en Cloudflare). En el celular el chat sigue igual. No se puede deshacer.`
-    if (!confirm(pregunta)) return
+    const pregunta = 'Se borran sus mensajes, fotos, audios y documentos guardados (también en Cloudflare). En el celular el chat sigue igual. No se puede deshacer.'
+    if (!(await confirmar(pregunta, { titulo: `¿Borrar "${c.nombre}" del respaldo?`, aceptar: 'Borrar' }))) return
     try {
       const r = await api(`/api/chats/${enc(id)}/borrar`, { method: 'POST' })
       toast(`Chat borrado del respaldo: ${r.mensajes} mensajes y ${r.archivos} archivos.`, 5000)
@@ -2706,7 +2742,7 @@ document.addEventListener('click', async (e) => {
     // Bandeja de salida: reintentar un mensaje que falló, o descartarlo.
     const chat = state.activo
     const accion = t.dataset.salidaAct
-    if (accion === 'descartar' && !confirm('¿Descartar este mensaje? No se va a mandar.')) return
+    if (accion === 'descartar' && !(await confirmar('No se va a mandar.', { titulo: '¿Descartar este mensaje?', aceptar: 'Descartar' }))) return
     t.disabled = true
     try {
       const r = await api(`/api/chats/${enc(chat)}/salida/${enc(t.dataset.id)}/${accion}`, { method: 'POST' })
@@ -2878,7 +2914,7 @@ document.addEventListener('click', async (e) => {
     case 'eliminar-msg': {
       const id = $('#menuMsg').dataset.msg
       cerrarMenu()
-      if (!confirm('¿Eliminar este mensaje para todos? Desaparece del chat del contacto; acá queda guardado el original.')) break
+      if (!(await confirmar('Desaparece del chat del contacto. Acá queda guardado el original.', { titulo: '¿Eliminar este mensaje para todos?', aceptar: 'Eliminar' }))) break
       try {
         const act = await api(`/api/chats/${enc(state.activo)}/eliminar`, { method: 'POST', json: { id } })
         onMensaje({ chatId: state.activo, mensaje: act })
@@ -2941,7 +2977,7 @@ document.addEventListener('click', async (e) => {
     case 'salir-grupo': {
       const f = info.ficha
       if (!f?.esGrupo) break
-      if (!confirm(`¿Salir de "${f.nombre}"? Dejás de recibir sus mensajes. La conversación guardada queda acá.`)) break
+      if (!(await confirmar('Dejás de recibir sus mensajes. La conversación guardada queda acá.', { titulo: `¿Salir de "${f.nombre}"?`, aceptar: 'Salir del grupo' }))) break
       try {
         await api(`/api/chats/${enc(f.id)}/salir`, { method: 'POST' })
         toast('Saliste del grupo. La conversación queda guardada.')
@@ -3012,7 +3048,7 @@ document.addEventListener('click', async (e) => {
       api('/api/reconectar', { method: 'POST' }).catch((err) => toast(err.message))
       break
     case 'desvincular':
-      if (confirm('¿Desvincular este WhatsApp? Los chats guardados no se borran. Para volver a usar la línea hay que escanear el QR de nuevo.')) {
+      if (await confirmar('Los chats guardados no se borran. Para volver a usar la línea hay que escanear el QR de nuevo.', { titulo: '¿Desvincular este WhatsApp?', aceptar: 'Desvincular' })) {
         api('/api/desvincular', { method: 'POST' }).then(() => toast('Línea desvinculada.')).catch((err) => toast(err.message))
       }
       break

@@ -184,11 +184,13 @@ Se guarda lo de los últimos 365 días (`WA_VENTANA_DIAS`), y nada más viejo:
   Los grupos se quedan aunque estén vacíos. Lo hace el servidor y no la base, para que
   ningún archivo quede huérfano en R2.
 - **Lo más viejo que manda WhatsApp con el historial no se guarda.**
-- **Historial al vincular:** el servidor le pide al celular el historial completo, pero
-  se presenta como navegador (Chrome), y el celular decide cuánto manda: no siempre es
-  todo. Presentarse como WhatsApp de escritorio traería más, pero con esta versión de
-  Baileys WhatsApp corta la conexión (error 428) y no llega a mostrar el QR. El
-  historial solo llega al **vincular con QR**.
+- **Historial al vincular:** el servidor le pide al celular solo el historial reciente
+  (lo mismo que WhatsApp Web), y el celular decide cuánto manda. No se pide el completo:
+  dejaba al celular sincronizando en segundo plano por horas, con una notificación cada
+  vez que se cerraba WhatsApp, y Baileys descarta esos bloques igual. Presentarse como
+  WhatsApp de escritorio traería más, pero con esta versión de Baileys WhatsApp corta la
+  conexión (error 428) y no llega a mostrar el QR. El historial solo llega al
+  **vincular con QR**.
 - **Todos los archivos se bajan solos**, también los del historial: fotos, audios,
   stickers, videos y documentos, de lo más nuevo a lo más viejo, de a uno (WhatsApp corta
   si se le piden muchos seguidos). Lo que falta se vuelve a poner en cola cada vez que

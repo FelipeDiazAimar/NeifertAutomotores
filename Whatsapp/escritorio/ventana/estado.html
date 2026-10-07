@@ -18,6 +18,75 @@
       </span>
     </header>
 
+    <!-- ============ Ajustes: lo mismo que el menú del ícono junto al reloj ============ -->
+    <div id="vistaAjustes" hidden>
+      <div class="titulo-vista">
+        <button class="btn-icono" id="volver" type="button" aria-label="Volver">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg>
+        </button>
+        <h1>Ajustes</h1>
+      </div>
+
+      <p class="grupo-ajustes">Apariencia</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Tema</b><span>Con "Sistema" sigue el modo claro u oscuro de Windows.</span></div>
+          <div class="segmentado" id="ajTema" role="radiogroup" aria-label="Tema">
+            <button type="button" role="radio" data-tema="system">Sistema</button>
+            <button type="button" role="radio" data-tema="light">Claro</button>
+            <button type="button" role="radio" data-tema="dark">Oscuro</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="grupo-ajustes">Arranque</p>
+      <div class="tarjeta ajustes">
+        <label class="interruptor">
+          <span class="textos"><b>Iniciar con la PC</b><span>Al prender la PC la app arranca oculta y el servidor vuelve solo con el número guardado (por ejemplo, después de un corte de luz).</span></span>
+          <input type="checkbox" id="ajInicioPc" />
+        </label>
+      </div>
+
+      <p class="grupo-ajustes">Servidor</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Actualización</b><span id="ajVersion"></span></div>
+          <button class="btn secundario chico" id="ajActualizar" type="button">Buscar ahora</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Reiniciar el servidor</b><span>Corta la conexión unos segundos y vuelve a arrancar.</span></div>
+          <button class="btn secundario chico" id="ajReiniciar" type="button">Reiniciar</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Registros</b><span>Qué hizo el servidor, la app y el túnel, con qué significa cada error.</span></div>
+          <button class="btn secundario chico" id="ajRegistros" type="button">Ver</button>
+        </div>
+      </div>
+
+      <p class="grupo-ajustes">Configuración</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Archivo de configuración (.env)</b><span id="ajConfig">Guardado cifrado en esta PC.</span></div>
+          <button class="btn secundario chico" id="ajCambiarConfig" type="button">Cambiar</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Restaurar la sesión desde el respaldo</b><span id="ajRespaldo"></span></div>
+          <button class="btn secundario chico" id="ajRestaurar" type="button">Restaurar</button>
+        </div>
+      </div>
+
+      <div class="acciones">
+        <button class="btn peligro ancho" id="ajApagar" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+          Apagar el servidor y salir
+        </button>
+      </div>
+      <p class="chico centro mt" id="ajVersionApp"></p>
+    </div>
+
     <!-- ============ Inicio: número de la línea + Iniciar servidor ============ -->
     <form id="vistaInicio" hidden>
       <h1>Iniciar el servidor</h1>
@@ -106,9 +175,16 @@
 
     <footer class="pie">
       <span class="version" id="version"></span>
-      <button class="enlace" id="verRegistros" type="button">Ver registros</button>
+      <span class="pie-enlaces">
+        <button class="enlace" id="verRegistros" type="button">Ver registros</button>
+        <button class="enlace con-icono" id="verAjustes" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/></svg>
+          Ajustes
+        </button>
+      </span>
     </footer>
 
+    <script src="dialogo.js"></script>
     <script>
       const $ = (id) => document.getElementById(id)
       const ICONOS = {
@@ -131,17 +207,22 @@
       }
       const formatear = (d) => (d && d.length === 10 ? `${d.slice(0, d.length - 6)} ${d.slice(-6)}` : d || '')
       let numeroCargado = false
+      let enAjustes = false
+      let ultimoEstado = null
 
       function mostrar(e) {
+        ultimoEstado = e
         $('version').textContent = `Servidor ${e.version}`
-        $('vistaInicio').hidden = e.iniciado
-        $('vistaServidor').hidden = !e.iniciado
+        $('vistaInicio').hidden = e.iniciado || enAjustes
+        $('vistaServidor').hidden = !e.iniciado || enAjustes
+        $('vistaAjustes').hidden = !enAjustes
+        $('verAjustes').hidden = enAjustes
         if (!e.iniciado) {
           if (!numeroCargado) {
             $('numero').value = formatear(e.numero)
             $('autoInicio').checked = e.autoInicio
             numeroCargado = true
-            $('numero').focus()
+            if (!enAjustes) $('numero').focus()
           }
           return
         }
@@ -208,13 +289,99 @@
       })
 
       $('cambiar').addEventListener('click', async () => {
-        if (!confirm('Para cambiar el número se detiene el servidor. Mientras esté detenido, nadie puede usar el WhatsApp desde el CRM. ¿Seguir?')) return
+        const seguir = await window.nfDialogo.preguntar({
+          tipo: 'aviso',
+          titulo: 'Cambiar el número',
+          mensaje: 'Para cambiar el número se detiene el servidor. Mientras esté detenido, nadie puede usar el WhatsApp desde el CRM.',
+          aceptar: 'Detener y cambiar',
+          cancelar: 'Cancelar',
+        })
+        if (!seguir) return
         await window.nfApp.detenerServidor()
         mostrar(await window.nfApp.estadoLinea())
       })
       $('whatsapp').addEventListener('click', () => window.nfApp.abrirWhatsapp())
       $('cerrar').addEventListener('click', () => window.nfApp.ocultar())
       $('verRegistros').addEventListener('click', () => window.nfApp.abrirRegistros())
+
+      /* ---------- Ajustes ---------- */
+      function mostrarAjustes(a) {
+        for (const b of $('ajTema').querySelectorAll('button')) {
+          b.classList.toggle('on', b.dataset.tema === a.tema)
+          b.setAttribute('aria-checked', String(b.dataset.tema === a.tema))
+        }
+        $('ajInicioPc').checked = a.inicioConPc
+        const revisado = a.ultimaBusqueda ? ` · ${a.ultimaBusqueda.resultado}` : ''
+        $('ajVersion').textContent = a.actualiza ? `Versión ${a.versionServidor}${revisado}` : `Versión ${a.versionServidor} · en modo desarrollo no se actualiza sola.`
+        $('ajActualizar').disabled = !a.actualiza || a.buscando
+        $('ajActualizar').textContent = a.buscando ? 'Buscando…' : 'Buscar ahora'
+        $('ajReiniciar').disabled = !a.iniciado
+        $('ajConfig').textContent = a.crm ? `Guardado cifrado en esta PC · CRM: ${a.crm}` : 'Guardado cifrado en esta PC · sin CRM_URL.'
+        $('ajRespaldo').textContent = a.respaldo
+          ? 'Para pasar la línea a esta PC sin escanear el QR. La PC anterior tiene que estar apagada.'
+          : 'No disponible: la configuración no tiene WA_BACKUP_CLAVE y R2.'
+        $('ajRestaurar').disabled = !a.respaldo
+        $('ajVersionApp').textContent = `App ${a.versionApp}`
+      }
+      const recargarAjustes = async () => mostrarAjustes(await window.nfApp.ajustes())
+
+      async function abrirAjustes() {
+        enAjustes = true
+        if (ultimoEstado) mostrar(ultimoEstado)
+        await recargarAjustes()
+        window.scrollTo(0, 0)
+        document.body.scrollTop = 0
+      }
+      function cerrarAjustes() {
+        enAjustes = false
+        if (ultimoEstado) mostrar(ultimoEstado)
+      }
+      // Un botón queda deshabilitado y con otro texto mientras la acción corre.
+      async function mientras(boton, texto, accion) {
+        const antes = boton.textContent
+        boton.disabled = true
+        boton.textContent = texto
+        try {
+          await accion()
+        } finally {
+          boton.textContent = antes
+          boton.disabled = false
+          await recargarAjustes()
+        }
+      }
+
+      $('verAjustes').addEventListener('click', abrirAjustes)
+      $('volver').addEventListener('click', cerrarAjustes)
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && enAjustes && !document.querySelector('.velo')) cerrarAjustes()
+      })
+      $('ajTema').addEventListener('click', async (ev) => {
+        const tema = ev.target.closest('[data-tema]')?.dataset.tema
+        if (tema) mostrarAjustes(await window.nfApp.ponerTema(tema))
+      })
+      $('ajInicioPc').addEventListener('change',async () => mostrarAjustes(await window.nfApp.ponerInicioConLaPc($('ajInicioPc').checked)))
+      $('ajActualizar').addEventListener('click', () => mientras($('ajActualizar'), 'Buscando…', () => window.nfApp.buscarActualizacion()))
+      $('ajReiniciar').addEventListener('click', async () => {
+        const seguir = await window.nfDialogo.preguntar({
+          tipo: 'aviso',
+          titulo: 'Reiniciar el servidor',
+          mensaje: 'El WhatsApp del CRM se corta unos segundos mientras el servidor vuelve a arrancar.',
+          aceptar: 'Reiniciar',
+          cancelar: 'Cancelar',
+        })
+        if (seguir) await mientras($('ajReiniciar'), 'Reiniciando…', () => window.nfApp.reiniciarServidor())
+      })
+      $('ajRegistros').addEventListener('click', () => window.nfApp.abrirRegistros())
+      $('ajCambiarConfig').addEventListener('click', () => window.nfApp.abrirConfig())
+      $('ajRestaurar').addEventListener('click', () => mientras($('ajRestaurar'), 'Restaurando…', () => window.nfApp.restaurarSesion()))
+      $('ajApagar').addEventListener('click', () => window.nfApp.apagarYSalir())
+
+      window.nfApp.alCambiarAjustes(mostrarAjustes)
+      window.nfApp.alPedirAjustes(abrirAjustes)
+      // Avisos y preguntas del proceso principal: con el diálogo de la app, no el de Windows.
+      window.nfApp.alPedirDialogo(async (id, opciones) => {
+        window.nfApp.responderDialogoEnVentana(id, await window.nfDialogo.preguntar(opciones))
+      })
 
       window.nfApp.alCambiarEstado(mostrar)
       window.nfApp.estadoLinea().then(mostrar)

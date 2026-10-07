@@ -123,6 +123,36 @@ function guardarAjustes(cambios) {
 }
 
 /**
+ * "Iniciar con la PC": la app se abre oculta con Windows y arranca el servidor con el número
+ * guardado. Es un solo ajuste (el inicio con Windows sin el arranque solo no sirve de nada).
+ */
+const iniciaConLaPc = () => app.getLoginItemSettings({ args: ['--oculto'] }).openAtLogin && leerAjustes().autoInicio !== false
+function ponerInicioConLaPc(si) {
+  guardarAjustes({ autoInicio: !!si })
+  app.setLoginItemSettings({ openAtLogin: !!si, args: ['--oculto'] })
+  actualizarIcono()
+}
+
+/**
+ * Tema de las pantallas: el del sistema (por defecto), claro u oscuro. Las pantallas lo
+ * toman de prefers-color-scheme, que Electron cambia según nativeTheme.themeSource.
+ */
+const TEMAS = ['system', 'light', 'dark']
+const temaGuardado = () => (TEMAS.includes(leerAjustes().tema) ? leerAjustes().tema : 'system')
+const fondoVentana = () => (nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef')
+function ponerTema(tema) {
+  if (!TEMAS.includes(tema)) return
+  guardarAjustes({ tema })
+  nativeTheme.themeSource = tema
+}
+// Cambió el tema (desde Ajustes o desde Windows): el fondo de las ventanas lo acompaña.
+nativeTheme.on('updated', () => {
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!dialogosSueltos.has(w.webContents.id)) w.setBackgroundColor(fondoVentana())
+  }
+})
+
+/**
  * El número se escribe como un celular argentino "local": característica sin el 0 y número
  * sin el 15, 10 dígitos en total (3492 123456, 11 2345 6789). Nada de +54 ni 9: eso lo
  * agrega la app (WhatsApp lo usa como 549 + característica + número).
@@ -323,7 +353,11 @@ async function buscarYAvisar(manual = false) {
   if (manual || !/^Está al día/.test(resultado)) registrar(`Actualización: ${resultado}`)
   ultimaBusqueda = { ts: Date.now(), resultado }
   actualizarIcono()
-  if (manual) dialog.showMessageBox({ type: 'info', title: 'Actualización del servidor', message: resultado })
+  if (manual) {
+    const tipo = /^Actualizado/.test(resultado) ? 'ok' : /^No se pudo|falló/.test(resultado) ? 'error' : 'info'
+    mostrarDialogo({ tipo, titulo: 'Actualización del servidor', mensaje: resultado })
+  }
+  return resultado
 }
 
 function arrancarTunel() {
@@ -466,8 +500,8 @@ async function iniciarServidor({ numero, autoInicio = true } = {}) {
   const r = validarNumero(numero)
   if (!r.ok) return r
   const cambio = leerAjustes().numero !== r.numero
-  guardarAjustes({ numero: r.numero, autoInicio: !!autoInicio })
-  app.setLoginItemSettings({ openAtLogin: true, args: ['--oculto'] })
+  guardarAjustes({ numero: r.numero })
+  ponerInicioConLaPc(autoInicio)
   registrar(`Iniciar servidor con la línea +${r.linea}${cambio ? ' (número nuevo)' : ''}`)
   iniciado = true
   // Con otro número el servidor tiene que arrancar de nuevo: cada línea tiene sus datos.
@@ -521,7 +555,7 @@ function abrirVentana() {
     height: 760,
     resizable: false,
     maximizable: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
+    backgroundColor: fondoVentana(),
     title: 'Servidor de WhatsApp — Neifert',
     icon: ICONO,
     show: false,
@@ -547,6 +581,92 @@ function abrirWhatsappWeb() {
   if (url && /^https?:\/\//.test(url)) shell.openExternal(url)
 }
 
+/** Abre la ventana de estado directo en Ajustes. */
+function abrirAjustes() {
+  if (!leerConfig()) return abrirConfig()
+  const nueva = !ventana
+  abrirVentana()
+  const enviar = () => ventana?.webContents.send('ver-ajustes')
+  if (nueva) ventana.webContents.once('did-finish-load', enviar)
+  else enviar()
+}
+
+/** Lo que muestra el panel de Ajustes (sin claves: solo qué hay configurado). */
+function vistaAjustes() {
+  const config = leerConfig() || {}
+  return {
+    tema: temaGuardado(),
+    inicioConPc: iniciaConLaPc(),
+    iniciado,
+    versionServidor: servidorActual().version,
+    versionApp: app.getVersion(),
+    actualiza: ACTUALIZA,
+    buscando,
+    ultimaBusqueda,
+    crm: config.CRM_URL || null,
+    respaldo: !!(config.WA_BACKUP_CLAVE && credencialesR2(config)),
+  }
+}
+
+/* ---------------- Diálogos propios ---------------- */
+
+// Avisos y preguntas con el estilo de la app, no los de Windows. Con la ventana de estado a
+// la vista se muestran adentro de ella; si no (se pidió desde el ícono), en una ventanita
+// sin marco que solo muestra la tarjeta del aviso.
+let ultimoDialogo = 0
+const dialogosEnVentana = new Map() // id → resolve
+const dialogosSueltos = new Map() // id del webContents → { opciones, responder }
+
+/**
+ * opciones: { tipo: info|aviso|error|ok, titulo, mensaje, detalle, aceptar, cancelar, foco }.
+ * Sin `cancelar` es un aviso de un solo botón. Devuelve true si se tocó el botón principal.
+ */
+function mostrarDialogo(opciones) {
+  if (ventana && ventana.isVisible() && !ventana.isMinimized() && !ventana.webContents.isLoading()) {
+    const id = ++ultimoDialogo
+    return new Promise((resolve) => {
+      dialogosEnVentana.set(id, resolve)
+      ventana.webContents.send('dialogo', id, opciones)
+      ventana.focus()
+    })
+  }
+  return new Promise((resolve) => {
+    const win = new BrowserWindow({
+      width: 440,
+      height: 220,
+      useContentSize: true,
+      frame: false,
+      transparent: true,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      alwaysOnTop: true,
+      show: false,
+      title: opciones.titulo || 'Neifert WhatsApp',
+      icon: ICONO,
+      webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
+    })
+    const id = win.webContents.id
+    // Cerrado con Alt+F4: un aviso cuenta como visto; una pregunta, como cancelada.
+    let respuesta = !opciones.cancelar
+    dialogosSueltos.set(id, {
+      opciones,
+      responder: (acepta) => {
+        respuesta = !!acepta
+        win.close()
+      },
+    })
+    win.removeMenu()
+    win.webContents.on('will-navigate', (e) => e.preventDefault())
+    win.on('closed', () => {
+      dialogosSueltos.delete(id)
+      resolve(respuesta)
+    })
+    win.loadFile(path.join(__dirname, 'ventana', 'dialogo.html'))
+  })
+}
+
 /* Registros: lo del servidor, la app y el túnel, con qué significa cada error. */
 let ventanaRegistros = null
 function abrirRegistros() {
@@ -559,7 +679,7 @@ function abrirRegistros() {
     height: 640,
     minWidth: 560,
     minHeight: 400,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
+    backgroundColor: fondoVentana(),
     title: 'Registros — Neifert WhatsApp',
     icon: ICONO,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
@@ -577,7 +697,7 @@ function abrirConfig() {
     height: 720,
     resizable: false,
     maximizable: false,
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#111114' : '#f4f2ef',
+    backgroundColor: fondoVentana(),
     title: 'Configuración — Neifert WhatsApp',
     icon: ICONO,
     webPreferences: { preload: path.join(__dirname, 'preload.cjs'), contextIsolation: true, sandbox: true },
@@ -595,7 +715,6 @@ function actualizarIcono() {
   if (!icono) return
   const texto = TEXTO_ESTADO[estado.conexion] || estado.conexion
   icono.setToolTip(`Neifert WhatsApp — ${leerConfig() ? texto : 'falta configurar'}`)
-  const inicio = app.getLoginItemSettings({ args: ['--oculto'] }).openAtLogin
   icono.setContextMenu(
     Menu.buildFromTemplate([
       { label: `Estado: ${leerConfig() ? texto : 'falta configurar'}`, enabled: false },
@@ -609,13 +728,17 @@ function actualizarIcono() {
       { label: 'Reiniciar el servidor', enabled: iniciado, click: () => reiniciarTodo() },
       { label: buscando ? 'Buscando actualización…' : 'Buscar actualización ahora', enabled: ACTUALIZA && !buscando && !!leerConfig(), click: () => buscarYAvisar(true) },
       { label: 'Ver registros', click: abrirRegistros },
+      { label: 'Ajustes…', click: abrirAjustes },
       { label: 'Cambiar configuración…', click: abrirConfig },
       { label: 'Restaurar la sesión desde el respaldo…', enabled: !!leerConfig(), click: () => restaurarSesion() },
       {
-        label: 'Iniciar con Windows',
+        label: 'Iniciar con la PC',
         type: 'checkbox',
-        checked: inicio,
-        click: (item) => app.setLoginItemSettings({ openAtLogin: item.checked, args: ['--oculto'] }),
+        checked: iniciaConLaPc(),
+        click: (item) => {
+          ponerInicioConLaPc(item.checked)
+          ventana?.webContents.send('ajustes', vistaAjustes())
+        },
       },
       { type: 'separator' },
       { label: 'Apagar el servidor y salir', click: confirmarSalida },
@@ -630,18 +753,21 @@ function actualizarIcono() {
 async function restaurarSesion() {
   const config = leerConfig()
   if (!config?.WA_BACKUP_CLAVE || !credencialesR2(config)) {
-    return dialog.showMessageBox({ type: 'warning', title: 'Restaurar la sesión', message: 'La configuración no tiene WA_BACKUP_CLAVE y R2: no hay respaldo del que traer la sesión.' })
+    return mostrarDialogo({
+      tipo: 'aviso',
+      titulo: 'No hay respaldo',
+      mensaje: 'La configuración no tiene WA_BACKUP_CLAVE y R2: no hay respaldo del que traer la sesión.',
+    })
   }
-  const { response } = await dialog.showMessageBox({
-    type: 'warning',
-    buttons: ['Restaurar', 'Cancelar'],
-    defaultId: 1,
-    cancelId: 1,
-    title: 'Restaurar la sesión desde el respaldo',
-    message: 'Se reemplaza la sesión de WhatsApp de esta PC por la del último respaldo.',
-    detail: 'La PC que era el servidor antes tiene que estar APAGADA (o sin la app abierta). Si las dos se conectan con la misma sesión, se desconectan entre sí.',
+  const acepta = await mostrarDialogo({
+    tipo: 'aviso',
+    titulo: 'Restaurar la sesión desde el respaldo',
+    mensaje: 'Se reemplaza la sesión de WhatsApp de esta PC por la del último respaldo.\n\nLa PC que era el servidor antes tiene que estar APAGADA (o sin la app abierta). Si las dos se conectan con la misma sesión, se desconectan entre sí.',
+    aceptar: 'Restaurar',
+    cancelar: 'Cancelar',
+    foco: 'cancelar',
   })
-  if (response !== 0) return
+  if (!acepta) return
   saliendo = true
   await apagarServidor()
   apagarTunel()
@@ -663,20 +789,24 @@ async function restaurarSesion() {
   reintentos = 0
   arrancarServidor()
   arrancarTunel()
-  dialog.showMessageBox({ type: codigo === 0 ? 'info' : 'error', title: 'Restaurar la sesión', message: codigo === 0 ? 'Sesión restaurada. El servidor arranca con ella.' : 'No se pudo restaurar la sesión.', detail: texto.slice(-1500) })
+  mostrarDialogo({
+    tipo: codigo === 0 ? 'ok' : 'error',
+    titulo: codigo === 0 ? 'Sesión restaurada' : 'No se pudo restaurar la sesión',
+    mensaje: codigo === 0 ? 'El servidor arranca con la sesión del respaldo.' : 'El servidor sigue con la sesión que tenía.',
+    detalle: texto.slice(-1500),
+  })
 }
 
 async function confirmarSalida() {
-  const { response } = await dialog.showMessageBox({
-    type: 'warning',
-    buttons: ['Apagar', 'Cancelar'],
-    defaultId: 1,
-    cancelId: 1,
-    title: 'Apagar el servidor',
-    message: 'Si apagás el servidor, nadie va a poder usar el WhatsApp desde el CRM hasta que se vuelva a abrir la app.',
-    detail: 'Los mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.',
+  const acepta = await mostrarDialogo({
+    tipo: 'aviso',
+    titulo: 'Apagar el servidor',
+    mensaje: 'Si apagás el servidor, nadie va a poder usar el WhatsApp desde el CRM hasta que se vuelva a abrir la app.\n\nLos mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.',
+    aceptar: 'Apagar',
+    cancelar: 'Cancelar',
+    foco: 'cancelar',
   })
-  if (response === 0) salir()
+  if (acepta) salir()
 }
 
 /**
@@ -759,7 +889,8 @@ ipcMain.handle('config-guardar', async (e, { borrarOriginal } = {}) => {
   }
   registrar(`Configuración guardada (cifrada)${borrado ? '; se borró el archivo original' : ''}`)
   elegido = null
-  app.setLoginItemSettings({ openAtLogin: true, args: ['--oculto'] })
+  // Respeta si alguien apagó "Iniciar con la PC" en Ajustes.
+  if (leerAjustes().autoInicio !== false) app.setLoginItemSettings({ openAtLogin: true, args: ['--oculto'] })
   if (iniciado) await reiniciarTodo()
   ventanaConfig?.close()
   setTimeout(abrirVentana, 500)
@@ -778,6 +909,38 @@ ipcMain.handle('registros', () => leerRegistros({ dirLogs: path.join(DATA_DIR, '
 ipcMain.on('copiar', (e, texto) => clipboard.writeText(String(texto ?? '')))
 ipcMain.on('abrir-carpeta-registros', () => shell.openPath(fs.existsSync(path.join(DATA_DIR, 'logs')) ? path.join(DATA_DIR, 'logs') : DATOS))
 
+// Ajustes (en la ventana de estado)
+ipcMain.handle('ajustes', () => vistaAjustes())
+ipcMain.handle('ajuste-inicio-pc', (e, si) => {
+  ponerInicioConLaPc(si)
+  return vistaAjustes()
+})
+ipcMain.handle('ajuste-tema', (e, tema) => {
+  ponerTema(tema)
+  return vistaAjustes()
+})
+ipcMain.on('abrir-config', abrirConfig)
+ipcMain.handle('restaurar-sesion', () => restaurarSesion())
+ipcMain.handle('buscar-actualizacion', () => buscarYAvisar(true))
+ipcMain.handle('reiniciar-servidor', () => reiniciarTodo())
+ipcMain.on('apagar-y-salir', confirmarSalida)
+
+// Diálogos propios: respuesta desde la ventana de estado o desde la ventanita suelta.
+ipcMain.on('dialogo-en-ventana', (e, id, acepta) => {
+  const resolver = dialogosEnVentana.get(id)
+  dialogosEnVentana.delete(id)
+  resolver?.(!!acepta)
+})
+ipcMain.handle('dialogo-opciones', (e) => dialogosSueltos.get(e.sender.id)?.opciones || {})
+ipcMain.on('dialogo-listo', (e, alto) => {
+  const win = BrowserWindow.fromWebContents(e.sender)
+  if (!win || !dialogosSueltos.has(e.sender.id)) return
+  win.setContentSize(440, Math.max(120, Math.min(Number(alto) || 220, 640)))
+  win.center()
+  win.show()
+})
+ipcMain.on('dialogo-respuesta', (e, acepta) => dialogosSueltos.get(e.sender.id)?.responder(acepta))
+
 /* ---------------- Arranque ---------------- */
 
 app.on('second-instance', abrirVentana)
@@ -786,6 +949,7 @@ app.on('window-all-closed', () => {})
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('ar.neifert.whatsapp')
+  nativeTheme.themeSource = temaGuardado()
   registrar(`App iniciada (versión ${app.getVersion()})`)
   icono = new Tray(nativeImage.createFromPath(ICONO).resize({ width: 16, height: 16 }))
   icono.on('click', abrirVentana)

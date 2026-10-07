@@ -169,8 +169,10 @@ de cada punto está en [SERVIDOR.md](SERVIDOR.md) y la operación diaria en
   Vacía: se usa la que trae Baileys. Si WhatsApp la rechaza por vieja (cierre **405**), el
   servidor consulta la vigente, la usa, la guarda en `meta.versionWa` y **avisa** para que
   se actualice `WA_VERSION` a conciencia.
-- Navegador declarado: `Browsers.windows('Chrome')` con `syncFullHistory`. (Con
-  `'Desktop'` WhatsApp devolvía 428 y no generaba QR.)
+- Navegador declarado: `Browsers.windows('Chrome')` con `syncFullHistory: false`. (Con
+  `'Desktop'` WhatsApp devolvía 428 y no generaba QR. Con `syncFullHistory: true` el
+  celular quedaba sincronizando en segundo plano, con notificaciones, y Baileys descarta
+  los bloques FULL de todos modos.)
 - **Códigos de cierre que se manejan** (`src/whatsapp.js`):
 
 | Código | Qué significa | Qué hace el servidor |

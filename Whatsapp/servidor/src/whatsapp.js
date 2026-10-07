@@ -370,14 +370,19 @@ async function iniciarConexion() {
     logger,
     // Presentarse como "WhatsApp de escritorio" (Browsers.windows('Desktop')) haría que el
     // celular mande todo el historial, pero WhatsApp corta esa conexión (error 428) y no
-    // llega a mostrar el QR. Queda como Chrome, pidiendo el historial completo al vincular.
+    // llega a mostrar el QR. Queda como Chrome.
     // El primer valor es el nombre que el celular muestra en "Dispositivos vinculados" (y
     // al bajar el historial): así nadie lo confunde con otro WhatsApp Web. Se toma al
     // vincular; un dispositivo ya vinculado conserva el nombre que tenía.
     browser: [NOMBRE_DISPOSITIVO, 'Chrome', '10.0.22631'],
     // Si se marca "en línea", el celular deja de recibir notificaciones.
     markOnlineOnConnect: false,
-    syncFullHistory: true,
+    // Solo el historial reciente al vincular (lo que trae WhatsApp Web). Pedir el completo
+    // dejaba al celular "sincronizando" en segundo plano por horas o días, con su
+    // notificación cada vez que se cerraba WhatsApp, y Baileys descarta esos bloques igual
+    // (shouldSyncHistoryMessage por defecto ignora el tipo FULL). Vale para lo que se
+    // vincule de acá en adelante: el pedido viaja una sola vez, al escanear el QR.
+    syncFullHistory: false,
     generateHighQualityLinkPreview: false,
     shouldIgnoreJid: ignorar,
     getMessage: async (key) => enviados.get(key.id),
