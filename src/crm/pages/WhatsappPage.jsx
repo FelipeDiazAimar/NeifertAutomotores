@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
 import Spinner from '@/components/common/Spinner'
@@ -10,6 +10,9 @@ import { useUiStore } from '@/store/useUiStore'
 const PANEL_URL = (import.meta.env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
 const PANEL_ORIGEN = PANEL_URL ? new URL(PANEL_URL).origin : ''
 const REINTENTO_MS = 15_000
+// Con la PC servidor apagada se abre una copia del panel que lee los chats guardados en la
+// base (solo lectura; ver src/server/whatsappLectura.js). Es del mismo sitio que el CRM.
+const LECTURA_URL = '/wa-lectura/index.html'
 // Lo que puede tardar el panel en avisar que cargó (pide el token y lo canjea).
 const ESPERA_PANEL_MS = 25_000
 
@@ -86,12 +89,29 @@ export default function WhatsappPage() {
     }
   }, [intento])
 
-  // Caído: se vuelve a probar solo cada tanto (la PC servidor puede estar arrancando).
+  // Caído: se muestra el WhatsApp en solo lectura y se sigue probando en segundo plano (sin
+  // cerrar lo que se está leyendo). Cuando la PC servidor vuelve, se pasa al panel normal.
   useEffect(() => {
     if (servidor !== 'caido') return undefined
-    const t = setTimeout(probar, REINTENTO_MS)
-    return () => clearTimeout(t)
+    let vigente = true
+    const t = setInterval(async () => {
+      if ((await servidorResponde()) && vigente) probar()
+    }, REINTENTO_MS)
+    return () => {
+      vigente = false
+      clearInterval(t)
+    }
   }, [servidor, probar])
+
+  // A qué iframe se le habla: al panel de la PC servidor o a la copia de solo lectura.
+  // (probar() ya deja listo y estado en cero cada vez que se cambia de uno a otro).
+  const enLectura = servidor === 'caido'
+  const origen = enLectura ? window.location.origin : PANEL_ORIGEN
+  const origenRef = useRef(origen)
+  // Antes de que el iframe nuevo pueda mandar nada: si no, su primer mensaje se descarta.
+  useLayoutEffect(() => {
+    origenRef.current = origen
+  }, [origen])
 
   // El servidor respondió pero el panel nunca avisó que cargó (por ejemplo, la app se
   // reinició justo mientras se abría y el iframe quedó con la página de error): en vez de
@@ -105,7 +125,7 @@ export default function WhatsappPage() {
   // Al panel solo se le habla cuando ya avisó que cargó: antes, adentro del iframe puede
   // haber otra cosa (una página de error) y el navegador rechaza el mensaje.
   const enviar = useCallback((datos) => {
-    iframeRef.current?.contentWindow?.postMessage(datos, PANEL_ORIGEN)
+    iframeRef.current?.contentWindow?.postMessage(datos, origenRef.current)
   }, [])
 
   useEffect(() => {
@@ -115,7 +135,7 @@ export default function WhatsappPage() {
   useEffect(() => {
     async function alMensaje(e) {
       // Solo se habla con el panel, y solo con el que está en este iframe.
-      if (e.origin !== PANEL_ORIGEN || e.source !== iframeRef.current?.contentWindow || e.data?.origen !== 'nf-wa') return
+      if (e.origin !== origenRef.current || e.source !== iframeRef.current?.contentWindow || e.data?.origen !== 'nf-wa') return
       const { tipo } = e.data
       if (tipo === 'nf-wa:pedir-token') {
         const token = await tokenActual()
@@ -147,7 +167,7 @@ export default function WhatsappPage() {
     )
   }
 
-  const enPanel = servidor === 'panel' && listo && estado
+  const enPanel = (servidor === 'panel' || enLectura) && listo && estado
 
   return (
     // Más ancho y alto que el resto de las páginas: el chat necesita todo el espacio.
@@ -159,7 +179,28 @@ export default function WhatsappPage() {
           WhatsApp
         </h1>
 
-        {enPanel && (
+        {enPanel && enLectura && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <span
+              className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
+              title="La PC servidor está apagada: se ven los chats guardados. Se conecta sola cuando vuelva."
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
+              Solo lectura · servidor apagado
+            </span>
+            <button
+              type="button"
+              onClick={probar}
+              className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] dark:hover:text-whatsapp"
+              title="Probar ahora si la PC servidor ya está encendida"
+            >
+              <RefreshCw size={16} />
+              Reintentar
+            </button>
+          </div>
+        )}
+
+        {enPanel && !enLectura && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div role="tablist" aria-label="Secciones del WhatsApp" className="glass flex rounded-full p-1">
               {VISTAS.map((v) => (
@@ -216,22 +257,21 @@ export default function WhatsappPage() {
 
       <div className="relative min-h-0 flex-1">
         {servidor === 'caido' ? (
-          <div className="glass grid h-full place-items-center rounded-2xl p-6">
-            <div className="max-w-sm text-center">
-              <p className="font-display text-lg font-bold text-ink">El servidor de WhatsApp no responde</p>
-              <p className="mt-2 text-sm text-ink-2">
-                La PC que hace de servidor está apagada, sin internet, o la app &quot;Neifert WhatsApp&quot; está cerrada o con el
-                servidor detenido. Se vuelve a intentar solo.
-              </p>
-              <button
-                type="button"
-                onClick={probar}
-                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-              >
-                Reintentar ahora
-              </button>
-            </div>
-          </div>
+          // PC servidor apagada: el mismo panel, leyendo los chats guardados en la base.
+          <>
+            {!listo && !error && (
+              <div className="absolute inset-0 grid place-items-center">
+                <Spinner />
+              </div>
+            )}
+            <iframe
+              ref={iframeRef}
+              src={LECTURA_URL}
+              title="WhatsApp de la concesionaria (solo lectura)"
+              allow="clipboard-write"
+              className="h-full w-full border-0 bg-transparent"
+            />
+          </>
         ) : (
           <>
             {(servidor === 'probando' || (!listo && !error)) && (

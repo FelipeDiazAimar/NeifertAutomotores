@@ -1,5 +1,18 @@
 /* Bandeja de WhatsApp de la concesionaria. Habla con el servidor en /api y recibe los cambios en vivo por /api/eventos. */
 
+/*
+ * Solo lectura desde la base (NUBE): con la PC servidor apagada, el CRM abre una copia de
+ * este panel en /wa-lectura/, que lee los chats guardados en vez de hablar con el servidor.
+ * Todo /api/... va a /wa-lectura/api/... y no hay eventos en vivo. Servido por la PC
+ * servidor (la ruta normal) esto no cambia nada.
+ */
+const NUBE = location.pathname.startsWith('/wa-lectura/')
+const rutaApi = (ruta) => (NUBE && ruta.startsWith('/api/') ? `/wa-lectura${ruta}` : ruta)
+if (NUBE) {
+  const fetchOriginal = window.fetch.bind(window)
+  window.fetch = (url, opciones) => fetchOriginal(typeof url === 'string' ? rutaApi(url) : url, opciones)
+}
+
 const $ = (s, r = document) => r.querySelector(s)
 const $$ = (s, r = document) => [...r.querySelectorAll(s)]
 const ic = (n) => `<svg class="i" aria-hidden="true"><use href="#i-${n}"/></svg>`
@@ -91,7 +104,7 @@ async function api(ruta, { method = 'GET', json, body, headers } = {}) {
   })
   const data = await res.json().catch(() => ({}))
   if ((res.status === 401 || res.status === 403) && data.login) pantallaSinSesion(data, res.status)
-  if (!res.ok) throw new Error(data.error || `Error ${res.status}`)
+  if (!res.ok) throw Object.assign(new Error(data.error || `Error ${res.status}`), { status: res.status, data })
   return data
 }
 
@@ -123,15 +136,16 @@ function toast(texto, ms = 3200) {
 
 /**
  * Pregunta con un diálogo del panel (no el confirm() del navegador). Devuelve una promesa:
- * true si se tocó `aceptar`. Esc o tocar afuera es cancelar.
+ * true si se tocó `aceptar`. Esc o tocar afuera es cancelar. Con `cancelar: null` es un
+ * aviso de un solo botón. `icono`: un ícono grande arriba (por ejemplo 'lock').
  */
-function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancelar' } = {}) {
+function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancelar', icono = '' } = {}) {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog')
     dlg.className = 'dlg confirmar-dlg'
-    dlg.innerHTML = `${titulo ? `<h2>${esc(titulo)}</h2>` : ''}<p class="confirmar-texto">${esc(texto)}</p>
+    dlg.innerHTML = `${icono ? `<div class="confirmar-icono">${ic(icono)}</div>` : ''}${titulo ? `<h2>${esc(titulo)}</h2>` : ''}<p class="confirmar-texto">${esc(texto)}</p>
       <div class="btn-row">
-        <button type="button" class="btn ghost" data-r="no">${esc(cancelar)}</button>
+        ${cancelar ? `<button type="button" class="btn ghost" data-r="no">${esc(cancelar)}</button>` : ''}
         <button type="button" class="btn primary" data-r="si" autofocus>${esc(aceptar)}</button>
       </div>`
     let respuesta = false
@@ -217,7 +231,7 @@ function iniciales(c) {
   return esc(n.split(/\s+/).map((p) => p[0]).slice(0, 2).join('').toUpperCase())
 }
 function avatarHtml(c) {
-  const foto = c?.foto ? `<img src="/api/chats/${enc(c.id)}/foto?v=${c.foto}" alt="" loading="lazy">` : ''
+  const foto = c?.foto ? `<img src="${rutaApi(`/api/chats/${enc(c.id)}/foto?v=${c.foto}`)}" alt="" loading="lazy">` : ''
   return `<span class="avatar" data-jid="${esc(c?.id || '')}">${iniciales(c)}${foto}</span>`
 }
 
@@ -299,15 +313,19 @@ function rotuloChat(c) {
 function filaChat(c) {
   const r = rotuloChat(c)
   const sub = r.sub ? `<span class="row-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</span>` : ''
+  const ocupante = sesion.login ? ocupanteDe(c.id) : null
   const otros = otrosEnChat(c.id)
   const iconos = [
-    otros.length ? `<span class="agente-tag" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${ic('user')}<span>${esc(nombresLista(otros))}</span></span>` : '',
+    // Sin login no hay bloqueo: solo se avisa quién más lo tiene abierto.
+    !ocupante && otros.length ? `<span class="agente-tag" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${ic('user')}<span>${esc(nombresLista(otros))}</span></span>` : '',
     c.silenciado ? ic('mute') : '',
     c.fijado && !c.archivado ? ic('fijado') : '',
     c.noLeidos ? `<span class="unread tnum">${c.noLeidos}</span>` : '',
   ].join('')
-  const clases = ['row', c.id === state.activo && 'active', c.noLeidos && 'has-unread', c.silenciado && 'silenciado'].filter(Boolean).join(' ')
-  return `<button class="${clases}" data-chat="${esc(c.id)}">
+  const clases = ['row', c.id === state.activo && 'active', c.noLeidos && 'has-unread', c.silenciado && 'silenciado', ocupante && 'ocupado'].filter(Boolean).join(' ')
+  const titulo = ocupante ? ` title="${esc(ocupante.nombre)} está atendiendo este chat"` : ''
+  return `<button class="${clases}" data-chat="${esc(c.id)}"${titulo}>
+    ${ocupante ? `<span class="ocupado-cinta">${ic('lock')}<span>${esc(primerNombre(ocupante.nombre))}</span></span>` : ''}
     ${avatarHtml(c)}
     <span class="row-main">
       <span class="row-top"><span class="row-name ${r.subEsNombre ? 'tnum' : ''}">${esc(r.titulo)}</span></span>${sub}
@@ -364,10 +382,25 @@ function renderList() {
 
 /* ---------------- Conversación ---------------- */
 
+// Lo último que se vio de cada chat en esta sesión: con el servidor caído, los chats se
+// pueden seguir leyendo (solo lectura) con lo que ya estaba cargado.
+const leidosEnSesion = new Map() // chatId → { mensajes, hayAnteriores }
+const MAX_CHATS_GUARDADOS = 40
+function guardarLeido(id) {
+  if (!id || !state.mensajes.size) return
+  leidosEnSesion.delete(id)
+  leidosEnSesion.set(id, { mensajes: ordenados(), hayAnteriores: state.hayAnteriores })
+  if (leidosEnSesion.size > MAX_CHATS_GUARDADOS) leidosEnSesion.delete(leidosEnSesion.keys().next().value)
+}
+// Sin servidor: se cortó la conexión con la PC ('servicio') o se lee de la base porque está apagada ('nube').
+const sinServidor = () => state.conn.conexion === 'servicio' || state.conn.conexion === 'nube'
+
 async function abrirChat(id) {
-  if (state.conn.conexion === 'servicio') return toast('El servidor de WhatsApp no responde: esperá a que vuelva para abrir un chat.')
   const chat = state.chats.get(id)
-  if (state.activo !== id) avisarViendo(id)
+  // Si otra persona lo está atendiendo, no se entra (ver entrarAlChat). Sin servidor no se
+  // puede preguntar: se entra a leer, y escribir queda bloqueado igual.
+  if (state.activo !== id && !sinServidor() && !(await entrarAlChat(id))) return
+  if (state.activo && state.activo !== id) guardarLeido(state.activo)
   state.activo = id
   state.mensajes = new Map()
   state.citados = new Map()
@@ -393,23 +426,39 @@ async function abrirChat(id) {
   renderHead()
   renderComposer()
   // En un grupo, debajo del nombre van los integrantes (como en WhatsApp).
-  if (chat?.esGrupo) cargarIntegrantes(id).then(() => state.activo === id && renderHead())
+  // Sin servidor no hay integrantes ni "en línea" para pedir: solo se leen los mensajes.
+  if (chat?.esGrupo && !sinServidor()) cargarIntegrantes(id).then(() => state.activo === id && renderHead())
   $('#msgList').innerHTML = '<div class="sys">Cargando mensajes…</div>'
-  api(`/api/chats/${enc(id)}/presencia`, { method: 'POST' })
-    .then((p) => p && state.activo === id && onPresencia({ chatId: id, ...p }))
-    .catch(() => {})
+  if (!sinServidor()) {
+    api(`/api/chats/${enc(id)}/presencia`, { method: 'POST' })
+      .then((p) => p && state.activo === id && onPresencia({ chatId: id, ...p }))
+      .catch(() => {})
+  }
+  let pagina
+  let guardado = false
   try {
     // Solo la última página: lo anterior se pide al subir (cargarAnteriores).
-    const pagina = await api(`/api/chats/${enc(id)}/mensajes?limite=${PAGINA_SERVIDOR}`)
-    if (state.activo !== id) return
-    for (const m of pagina.mensajes) state.mensajes.set(m.id, m)
-    state.hayAnteriores = pagina.hayAnteriores
-    prepararSinLeer()
-    renderMensajes()
-    marcarLeido(id)
+    pagina = await api(`/api/chats/${enc(id)}/mensajes?limite=${PAGINA_SERVIDOR}`)
   } catch (err) {
-    $('#msgList').innerHTML = `<div class="sys">No se pudieron cargar los mensajes: ${esc(err.message)}</div>`
+    // El servidor no contesta: si el chat ya se había abierto en esta sesión, se lee eso.
+    pagina = leidosEnSesion.get(id)
+    guardado = true
+    if (!pagina) {
+      if (state.activo === id) {
+        $('#msgList').innerHTML = sinServidor()
+          ? '<div class="sys">El servidor no responde y este chat no se abrió antes en esta sesión: sus mensajes se ven cuando vuelva.</div>'
+          : `<div class="sys">No se pudieron cargar los mensajes: ${esc(err.message)}</div>`
+      }
+      return
+    }
   }
+  if (state.activo !== id) return
+  for (const m of pagina.mensajes) state.mensajes.set(m.id, m)
+  state.hayAnteriores = guardado ? false : pagina.hayAnteriores
+  prepararSinLeer()
+  renderMensajes()
+  if (guardado) $('#msgList').insertAdjacentHTML('afterbegin', '<div class="aviso-lectura">Solo lectura: son los mensajes que ya estaban cargados. Lo nuevo aparece cuando vuelva el servidor.</div>')
+  else if (!sinServidor()) marcarLeido(id)
 }
 
 /** Ubica el primer mensaje no leído y agranda la tanda dibujada para que entre. */
@@ -496,14 +545,17 @@ function renderHead() {
       <div class="who"><b>${esc(tituloChat(c))}</b>${subtituloChat(c)}</div>
     </button>
     <button class="icon-btn" data-act="buscar-chat" aria-label="Buscar en este chat" title="Buscar en este chat">${ic('search')}</button>
-    ${otrosEnChat(c.id).length ? `<span class="tag equipo" title="Tiene este chat abierto ahora">${ic('user')} ${esc(nombresLista(otrosEnChat(c.id)))} ${otrosEnChat(c.id).length === 1 ? 'está' : 'están'} acá</span>` : ''}
+    ${sinServidor() ? `<span class="tag solo-lectura-tag" title="El servidor no responde: se puede leer, pero no escribir ni cambiar nada">${ic('clock')} Solo lectura</span>` : ''}
+    ${sinServidor() ? '' : sesion.login
+      ? `<span class="tag atendiendo" title="Mientras lo tengas abierto, nadie más puede entrar a este chat">${ic('lock')} Lo atendés vos</span>`
+      : otrosEnChat(c.id).length ? `<span class="tag equipo" title="Tiene este chat abierto ahora">${ic('user')} ${esc(nombresLista(otrosEnChat(c.id)))} ${otrosEnChat(c.id).length === 1 ? 'está' : 'están'} acá</span>` : ''}
     ${c.silenciado ? `<span class="tag">${ic('mute')} Silenciado</span>` : ''}
     ${c.archivado ? `<span class="tag">${ic('archive')} Archivado</span>` : ''}`
 }
 
 const ordenados = () => [...state.mensajes.values()].sort((a, b) => a.ts - b.ts)
 const esAudio = (m) => m.tipo === 'nota_voz' || m.tipo === 'audio'
-const urlMedia = (m) => `/api/chats/${enc(state.activo)}/media/${enc(m.id)}?e=${m.media?.estado || ''}`
+const urlMedia = (m) => rutaApi(`/api/chats/${enc(state.activo)}/media/${enc(m.id)}?e=${m.media?.estado || ''}`)
 const diaHtml = (d) => `<div class="day" data-dia="${esc(d)}">${esc(d)}</div>`
 const sinLeerHtml = (n) => `<div class="sin-leer">${n === 1 ? '1 mensaje no leído' : `${n} mensajes no leídos`}</div>`
 
@@ -801,7 +853,7 @@ function mediaHtml(m) {
   if (md.estado !== 'ok') return mediaPendienteHtml(m)
   const url = urlMedia(m)
   // Con miniatura (480 px), la lista muestra esa y el archivo completo baja solo al abrirlo.
-  const mini = md.miniatura ? `/api/chats/${enc(state.activo)}/media/${enc(m.id)}/miniatura` : null
+  const mini = md.miniatura ? rutaApi(`/api/chats/${enc(state.activo)}/media/${enc(m.id)}/miniatura`) : null
   switch (m.tipo) {
     case 'imagen': return `<button class="media-img" data-ver="${url}" aria-label="Ampliar foto"><img src="${mini || url}" alt="Foto" loading="lazy"></button>`
     case 'sticker': return `<img class="sticker" src="${url}" alt="Sticker" loading="lazy">`
@@ -1259,6 +1311,83 @@ function avisarViendo(chatId) {
   api('/api/viendo', { method: 'POST', json: { pestana: PESTANA, chatId: chatId || null } }).catch(() => {})
 }
 
+/* ---------------- Un chat, una persona ---------------- */
+
+/** Quién (otro) está atendiendo ese chat, o null. */
+const ocupanteDe = (chatId) => otrosEnChat(chatId)[0] || null
+const primerNombre = (nombre) => String(nombre || '').split(' ')[0] || 'Otra persona'
+
+/**
+ * Pide entrar a un chat. Cada chat lo atiende una sola persona a la vez: si otra lo tiene
+ * abierto, no se entra y se avisa quién (un administrador lo puede tomar). Sin login (en
+ * la PC servidor) no hay bloqueo.
+ */
+async function entrarAlChat(id, { forzar = false } = {}) {
+  if (!sesion.login) return true
+  try {
+    await api('/api/viendo', { method: 'POST', json: { pestana: PESTANA, chatId: id, forzar } })
+    return true
+  } catch (err) {
+    // Un corte no tiene que impedir abrir el chat: el bloqueo lo vuelve a controlar el servidor al escribir.
+    if (err.status !== 409) return true
+    return avisarOcupado(id, err.data?.ocupado)
+  }
+}
+
+async function avisarOcupado(id, persona) {
+  const nombre = persona?.nombre || 'Otra persona'
+  const titulo = `${nombre} está atendiendo este chat`
+  const texto = `Para no pisarse, cada chat lo atiende una sola persona a la vez. Se libera cuando ${primerNombre(nombre)} lo cierre o deje de usar el panel unos minutos.`
+  if (!puede.linea()) {
+    await confirmar(texto, { titulo, aceptar: 'Entendido', cancelar: null, icono: 'lock' })
+    return false
+  }
+  const tomar = await confirmar(`${texto}\n\nComo administrador podés tomarlo: a ${primerNombre(nombre)} se le cierra el chat.`, {
+    titulo,
+    aceptar: 'Tomar el chat',
+    cancelar: 'Dejarlo',
+    icono: 'lock',
+  })
+  return tomar ? entrarAlChat(id, { forzar: true }) : false
+}
+
+/** Otra persona (un administrador) tomó el chat que tenía abierto: se cierra y se avisa. */
+function echadoDelChat(persona) {
+  if (!state.activo) return
+  cerrarChat()
+  const nombre = persona?.nombre || 'Otra persona'
+  confirmar(`Ahora lo atiende ${primerNombre(nombre)}. Lo vas a poder abrir de nuevo cuando lo libere.`, {
+    titulo: `${nombre} tomó este chat`,
+    aceptar: 'Entendido',
+    cancelar: null,
+    icono: 'lock',
+  })
+}
+
+// Mientras alguien usa el panel, cada minuto se avisa que sigue en el chat; si no avisa
+// (se fue y lo dejó abierto), el servidor lo libera a los 3 minutos. Sin tocar nada en 10
+// minutos se deja de avisar. Al volver, se avisa enseguida.
+let ultimaActividad = Date.now()
+const QUIETO_MS = 10 * 60_000
+async function seguirEnChat() {
+  const id = state.activo
+  if (!id || !sesion.login || document.visibilityState !== 'visible' || Date.now() - ultimaActividad > QUIETO_MS) return
+  try {
+    await api('/api/viendo', { method: 'POST', json: { pestana: PESTANA, chatId: id } })
+  } catch (err) {
+    if (err.status === 409 && state.activo === id) echadoDelChat(err.data?.ocupado)
+  }
+}
+for (const evento of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
+  document.addEventListener(evento, () => {
+    const volvio = Date.now() - ultimaActividad > 2 * 60_000
+    ultimaActividad = Date.now()
+    if (volvio) seguirEnChat()
+  }, { passive: true, capture: true })
+}
+document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && seguirEnChat())
+setInterval(seguirEnChat, 60_000)
+
 /** Quién firmó un mensaje: el autor en un grupo, o el empleado que lo mandó. */
 const firmanteDe = (m) => (m.deMi ? m.enviadoPor?.nombre || '' : m.autorNombre || '')
 
@@ -1382,7 +1511,7 @@ function salirDeBusqueda() {
 /** Abre el chat del resultado y salta al mensaje. */
 async function irAResultado(chatId, msgId) {
   if (state.activo !== chatId) await abrirChat(chatId)
-  irAMensaje(msgId)
+  if (state.activo === chatId) irAMensaje(msgId)
 }
 
 /* ---------------- Ficha del chat ---------------- */
@@ -1665,7 +1794,7 @@ function miniaturasHtml(f) {
 }
 
 function celdaMedia(f, m) {
-  const url = `/api/chats/${enc(f.id)}/media/${enc(m.id)}`
+  const url = rutaApi(`/api/chats/${enc(f.id)}/media/${enc(m.id)}`)
   if (m.tipo === 'imagen') return `<button data-ver="${url}" aria-label="Ampliar foto"><img src="${url}" alt="" loading="lazy"></button>`
   return `<a href="${url}" target="_blank" rel="noopener" aria-label="Ver video"><video src="${url}" muted preload="metadata"></video><span class="play">${ic('play')}</span></a>`
 }
@@ -1699,7 +1828,7 @@ const NOMBRE_ARCHIVO = { imagen: 'Foto', video: 'Video', gif: 'GIF', nota_voz: '
 /** Lo que se muestra a la derecha: descargar, bajar ahora, o el motivo de que no esté. */
 function accionArchivoHtml(f, m) {
   if (m.descargado) {
-    return `<a class="icon-btn" href="/api/chats/${enc(f.id)}/media/${enc(m.id)}?descargar=1" aria-label="Descargar" title="Descargar">${ic('download')}</a>`
+    return `<a class="icon-btn" href="${rutaApi(`/api/chats/${enc(f.id)}/media/${enc(m.id)}?descargar=1`)}" aria-label="Descargar" title="Descargar">${ic('download')}</a>`
   }
   if (m.perdido) return `<span class="tag" title="WhatsApp ya no tiene este archivo">No disponible</span>`
   return `<button class="btn ghost chico" data-bajar="${esc(m.id)}">${ic('download')}Descargar</button>`
@@ -1711,7 +1840,7 @@ function accionArchivoHtml(f, m) {
  */
 function burbujaArchivo(f, m) {
   const visual = (m.tipo === 'imagen' || m.tipo === 'video' || m.tipo === 'gif') && m.descargado
-  const url = `/api/chats/${enc(f.id)}/media/${enc(m.id)}`
+  const url = rutaApi(`/api/chats/${enc(f.id)}/media/${enc(m.id)}`)
   const titulo = m.nombre || NOMBRE_ARCHIVO[m.tipo] || 'Archivo'
   const ext = (m.nombre?.split('.').pop() || '').toUpperCase().slice(0, 4)
   const detalle = [ext && ext !== titulo.toUpperCase() ? ext : null, m.tamano ? fmtBytes(m.tamano) : null, m.segundos ? fmtDur(m.segundos) : null]
@@ -1877,18 +2006,20 @@ function abrirMenu(id, ancla, boton = null) {
   const menu = $('#menuMsg')
   const mia = m.reacciones?.yo
   const puedeEliminar = m.deMi && !m.eliminado
+  // Sin servidor (solo lectura) quedan las opciones que no cambian nada: copiar, bajar, ver.
+  const lectura = sinServidor()
   menu.innerHTML = `
-    <div class="reac-bar">${REACCIONES.map((e) => `<button data-reaccionar="${e}" aria-pressed="${mia === e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
+    ${lectura ? '' : `<div class="reac-bar">${REACCIONES.map((e) => `<button data-reaccionar="${e}" aria-pressed="${mia === e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
     <button class="item" role="menuitem" data-act="responder">${ic('reply')}Responder</button>
     <button class="item" role="menuitem" data-act="reenviar">${ic('send')}Reenviar</button>
-    <button class="item" role="menuitem" data-act="seleccionar">${ic('check')}Seleccionar mensajes</button>
+    <button class="item" role="menuitem" data-act="seleccionar">${ic('check')}Seleccionar mensajes</button>`}
     ${m.texto ? `<button class="item" role="menuitem" data-act="copiar">${ic('copy')}Copiar texto</button>` : ''}
     ${m.media?.estado === 'ok' ? `<a class="item" role="menuitem" style="color:inherit;text-decoration:none" href="${urlMedia(m)}&descargar=1" target="_blank" rel="noopener">${ic('download')}Descargar</a>` : ''}
     ${m.citado ? `<button class="item" role="menuitem" data-act="ir-citado">${ic('reply')}Ir al mensaje citado</button>` : ''}
-    <button class="item" role="menuitem" data-act="destacar">${ic('fijado')}${m.destacado ? 'Quitar destacado' : 'Destacar'}</button>
+    ${lectura ? '' : `<button class="item" role="menuitem" data-act="destacar">${ic('fijado')}${m.destacado ? 'Quitar destacado' : 'Destacar'}</button>`}
     ${m.eliminado ? `<button class="item" role="menuitem" data-act="ver-eliminado">${ic('history')}${state.revelados.has(m.id) ? 'Ocultar el original' : 'Ver qué decía'}</button>` : ''}
-    <button class="item" role="menuitem" data-act="info-msg">${ic('circle-check')}Información</button>
-    ${puedeEliminar ? `<button class="item peligro" role="menuitem" data-act="eliminar-msg">${ic('x')}Eliminar para todos</button>` : ''}`
+    ${lectura ? '' : `<button class="item" role="menuitem" data-act="info-msg">${ic('circle-check')}Información</button>`}
+    ${puedeEliminar && !lectura ? `<button class="item peligro" role="menuitem" data-act="eliminar-msg">${ic('x')}Eliminar para todos</button>` : ''}`
   menu.dataset.msg = id
   menu.hidden = false
   ubicarMenu(menu, ancla, m.deMi && !!boton)
@@ -2332,6 +2463,7 @@ const TEXTO_CONEXION = {
   conectado: ['', 'Conectada · recibiendo y enviando mensajes'],
   desconectado: ['off', 'Desconectada'],
   servicio: ['off', 'Servidor sin conexión'],
+  nube: ['wait', 'Solo lectura · servidor apagado'],
 }
 
 let actualizando = false
@@ -2388,10 +2520,11 @@ function renderPill() {
     return
   }
   let mensaje
-  if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
+  if (conexion === 'nube') mensaje = '<b>Modo lectura.</b> La PC servidor del WhatsApp está apagada: ves los chats y mensajes guardados y podés bajar los archivos que ya estaban descargados. Para escribir tiene que estar encendida; se conecta sola cuando vuelva.'
+  else if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
   else if (conexion === 'qr') mensaje = 'La línea no está vinculada: podés ver los chats guardados, pero no enviar.'
   else mensaje = `${esc(texto)} Mientras tanto podés ver los chats guardados.`
-  banner.innerHTML = `<span>${mensaje}</span>${conexion === 'servicio' ? '' : '<button class="btn ghost" data-view="connect">Ir a Conexión</button>'}`
+  banner.innerHTML = `<span>${mensaje}</span>${conexion === 'servicio' || conexion === 'nube' ? '' : '<button class="btn ghost" data-view="connect">Ir a Conexión</button>'}`
   banner.hidden = false
 }
 
@@ -2493,9 +2626,12 @@ function onEstado(nuevo) {
   state.conn = nuevo
   // Sin servidor no se puede leer ni mandar nada: se vuelve a la bandeja, se cierra el chat
   // y la lista queda bloqueada hasta que vuelva (ver servidorCaido / .sin-servidor).
-  const caido = nuevo.conexion === 'servicio'
+  const caido = nuevo.conexion === 'servicio' || nuevo.conexion === 'nube'
   document.documentElement.classList.toggle('sin-servidor', caido)
-  if (caido && antes.conexion !== 'servicio') servidorCaido()
+  // En modo lectura (nube) no se "perdió" nada: se entró así a propósito.
+  if (nuevo.conexion === 'servicio' && antes.conexion !== 'servicio') servidorCaido()
+  // Volvió el servidor: se va el "Solo lectura" del chat abierto.
+  if (!caido && ['servicio', 'nube'].includes(antes.conexion) && state.activo) renderHead()
   renderPill()
 
   if (habiaLinea && !nuevo.yo) {
@@ -2521,17 +2657,23 @@ function onEstado(nuevo) {
   actualizarComposer()
 }
 
-/** El servidor dejó de responder: fuera del chat abierto y a la bandeja (si hay línea). */
+/**
+ * El servidor dejó de responder: queda todo en solo lectura. El chat abierto sigue a la
+ * vista y se pueden abrir otros para leer lo que ya estaba cargado; escribir y cambiar
+ * cosas vuelve solo cuando se reconecte.
+ */
 function servidorCaido() {
-  cerrarChat()
+  if (state.activo) guardarLeido(state.activo)
   if (state.view !== 'inbox' && hayLinea()) setView('inbox')
-  toast('Se perdió la conexión con el servidor de WhatsApp. Los chats se vuelven a habilitar solos cuando vuelva.', 6000)
+  if (state.activo) renderHead()
+  toast('Se perdió la conexión con el servidor de WhatsApp. Podés seguir leyendo; escribir vuelve solo cuando se reconecte.', 6000)
 }
 
 /** Sale del chat abierto y vuelve a la pantalla de bienvenida, como Esc en WhatsApp Web. */
 function cerrarChat() {
   if (!state.activo) return
   if (!$('#msgInput')?.value.trim()) guardarBorrador(state.activo, '')
+  guardarLeido(state.activo)
   avisarViendo(null)
   detenerAudios()
   cerrarMenu()
@@ -2574,9 +2716,25 @@ function onPresencia({ chatId, estado, visto }) {
  */
 const hayLinea = () => !!state.conn.yo
 
+// Al entrar (o al refrescar) no se sabe todavía si hay una línea vinculada: se muestra
+// "Verificando la línea…" y recién con la respuesta del servidor se va a la bandeja o a
+// Conexión. Así no se ve Conexión un instante antes de saltar a la bandeja.
+let arrancando = true
+
+function terminarArranque() {
+  if (!arrancando) return
+  arrancando = false
+  $('#viewCargando').hidden = true
+  setView(hayLinea() ? 'inbox' : 'connect')
+}
+// Por si el servidor no contesta nunca: no se queda cargando para siempre.
+setTimeout(terminarArranque, 15000)
+
 function setView(view) {
   if (view === 'inbox' && !hayLinea()) view = 'connect'
+  if (arrancando) view = 'cargando'
   state.view = view
+  $('#viewCargando').hidden = view !== 'cargando'
   $('#viewInbox').hidden = view !== 'inbox'
   $('#viewConnect').hidden = view !== 'connect'
   $('#tabInbox').setAttribute('aria-selected', String(view === 'inbox'))
@@ -2628,10 +2786,12 @@ async function sincronizar() {
     onEstado(estado)
     renderList()
     renderPrefs()
+    terminarArranque()
     if (state.view === 'connect') renderLog()
     if (state.activo) abrirChat(state.activo)
   } catch {
     onEstado({ ...state.conn, conexion: 'servicio' })
+    terminarArranque()
   }
 }
 
@@ -2646,6 +2806,8 @@ function conectarEventos() {
     state.agentes = JSON.parse(e.data)
     renderYo()
     pedirLista()
+    // Otra persona en el chat que tengo abierto: un administrador me lo tomó.
+    if (state.activo && sesion.login && ocupanteDe(state.activo)) echadoDelChat(ocupanteDe(state.activo))
     if (state.activo) renderHead()
   })
   es.addEventListener('error', () => {
@@ -2685,7 +2847,7 @@ function conectarEventos() {
     // Los avatares de los integrantes del grupo no son chats: se actualizan en el lugar.
     for (const av of document.querySelectorAll(`.avatar[data-jid="${CSS.escape(id)}"]`)) {
       if (av.querySelector('img')) continue
-      av.insertAdjacentHTML('beforeend', `<img src="/api/chats/${enc(id)}/foto?v=${ts}" alt="" loading="lazy">`)
+      av.insertAdjacentHTML('beforeend', `<img src="${rutaApi(`/api/chats/${enc(id)}/foto?v=${ts}`)}" alt="" loading="lazy">`)
     }
   })
   es.addEventListener('mensaje', (e) => onMensaje(JSON.parse(e.data)))
@@ -2712,6 +2874,8 @@ document.addEventListener('contextmenu', (e) => {
     if (m && m.tipo !== 'desconocido') abrirMenu(id, puntoDe(e))
     return
   }
+  // Sin servidor es solo lectura: el menú del chat es para archivar, fijar, silenciar…
+  if (sinServidor()) return
   abrirMenuChat(fila.dataset.chat, puntoDe(e))
 })
 
@@ -3184,5 +3348,6 @@ syncTema()
 setView('inbox')
 renderList()
 entrar()
-  .then((ok) => ok && conectarEventos())
+  // Leyendo de la base (PC servidor apagada) no hay eventos en vivo: se carga una vez.
+  .then((ok) => ok && (NUBE ? sincronizar() : conectarEventos()))
   .catch(() => pantallaSinSesion({ error: 'No se pudo conectar con el servidor del WhatsApp.' }))

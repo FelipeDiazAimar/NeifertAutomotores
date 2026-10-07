@@ -19,7 +19,12 @@ const MAX_EN_MEMORIA = 300
 
 // Qué chat tiene abierto cada pestaña. Una persona puede tener el panel abierto en dos
 // lugares a la vez: se cuenta por pestaña y se muestra por persona.
-const viendo = new Map() // pestana → { id, nombre, chatId }
+const viendo = new Map() // pestana → { id, nombre, chatId, ts }
+
+// Un chat lo atiende una sola persona a la vez. La pestaña avisa cada minuto que sigue en
+// el chat mientras alguien la usa; si deja de avisar (se fue y lo dejó abierto), el chat
+// se libera solo pasado este tiempo.
+const VENCE_MS = 3 * 60_000
 
 export function suscribir(req, res) {
   res.writeHead(200, {
@@ -74,18 +79,57 @@ export function agentes() {
 
 const emitirAgentes = () => emitir('agentes', agentes())
 
-/** La pestaña `pestana` del usuario actual abrió `chatId` (o cerró el chat, con null). */
-export function marcarViendo(pestana, chatId) {
+/** Quién (que no sea `usuarioId`) está atendiendo `chatId`, o null si está libre. */
+export function ocupanteDe(chatId, usuarioId) {
+  if (!chatId) return null
+  for (const v of viendo.values()) {
+    if (v.chatId === chatId && v.id !== usuarioId) return { id: v.id, nombre: v.nombre }
+  }
+  return null
+}
+
+/**
+ * La pestaña `pestana` del usuario actual abrió `chatId` (o cerró el chat, con null).
+ * Si otra persona lo está atendiendo, no entra (error 409 con quién lo tiene), salvo que
+ * un administrador lo tome (`forzar`): ahí a la otra persona se le cierra el chat.
+ * Llamarlo de nuevo con el mismo chat renueva el aviso de que sigue ahí.
+ */
+export function marcarViendo(pestana, chatId, { forzar = false } = {}) {
   const u = usuarioActual()
   if (!u || !pestana) return agentes()
   const clave = String(pestana).slice(0, 40)
   const previo = viendo.get(clave)
-  if (previo?.chatId === chatId) return agentes()
-  if (chatId) viendo.set(clave, { id: u.id, nombre: u.nombre, chatId })
+  if (chatId) {
+    const ocupante = ocupanteDe(chatId, u.id)
+    if (ocupante && !(forzar && manejaLinea(u))) {
+      throw Object.assign(new Error(`${ocupante.nombre} está atendiendo este chat.`), { status: 409, datos: { ocupado: ocupante } })
+    }
+    if (ocupante) {
+      for (const [k, v] of viendo) if (v.chatId === chatId && v.id !== u.id) viendo.delete(k)
+      log('info', 'Chat tomado', `${u.nombre} se lo tomó a ${ocupante.nombre}`)
+    }
+  }
+  if (previo?.chatId === chatId && chatId) {
+    previo.ts = Date.now()
+    if (!forzar) return agentes()
+  }
+  if (chatId) viendo.set(clave, { id: u.id, nombre: u.nombre, chatId, ts: Date.now() })
   else viendo.delete(clave)
   emitirAgentes()
   return agentes()
 }
+
+// Chats que nadie toca hace rato: se liberan para que otro pueda entrar.
+setInterval(() => {
+  let vencidos = 0
+  for (const [k, v] of viendo) {
+    if (Date.now() - v.ts > VENCE_MS) {
+      viendo.delete(k)
+      vencidos++
+    }
+  }
+  if (vencidos) emitirAgentes()
+}, 30_000).unref()
 
 /* ---------------- Registro ---------------- */
 

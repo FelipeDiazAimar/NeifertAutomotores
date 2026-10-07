@@ -7,6 +7,7 @@ import { crmProxyPlugin } from './src/plugins/crmProxy.js'
 import { r2ProxyPlugin } from './src/plugins/r2Proxy.js'
 import { usersProxyPlugin } from './src/plugins/usersProxy.js'
 import { instagramReportSyncProxyPlugin } from './src/plugins/instagramReportSyncProxy.js'
+import { whatsappLecturaPlugin } from './src/plugins/whatsappLectura.js'
 
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
@@ -43,6 +44,8 @@ export default defineConfig(({ mode }) => {
         agentToken: env.INSTAGRAM_AGENT_TOKEN,
         r2PublicUrl: env.R2_PUBLIC_URL,
       }),
+      // WhatsApp en solo lectura desde la base, para cuando la PC servidor está apagada.
+      whatsappLecturaPlugin({ env }),
     ],
     resolve: {
       alias: {

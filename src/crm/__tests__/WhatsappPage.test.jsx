@@ -17,20 +17,58 @@ afterEach(() => {
 })
 
 describe('WhatsappPage', () => {
-  it('si el servidor no responde, lo dice en vez de mostrar el error del navegador', async () => {
+  it('si el servidor no responde, abre el WhatsApp en solo lectura (los chats guardados en la base)', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
     montar()
-    expect(await screen.findByText(/no responde/i)).toBeInTheDocument()
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
+    expect(lectura).toHaveAttribute('src', '/wa-lectura/index.html')
     expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+
+    // La copia de solo lectura es del mismo sitio que el CRM: se le habla con ese origen.
+    const panel = lectura.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:pedir-token' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:token', token: 'token' }, window.location.origin))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'nube', clase: 'wait', texto: 'Solo lectura', vista: 'inbox', hayLinea: true, puedeActualizar: false })
+    expect(screen.getByText(/solo lectura · servidor apagado/i)).toBeInTheDocument()
+    // En solo lectura no hay pestañas: Conexión no sirve con la PC apagada.
+    expect(screen.queryByRole('tab', { name: 'Conexión' })).toBeNull()
   })
 
-  it('"Reintentar ahora" vuelve a probar y, si responde, carga el panel', async () => {
+  it('"Reintentar" vuelve a probar y, si la PC servidor ya responde, carga el panel normal', async () => {
     const fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({})
     vi.stubGlobal('fetch', fetch)
     montar()
-    await userEvent.click(await screen.findByRole('button', { name: /reintentar/i }))
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
+    const panel = lectura.contentWindow
+    await act(() =>
+      window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', tipo: 'nf-wa:listo' } })),
+    )
+    await act(() =>
+      window.dispatchEvent(
+        new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', tipo: 'nf-wa:estado', conexion: 'nube', vista: 'inbox', hayLinea: true } }),
+      ),
+    )
+    await userEvent.click(screen.getByRole('button', { name: /reintentar/i }))
     expect(await screen.findByTitle('WhatsApp de la concesionaria')).toHaveAttribute('src', 'http://localhost:3100/')
     expect(fetch).toHaveBeenCalledWith('http://localhost:3100/api/salud', expect.objectContaining({ mode: 'no-cors' }))
+  })
+
+  it('con la PC apagada sigue probando sola y pasa al panel normal cuando vuelve', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({})
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    // Primer reintento: sigue apagada, la lectura no se cierra.
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    expect(screen.getByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    // Segundo: ya responde.
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria')).toHaveAttribute('src', 'http://localhost:3100/')
   })
 
   it('el encabezado (pestañas, estado y actualizar) lo dibuja el CRM con lo que avisa el panel', async () => {

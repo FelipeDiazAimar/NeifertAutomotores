@@ -17,7 +17,7 @@ import {
   SOLO_ESTA_PC,
   WEB_DIR,
 } from './src/config.js'
-import { agentes, emitir, log, marcarViendo, suscribir, ultimosLogs } from './src/eventos.js'
+import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
@@ -61,7 +61,7 @@ const ruta = (fn) => async (req, res) => {
     const resultado = await fn(req, res)
     if (resultado !== undefined && !res.headersSent) res.json(resultado)
   } catch (err) {
-    if (!res.headersSent) res.status(err.status || 400).json({ error: err.message })
+    if (!res.headersSent) res.status(err.status || 400).json({ error: err.message, ...(err.datos || {}) })
   }
 }
 
@@ -133,7 +133,17 @@ app.get('/api/sesion', ruta((req) => sesionActual(req)))
 
 /* Quién más está usando el panel */
 app.get('/api/agentes', ruta(() => agentes()))
-app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.chatId || null)))
+app.post('/api/viendo', ruta((req) => marcarViendo(req.body?.pestana, req.body?.chatId || null, { forzar: !!req.body?.forzar })))
+
+// Un chat lo atiende una sola persona: mientras otra lo tiene abierto, no se puede mandar,
+// archivar ni cambiar nada en él (solo mirar la presencia, que no toca el chat).
+const SIN_BLOQUEO = new Set(['presencia'])
+app.use('/api/chats/:id', (req, res, next) => {
+  if (req.method === 'GET' || !req.usuario || SIN_BLOQUEO.has(req.path.split('/')[1])) return next()
+  const ocupante = ocupanteDe(req.params.id, req.usuario.id)
+  if (!ocupante) return next()
+  res.status(423).json({ error: `${ocupante.nombre} está atendiendo este chat: mientras tanto no se puede cambiar nada.`, ocupado: ocupante })
+})
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))

@@ -1,5 +1,6 @@
 {
   "rewrites": [
+    { "source": "/wa-lectura/api/:wa*", "destination": "/api/crm/usuarios?wa=:wa*" },
     { "source": "/((?!api/).*)", "destination": "/index.html" }
   ],
   "crons": [

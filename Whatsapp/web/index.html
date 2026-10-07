@@ -42,6 +42,7 @@
   <symbol id="i-file" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/></symbol>
   <symbol id="i-pin" viewBox="0 0 24 24"><path d="M20 10c0 4.99-5.54 10.19-7.4 11.8a1 1 0 0 1-1.2 0C9.54 20.19 4 14.99 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/></symbol>
   <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
   <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
   <symbol id="i-fijado" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
@@ -85,8 +86,17 @@
     </div>
   </div>
 
+  <!-- ===================== CARGANDO (al entrar, hasta saber si hay línea) ===================== -->
+  <section id="viewCargando" class="cargando-vista" aria-live="polite">
+    <div class="cargando-caja">
+      <span class="cargando-logo"><svg class="i" aria-hidden="true"><use href="#i-wa"/></svg><span class="spinner"></span></span>
+      <b>Verificando la línea…</b>
+      <span>Un momento: se revisa que el WhatsApp esté vinculado.</span>
+    </div>
+  </section>
+
   <!-- ===================== BANDEJA ===================== -->
-  <section id="viewInbox" class="inbox" aria-label="Bandeja de WhatsApp">
+  <section id="viewInbox" class="inbox" aria-label="Bandeja de WhatsApp" hidden>
     <div class="pane glass shadow list-pane">
       <div class="list-head">
         <div class="list-tools">

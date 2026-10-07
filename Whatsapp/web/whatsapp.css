@@ -360,6 +360,35 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .agente-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag.equipo { background: var(--wa-soft); color: var(--wa); border-color: transparent; }
 
+/* Al entrar: "Verificando la línea…" hasta saber si va a la bandeja o a Conexión. */
+.cargando-vista { flex: 1; min-height: 320px; display: grid; place-items: center; }
+.cargando-vista[hidden] { display: none; }
+.cargando-caja { display: flex; flex-direction: column; align-items: center; gap: 6px; text-align: center; color: var(--ink-3); font-size: 13px; animation: cargando-entra 0.3s ease-out 0.15s both; }
+.cargando-caja b { color: var(--ink); font-size: 15px; font-weight: 600; margin-top: 8px; }
+.cargando-logo { position: relative; width: 64px; height: 64px; display: grid; place-items: center; }
+.cargando-logo svg.i { width: 30px; height: 30px; color: var(--wa); }
+.cargando-logo .spinner { position: absolute; inset: 0; width: 64px; height: 64px; border-width: 3px; border-top-color: var(--wa); }
+@keyframes cargando-entra { from { opacity: 0; transform: translateY(4px); } }
+
+/* Un chat, una persona: el que atiende otro se ve con candado y su nombre sobre la foto. */
+.row.ocupado { background: var(--red-soft); cursor: not-allowed; }
+.row.ocupado:hover { background: color-mix(in srgb, var(--red) 14%, transparent); }
+.row.ocupado .avatar { opacity: 0.45; filter: grayscale(0.6); }
+.row.ocupado .row-main { opacity: 0.7; }
+.row.ocupado::before { content: ""; position: absolute; left: 0; top: 8px; bottom: 8px; width: 3px; border-radius: 0 3px 3px 0; background: var(--red); }
+.ocupado-cinta {
+  position: absolute; left: 10px; top: 44px; z-index: 1; width: 56px;
+  display: inline-flex; align-items: center; justify-content: center; gap: 3px;
+  padding: 2px 5px; border-radius: 99px; background: var(--red); color: #fff;
+  font-size: 10px; font-weight: 700; line-height: 1.3; box-shadow: 0 2px 6px -2px rgba(0, 0, 0, 0.4);
+}
+.ocupado-cinta svg.i { width: 10px; height: 10px; flex: none; }
+.ocupado-cinta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tag.atendiendo { background: var(--wa-soft); color: var(--wa); border-color: transparent; }
+.tag.atendiendo svg.i { width: 12px; height: 12px; }
+.confirmar-icono { width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; background: var(--red-soft); color: var(--red); margin-bottom: 10px; }
+.confirmar-icono svg.i { width: 22px; height: 22px; }
+
 .sin-sesion { position: fixed; inset: 0; z-index: 100; display: grid; place-items: center; padding: 16px; background: var(--bg); }
 .sin-sesion .card { max-width: 420px; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: 32px 28px; text-align: center; }
 .sin-sesion svg.i { width: 40px; height: 40px; color: var(--wa); }
@@ -436,11 +465,15 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .crm-res span { color: var(--ink-3); font-size: 12.5px; }
 .solo-lectura .solo-escritura { display: none; }
 
-/* Servidor caído: la lista queda a la vista pero bloqueada hasta que vuelva */
-.sin-servidor #chatList,
-.sin-servidor .search,
+/* Servidor caído: solo lectura. Se pueden abrir los chats y leer lo que ya estaba cargado,
+   pero no escribir, mandar, reaccionar ni cambiar nada hasta que vuelva. */
 .sin-servidor .new-chat { opacity: 0.45; pointer-events: none; filter: grayscale(0.4); transition: opacity 0.2s; }
-.sin-servidor .composer { display: none !important; }
+.sin-servidor .composer,
+.sin-servidor .reac-bar,
+.sin-servidor .mm-btn { display: none !important; }
+.tag.solo-lectura-tag { background: var(--amber-soft); color: var(--amber); border-color: var(--amber-line); }
+.tag.solo-lectura-tag svg.i { width: 12px; height: 12px; }
+.aviso-lectura { margin: 8px auto; padding: 6px 12px; border-radius: 99px; background: var(--amber-soft); color: var(--amber); font-size: 12px; font-weight: 600; width: fit-content; max-width: 90%; text-align: center; }
 
 /* ---------- Embebido en el CRM: sin encabezado propio y a todo el espacio ---------- */
 /* El logo, las pestañas, el estado de la línea y el botón de actualizar los muestra el CRM arriba. */
