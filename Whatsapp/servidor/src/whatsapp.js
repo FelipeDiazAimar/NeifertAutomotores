@@ -105,7 +105,11 @@ import {
  * mensaje de corte pero no lo pasa en el evento: solo aparece en su registro interno ("processing
  * sync action"). El logger la captura acá, antes de que llegue el evento del chat.
  */
-const rangoArchivado = new Map() // id del chat (como lo manda WhatsApp) → ids de los mensajes de corte
+const rangoArchivado = new Map() // id del chat (como lo manda WhatsApp) → { ids, ts } del mensaje de corte
+// "Desarchivar al recibir mensajes" del celular, tal como llega en la sincronización. En
+// una sincronización completa puede llegar después de los archivados: por eso se anota acá
+// y los archivados se vuelven a evaluar al terminar (ver reevaluarArchivados).
+let ajusteDesarchivar = null
 
 // Cómo aparece el servidor en "Dispositivos vinculados" del celular de la línea.
 const NOMBRE_DISPOSITIVO = 'Whatsapp Neifert'
@@ -117,9 +121,16 @@ const logger = pino({
   hooks: {
     logMethod(args, metodo, nivel) {
       const accion = args[1] === 'processing sync action' ? args[0]?.syncAction : null
-      const rango = accion?.syncAction?.value?.archiveChatAction?.messageRange
+      const valor = accion?.syncAction?.value
+      const rango = valor?.archiveChatAction?.messageRange
       const id = accion?.index?.[1]
-      if (id && rango) rangoArchivado.set(id, (rango.messages || []).map((m) => m?.key?.id).filter(Boolean))
+      if (id && rango) {
+        rangoArchivado.set(id, {
+          ids: (rango.messages || []).map((m) => m?.key?.id).filter(Boolean),
+          ts: toNumber(rango.lastMessageTimestamp || rango.lastSystemMessageTimestamp) || 0,
+        })
+      }
+      if (typeof valor?.unarchiveChatsSetting?.unarchiveChats === 'boolean') ajusteDesarchivar = valor.unarchiveChatsSetting.unarchiveChats
       if (nivel >= (NIVELES[BAILEYS_LOG] ?? Infinity)) metodo.apply(this, args)
     },
   },
@@ -468,13 +479,14 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     setTimeout(() => {
       if (s === sock && conexion === 'conectado') sinUsuario(() => procesarSalida().catch((err) => log('aviso', 'Bandeja de salida', err.message)))
     }, 5000)
-    // Una vez por sesión vinculada: trae del celular qué chats están archivados o fijados.
-    if (!meta().chatsSincronizados) {
-      setTimeout(() => {
-        if (s !== sock || conexion !== 'conectado') return
-        sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
-      }, 8000)
-    }
+    // La primera vez por sesión vinculada se trae todo (qué chats están archivados o
+    // fijados); las siguientes, solo lo que cambió mientras el servidor estuvo apagado.
+    setTimeout(() => {
+      if (s !== sock || conexion !== 'conectado') return
+      const completa = !meta().chatsSincronizados || meta().reglaArchivados !== REGLA_ARCHIVADOS
+      if (completa) sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
+      else ponerAlDiaChats().catch((err) => log('aviso', 'No se pudieron traer los cambios de los chats', err.message))
+    }, 8000)
     // Los grupos se traen enseguida: son chats como cualquier otro y tienen que estar en
     // la bandeja desde el arranque, sin esperar a que alguien escriba.
     traerGrupos(s, 3000)
@@ -922,6 +934,8 @@ export async function ponerAlDiaArchivos() {
   recorrerMensajes((chatId, m) => {
     const md = m.media
     if (!md || !m.raw || md.estado === 'ok' || md.estado === 'grande' || md.estado === 'liberado' || (m.ts || 0) < corte) return
+    // Enlace vencido: solo lo trae el celular, y eso se pide cuando alguien lo abre.
+    if (md.vencido) return
     faltan.push({ chatId, m })
   })
   faltan.sort((a, b) => (b.m.ts || 0) - (a.m.ts || 0))
@@ -1030,7 +1044,7 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   if (guardado.media && !['ok', 'liberado'].includes(guardado.media.estado) && config().descargarMedia) {
     // Lo que acaba de llegar se baja en el momento; lo del historial va a la cola, para
     // no pedirle cientos de archivos a WhatsApp de golpe.
-    if (ahora() - ts < MEDIA_RECIENTE_SEG) await descargarMedia(chatId, guardado)
+    if (ahora() - ts < MEDIA_RECIENTE_SEG) await descargarMedia(chatId, guardado, { pedirAlCelular: false })
     else encolarMedia(chatId, guardado.id)
   }
 }
@@ -1367,21 +1381,54 @@ export async function suscribirPresencia(chatId) {
  * escribió después de que se archivó.
  */
 const cuentaArchivo = { siguen: 0, vuelven: 0, sinCorte: 0 } // para el registro de cada sincronización
+let cambiosDeArchivo = 0 // chats que pasaron de archivado a no archivado (o al revés)
+
+// Archivados tal como los mandó WhatsApp en esta sincronización: id del chat → id crudo.
+const archivadosVistos = new Map()
+// Con qué id identifica WhatsApp a cada chat en las marcas (archivar, fijar, silenciar):
+// el teléfono o el LID. Los cambios del panel tienen que ir con el mismo, o el celular no
+// los reconoce como de ese chat.
+const indiceWa = new Map() // id del chat acá → id en las marcas de WhatsApp
+
+/** ¿La otra persona escribió después de `ts` (segundos)? Para cuando no está el mensaje de corte. */
+function recibioDespuesDeTs(id, ts) {
+  if (!ts) return null
+  return listarMensajes(id).some((m) => m.ts > ts && !m.deMi && !['sistema', 'desconocido'].includes(m.tipo))
+}
 
 function archivadoVigente(ch, id) {
-  if (!ch.archived) return false
+  if (!ch.archived) {
+    archivadosVistos.delete(id)
+    return false
+  }
+  archivadosVistos.set(id, ch.id)
   const creds = sock?.authState?.creds || authActual?.creds
+  const desarchiva = ajusteDesarchivar ?? creds?.accountSettings?.unarchiveChats
+  if (!desarchiva) return true
   const corte = rangoArchivado.get(ch.id)
-  rangoArchivado.delete(ch.id)
-  if (!creds?.accountSettings?.unarchiveChats) return true
-  const despues = corte?.length ? recibioDespuesDe(id, corte) : null
-  // Sin el mensaje de corte guardado no se puede saber: vale lo que dice WhatsApp.
+  // Primero por el mensaje de corte; si no está guardado, por su fecha.
+  let despues = corte?.ids?.length ? recibioDespuesDe(id, corte.ids) : null
+  if (despues === null) despues = recibioDespuesDeTs(id, corte?.ts)
+  // Sin corte ni fecha no se puede saber: vale lo que dice WhatsApp.
   if (despues === null) {
     cuentaArchivo.sinCorte++
     return true
   }
   cuentaArchivo[despues ? 'vuelven' : 'siguen']++
   return !despues
+}
+
+/**
+ * Al terminar una sincronización, los archivados se evalúan de nuevo: el ajuste de
+ * "desarchivar al recibir mensajes" pudo llegar después que ellos.
+ */
+function reevaluarArchivados() {
+  Object.assign(cuentaArchivo, { siguen: 0, vuelven: 0, sinCorte: 0 })
+  for (const [id, crudo] of archivadosVistos) {
+    const archivado = archivadoVigente({ id: crudo, archived: true }, id)
+    if (archivado !== estaArchivado(id)) cambiosDeArchivo++
+    setArchivado(id, archivado)
+  }
 }
 
 async function procesarChats(chats, { crearGrupos = false } = {}) {
@@ -1400,18 +1447,49 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
     if (ignorar(ch.id)) continue
     const id = ch.pnJid ? jidNormalizedUser(ch.pnJid) : await jidDelChat({ remoteJid: ch.id })
     if (ignorar(id)) continue
+    if (cambiaArchivo || cambiaFijado || cambiaSilencio) indiceWa.set(id, jidNormalizedUser(ch.id))
     // Un grupo que WhatsApp lista como nuevo entra a la bandeja sin esperar un mensaje.
     if (crearGrupos && isJidGroup(id) && !existeChat(id)) {
       upsertChat(id, { ultimoTs: toNumber(ch.conversationTimestamp) || 0 })
     }
     if (cambiaNombre) setGrupoNombre(id, ch.name)
-    if (cambiaArchivo) setArchivado(id, archivadoVigente(ch, id))
+    if (cambiaArchivo) {
+      const archivado = archivadoVigente(ch, id)
+      if (archivado !== estaArchivado(id)) cambiosDeArchivo++
+      setArchivado(id, archivado)
+    }
     if (cambiaFijado) setFijado(id, ch.pinned ? toNumber(ch.pinned) : null)
     if (cambiaSilencio) setSilenciado(id, ch.muteEndTime ? toNumber(ch.muteEndTime) : null)
     if (cambiaLectura && existeChat(id)) {
       if (ch.unreadCount === 0) marcarLeido(id)
       else if (!buscarChat(id)?.noLeidos) sumarNoLeido(id)
     }
+  }
+}
+
+const COLECCIONES_CHATS = ['regular_high', 'regular_low', 'critical_unblock_low']
+// Sube cuando cambia cómo se interpretan los archivados: obliga a una sincronización
+// completa al conectar, para corregir lo que quedó guardado con la regla anterior.
+const REGLA_ARCHIVADOS = 2
+
+/**
+ * Al reconectar: trae lo que se cambió en el celular mientras el servidor estuvo apagado
+ * (archivados, fijados, silenciados, leídos). WhatsApp avisa de esos cambios al volver,
+ * pero si el aviso no llega el chat queda como estaba. Pedir las novedades desde la última
+ * versión guardada solo trae los cambios, y es una consulta a WhatsApp, no al celular.
+ */
+async function ponerAlDiaChats() {
+  if (sincronizando || !sock || conexion !== 'conectado' || typeof sock.resyncAppState !== 'function') return
+  sincronizando = true
+  const antes = cambiosDeArchivo
+  try {
+    await conTimeout(sock.resyncAppState(COLECCIONES_CHATS, false), 120000, 'WhatsApp tardó demasiado en responder')
+    await new Promise((r) => setTimeout(r, 1500))
+    reevaluarArchivados()
+    const n = cambiosDeArchivo - antes
+    if (n) log('info', 'Chats puestos al día con el celular', `${n} ${n === 1 ? 'chat cambió' : 'chats cambiaron'} de archivado`)
+  } finally {
+    sincronizando = false
   }
 }
 
@@ -1425,17 +1503,22 @@ export async function sincronizarChats() {
   asegurarConectado()
   if (sincronizando) throw new Error('Ya hay una sincronización en curso')
   sincronizando = true
-  const colecciones = ['regular_high', 'regular_low', 'critical_unblock_low']
+  const colecciones = COLECCIONES_CHATS
   log('info', 'Sincronizando chats archivados, fijados, silenciados y contactos')
   try {
     const keys = sock.authState?.keys || authActual?.keys
     if (!keys || typeof sock.resyncAppState !== 'function') throw new Error('Esta versión de Baileys no permite sincronizar chats')
     await keys.set({ 'app-state-sync-version': Object.fromEntries(colecciones.map((c) => [c, null])) })
+    // Se vuelve a armar con lo que mande WhatsApp en la foto completa.
+    archivadosVistos.clear()
     await conTimeout(sock.resyncAppState(colecciones, false), 120000, 'WhatsApp tardó demasiado en responder. Probá de nuevo en un rato.')
     // Los eventos se procesan apenas termina la sincronización: se espera un momento antes de contar.
     await new Promise((r) => setTimeout(r, 1500))
-    setMeta({ chatsSincronizados: Date.now() })
-    log('info', 'Archivados revisados', `${cuentaArchivo.siguen} siguen · ${cuentaArchivo.vuelven} volvieron a la bandeja por mensajes nuevos · ${cuentaArchivo.sinCorte} sin el mensaje de corte guardado`)
+    reevaluarArchivados()
+    setMeta({ chatsSincronizados: Date.now(), reglaArchivados: REGLA_ARCHIVADOS })
+    log('info', 'Archivados revisados', `${cuentaArchivo.siguen} siguen · ${cuentaArchivo.vuelven} volvieron a la bandeja por mensajes nuevos · ${cuentaArchivo.sinCorte} sin el mensaje de corte guardado · desarchivar al recibir: ${ajusteDesarchivar ?? 'sin dato'}`)
+    const porLid = [...indiceWa.values()].filter((j) => j.endsWith('@lid')).length
+    log('info', 'Ids de las marcas de WhatsApp', `${porLid} chats por LID · ${indiceWa.size - porLid} por teléfono o grupo`)
     Object.assign(cuentaArchivo, { siguen: 0, vuelven: 0, sinCorte: 0 })
     const r = contarMarcas()
     log('ok', 'Chats sincronizados', `${r.archivados} archivados · ${r.fijados} fijados`)
@@ -1679,9 +1762,26 @@ export async function salirDelGrupo(chatId) {
 export const DURACIONES_SILENCIO = { '8h': 8 * 3600e3, '1s': 7 * 24 * 3600e3, siempre: null }
 
 /** WhatsApp pide el último mensaje del chat para saber a qué altura aplicar el cambio. */
+/** El id del chat como lo usa WhatsApp en las marcas (ver indiceWa). */
+const jidMarcas = (chatId) => indiceWa.get(chatId) || chatId
+
+/**
+ * El último mensaje del chat, para el "hasta acá" de archivar o marcar leído. La clave va
+ * como la mandó WhatsApp (guardada en raw) y con el mismo id de chat que la marca: si no
+ * coincide con lo que tiene el celular, el celular lo toma como un mensaje que no conoce.
+ */
 function ultimosMensajes(chatId) {
   const m = listarMensajes(chatId).at(-1)
-  return m ? [{ key: claveMensaje(chatId, m), messageTimestamp: m.ts }] : []
+  if (!m) return []
+  let key = claveMensaje(chatId, m)
+  try {
+    const crudo = m.raw ? JSON.parse(m.raw).key : null
+    if (crudo?.id === m.id) key = { remoteJid: crudo.remoteJid, id: crudo.id, fromMe: !!crudo.fromMe, ...(crudo.participant ? { participant: crudo.participant } : {}) }
+  } catch {
+    // raw dañado: queda la clave armada con lo guardado.
+  }
+  key.remoteJid = jidMarcas(chatId)
+  return [{ key, messageTimestamp: m.ts }]
 }
 
 /**
@@ -1725,11 +1825,13 @@ export async function cambiarMarca(chatId, accion, valor) {
   }
 
   try {
-    await sock.chatModify(mod, chatId)
+    await sock.chatModify(mod, jidMarcas(chatId))
   } catch (err) {
     volverAtras()
     throw new Error(`WhatsApp no aceptó el cambio: ${err.message}`, { cause: err })
   }
+  const como = !indiceWa.has(chatId) ? 'id sin confirmar por WhatsApp' : jidMarcas(chatId).endsWith('@lid') ? 'por LID' : 'por teléfono o grupo'
+  log('info', 'Cambio enviado al celular', `${accion}${valor === false ? ' (deshacer)' : ''} · ${nombreDe(chatId)} · ${como}`)
   return vistaChat(buscarChat(chatId))
 }
 
@@ -1771,7 +1873,13 @@ function mensajeDeError(err, huboReenvio) {
   return texto.replace(/https?:\/\/\S+/g, '').trim()
 }
 
-async function descargarMedia(chatId, m) {
+/**
+ * Baja el archivo de un mensaje. Si el enlace de WhatsApp venció, hay que pedirle al
+ * celular que lo vuelva a subir, y ese pedido lo despierta (le aparece "sincronizando").
+ * Por eso `pedirAlCelular` es solo para lo que pide una persona; la cola automática no lo
+ * usa: el archivo queda "vencido" y se baja cuando alguien toca Descargar.
+ */
+async function descargarMedia(chatId, m, { pedirAlCelular = true } = {}) {
   if (!m.raw || descargando.has(m.id)) return m
   if (m.media?.tamano && m.media.tamano > MEDIA_MAX_BYTES) {
     return actualizarMensaje(chatId, m.id, { media: { ...m.media, estado: 'grande' } })
@@ -1787,6 +1895,11 @@ async function descargarMedia(chatId, m) {
       buffer = await downloadMediaMessage(wa, 'buffer', {})
     } catch (err) {
       if (!sePuedePedirReenvio(err)) throw err
+      if (!pedirAlCelular) {
+        // No es un fallo: queda para cuando alguien lo pida (y no vuelve a la cola sola).
+        const actual = buscarMensaje(chatId, m.id) || m
+        return actualizarMensaje(chatId, m.id, { media: { ...actual.media, estado: 'pendiente', vencido: true, error: null } })
+      }
       if (!sock || conexion !== 'conectado') {
         throw new Error('El enlace venció y WhatsApp no está conectado para pedir el reenvío.', { cause: err })
       }
@@ -1813,7 +1926,7 @@ async function descargarMedia(chatId, m) {
     await guardarMedia(chatId, archivo, buffer, m.media.mime)
     const extras = await extrasDeArchivo(chatId, m, buffer)
     if (cuota.fraccion() >= cuota.UMBRAL_LIMPIEZA) liberarEspacio()
-    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0, ...extras } })
+    return actualizarMensaje(chatId, m.id, { media: { ...m.media, archivo, tamano: buffer.length, estado: 'ok', error: null, fallos: 0, vencido: false, ...extras } })
   } catch (err) {
     // Sin espacio en R2: se libera lo más viejo y el archivo queda para reintentar.
     if (err.code === 'SIN_ESPACIO') liberarEspacio()
@@ -1836,7 +1949,7 @@ async function descargarMedia(chatId, m) {
 /* ---------------- Cola de descargas ---------------- */
 
 const colaMedia = []
-const enColaMedia = new Set()
+const enColaMedia = new Map() // llave → item de la cola
 let bajando = false
 // Una descarga por vez y con pausa: WhatsApp corta si se le piden muchos archivos seguidos.
 const PAUSA_MEDIA_MS = 700
@@ -1844,13 +1957,21 @@ const PAUSA_MEDIA_MS = 700
 /** Un archivo que ya falló varias veces no vuelve a la cola: no se recupera insistiendo. */
 const seDaPorPerdido = (m) => (m?.media?.fallos || 0) >= MAX_FALLOS_MEDIA
 
-/** Agenda la descarga de un archivo sin bloquear a quien lo pide. */
-export function encolarMedia(chatId, id, { forzar = false } = {}) {
+/**
+ * Agenda la descarga de un archivo sin bloquear a quien lo pide. `pedirAlCelular`: lo pidió
+ * una persona ("Descargar todo"), así que si el enlace venció se le pide al celular.
+ */
+export function encolarMedia(chatId, id, { forzar = false, pedirAlCelular = false } = {}) {
   const llave = `${chatId}|${id}`
-  if (enColaMedia.has(llave)) return false
+  const yaEnCola = enColaMedia.get(llave)
+  if (yaEnCola) {
+    if (pedirAlCelular) yaEnCola.pedirAlCelular = true
+    return false
+  }
   if (!forzar && seDaPorPerdido(buscarMensaje(chatId, id))) return false
-  enColaMedia.add(llave)
-  colaMedia.push({ chatId, id })
+  const item = { chatId, id, pedirAlCelular }
+  enColaMedia.set(llave, item)
+  colaMedia.push(item)
   arrancarCola()
   return true
 }
@@ -1865,12 +1986,12 @@ async function trabajarCola() {
   try {
     while (colaMedia.length) {
       if (!sock || conexion !== 'conectado' || !config().descargarMedia) break
-      const { chatId, id } = colaMedia.shift()
+      const { chatId, id, pedirAlCelular } = colaMedia.shift()
       enColaMedia.delete(`${chatId}|${id}`)
       const m = buscarMensaje(chatId, id)
       if (m?.media && !['ok', 'liberado'].includes(m.media.estado) && m.raw) {
         try {
-          await descargarMedia(chatId, m)
+          await descargarMedia(chatId, m, { pedirAlCelular })
         } catch {
           // descargarMedia ya deja el error anotado en el mensaje.
         }
@@ -1900,7 +2021,7 @@ export function descargarTodo(chatId, { reintentar = false } = {}) {
       continue
     }
     if (reintentar) actualizarMensaje(chatId, m.id, { media: { ...m.media, fallos: 0 } })
-    if (encolarMedia(chatId, m.id, { forzar: reintentar })) n++
+    if (encolarMedia(chatId, m.id, { forzar: reintentar, pedirAlCelular: true })) n++
   }
   if (n) log('info', 'Descargando archivos del chat', `${nombreDe(chatId)} · ${n} archivos en cola`)
   return { encolados: n, enCola: colaMedia.length, perdidos }
@@ -2261,7 +2382,7 @@ export async function destacarMensaje(chatId, id, destacar) {
   asegurarConectado()
   const m = buscarMensaje(chatId, id)
   if (!m) throw Object.assign(new Error('El mensaje no existe'), { status: 404 })
-  await sock.chatModify({ star: { messages: [{ id: m.id, fromMe: !!m.deMi }], star: !!destacar } }, chatId)
+  await sock.chatModify({ star: { messages: [{ id: m.id, fromMe: !!m.deMi }], star: !!destacar } }, jidMarcas(chatId))
   return vistaMensaje(actualizarMensaje(chatId, id, { destacado: !!destacar }))
 }
 
@@ -2309,7 +2430,7 @@ export async function confirmarLectura(chatId) {
   marcarLeido(chatId)
   if (!sock || conexion !== 'conectado') return
   if (teniaSinLeer) {
-    sock.chatModify({ markRead: true, lastMessages: ultimosMensajes(chatId) }, chatId).catch((err) => {
+    sock.chatModify({ markRead: true, lastMessages: ultimosMensajes(chatId) }, jidMarcas(chatId)).catch((err) => {
       log('aviso', 'No se pudo marcar el chat como leído en el celular', `${nombreDe(chatId)} · ${err.message}`)
     })
   }

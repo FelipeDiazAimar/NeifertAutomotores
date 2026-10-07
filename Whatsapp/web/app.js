@@ -790,7 +790,7 @@ function mediaPendienteHtml(m) {
   const detalle = [esAudio(m) && md.segundos ? fmtDur(md.segundos) : null, md.tamano ? fmtBytes(md.tamano) : null].filter(Boolean).join(' · ')
   return `<div class="media-missing ${error ? 'is-error' : ''}">
     ${ic(error ? 'alert' : ICONO_MEDIA[m.tipo] || 'file')}
-    <span class="mm-txt"><b>${esc(nombre)}</b>${detalle ? `<small class="tnum">${detalle}</small>` : ''}${error ? `<small class="mm-err">${esc(md.error || 'No se pudo descargar.')}</small>` : ''}</span>
+    <span class="mm-txt"><b>${esc(nombre)}</b>${detalle ? `<small class="tnum">${detalle}</small>` : ''}${error ? `<small class="mm-err">${esc(md.error || 'No se pudo descargar.')}</small>` : md.vencido ? '<small>Se le pide al celular de la línea.</small>' : ''}</span>
     <button class="btn ghost mm-btn" data-descargar="${esc(m.id)}">${error ? 'Reintentar' : 'Descargar'}</button>
   </div>`
 }

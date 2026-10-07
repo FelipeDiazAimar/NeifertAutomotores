@@ -91,6 +91,16 @@ function leerConfig() {
 
 const valor = (config, nombres) => nombres.map((n) => config[n]).find(Boolean) || ''
 
+/**
+ * El token del túnel. Cloudflare lo muestra adentro de un comando
+ * ("cloudflared.exe service install eyJ…") y es fácil pegar el comando entero: se toma
+ * solo la parte del token (empieza con eyJ). '' si no hay ninguno que sirva.
+ */
+function tokenTunel(config) {
+  const crudo = String(config?.WA_TUNEL_TOKEN || '').trim()
+  return crudo.split(/\s+/).find((p) => /^eyJ[\w+/=-]+$/.test(p)) || ''
+}
+
 function revisarConfig(texto) {
   let config
   try {
@@ -102,6 +112,9 @@ function revisarConfig(texto) {
   const avisos = Object.entries(RECOMENDADAS)
     .filter(([n]) => !config[n])
     .map(([n, efecto]) => `${n}: ${efecto}`)
+  const tunel = String(config.WA_TUNEL_TOKEN || '').trim()
+  if (tunel && !tokenTunel(config)) avisos.push('WA_TUNEL_TOKEN: no parece un token de Cloudflare (empieza con eyJ); el CRM no va a llegar a esta PC')
+  else if (tunel && tunel !== tokenTunel(config)) avisos.push('WA_TUNEL_TOKEN: tiene el comando entero de Cloudflare; se usa solo el token (lo que empieza con eyJ)')
   return { ok: faltan.length === 0, faltan, avisos, config }
 }
 
@@ -362,8 +375,11 @@ async function buscarYAvisar(manual = false) {
 
 function arrancarTunel() {
   if (tunel || saliendo || !iniciado) return
-  const token = leerConfig()?.WA_TUNEL_TOKEN
-  if (!token) return
+  const config = leerConfig()
+  if (!config?.WA_TUNEL_TOKEN) return
+  const token = tokenTunel(config)
+  // Sin un token que sirva, reintentar cada 10 s solo llena el registro.
+  if (!token) return registrar('WA_TUNEL_TOKEN no es un token de Cloudflare (empieza con eyJ): el túnel no arranca. Corregilo en "Cambiar configuración".')
   if (!fs.existsSync(CLOUDFLARED)) return registrar(`Falta cloudflared en ${CLOUDFLARED}: el CRM no va a llegar a esta PC`)
   registrar('Iniciando Cloudflare Tunnel')
   // El token va por variable de entorno, no en la línea de comandos (ahí lo ve cualquiera).

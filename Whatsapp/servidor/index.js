@@ -144,7 +144,12 @@ app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), confi
 app.get('/api/log', exigirLinea, ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
-app.post('/api/config', exigirLinea, accion('preferencias', (req) => {
+// "Descargar multimedia al llegar" lo puede pausar cualquier usuario (para no guardar
+// archivos de más); el resto de las preferencias, solo quien maneja la línea.
+const PREFS_PARA_TODOS = ['descargarMedia']
+const exigirPreferencias = (req, res, next) =>
+  Object.keys(req.body || {}).every((k) => PREFS_PARA_TODOS.includes(k)) ? next() : exigirLinea(req, res, next)
+app.post('/api/config', exigirPreferencias, accion('preferencias', (req) => {
   setConfig(req.body || {})
   const c = configPublica()
   emitir('config', c)

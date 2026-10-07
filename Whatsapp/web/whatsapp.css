@@ -376,7 +376,7 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .solo-lectura .composer:not([hidden]) + .aviso-lectura { display: block; }
 .solo-lectura [data-act="sincronizar-chats"], .solo-lectura [data-act="sincronizar-grupos"] { display: none; }
 .sin-linea .solo-linea { display: none; }
-.sin-linea [data-pref] { pointer-events: none; opacity: 0.5; }
+.sin-linea [data-pref]:not([data-pref-todos]) { pointer-events: none; opacity: 0.5; }
 
 /* Bandeja de salida: el mensaje todavía no salió. */
 .salida-nota { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 4px; padding-right: 62px; font-size: 12px; color: var(--ink-3); }
