@@ -11,6 +11,21 @@ const { default: WhatsappPage } = await import('../pages/WhatsappPage.jsx')
 
 const montar = () => render(<MemoryRouter><WhatsappPage /></MemoryRouter>)
 
+/**
+ * fetch de mentira: la función del CRM (/wa-lectura/api/servidor) contesta, en orden, si
+ * la PC servidor responde (la última respuesta se repite). Lo demás contesta vacío.
+ */
+const servidorQue = (...respuestas) => {
+  const cola = [...respuestas]
+  return vi.fn(async (url) => {
+    if (String(url).startsWith('/wa-lectura/api/servidor')) {
+      const responde = cola.length > 1 ? cola.shift() : cola[0]
+      return { json: async () => ({ responde }) }
+    }
+    return {}
+  })
+}
+
 afterEach(() => {
   vi.unstubAllGlobals()
   vi.useRealTimers()
@@ -38,8 +53,18 @@ describe('WhatsappPage', () => {
     expect(screen.queryByRole('tab', { name: 'Conexión' })).toBeNull()
   })
 
+  it('con la PC apagada Cloudflare igual contesta: si la función dice que no responde, va a solo lectura', async () => {
+    // La pregunta directa "llegaría" (Cloudflare devuelve su página de error), pero no cuenta.
+    vi.stubGlobal('fetch', servidorQue(false))
+    montar()
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+    // Mientras carga hay un aviso, no un cuadro gris.
+    expect(screen.getByText(/el servidor de whatsapp está apagado/i)).toBeInTheDocument()
+  })
+
   it('"Reintentar" vuelve a probar y, si la PC servidor ya responde, carga el panel normal', async () => {
-    const fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({})
+    const fetch = servidorQue(false, true)
     vi.stubGlobal('fetch', fetch)
     montar()
     const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
@@ -54,12 +79,12 @@ describe('WhatsappPage', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: /reintentar/i }))
     expect(await screen.findByTitle('WhatsApp de la concesionaria')).toHaveAttribute('src', 'http://localhost:3100/')
-    expect(fetch).toHaveBeenCalledWith('http://localhost:3100/api/salud', expect.objectContaining({ mode: 'no-cors' }))
+    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/servidor', expect.objectContaining({ cache: 'no-store' }))
   })
 
   it('con la PC apagada sigue probando sola y pasa al panel normal cuando vuelve', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    const fetch = vi.fn().mockRejectedValueOnce(new TypeError('Failed to fetch')).mockRejectedValueOnce(new TypeError('Failed to fetch')).mockResolvedValue({})
+    const fetch = servidorQue(false, false, true)
     vi.stubGlobal('fetch', fetch)
     montar()
     expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
@@ -94,13 +119,14 @@ describe('WhatsappPage', () => {
 
   it('si el panel nunca termina de cargar, vuelve a probar en vez de quedar cargando', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
-    const fetch = vi.fn().mockResolvedValue({})
+    const fetch = servidorQue(true)
     vi.stubGlobal('fetch', fetch)
+    const pruebas = () => fetch.mock.calls.filter(([url]) => url === '/wa-lectura/api/servidor').length
     montar()
     await screen.findByTitle('WhatsApp de la concesionaria')
-    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(pruebas()).toBe(1)
     await act(() => vi.advanceTimersByTimeAsync(25_000))
-    await waitFor(() => expect(fetch).toHaveBeenCalledTimes(2))
+    await waitFor(() => expect(pruebas()).toBe(2))
   })
 
   it('un mensaje que no viene del panel no cambia nada', async () => {

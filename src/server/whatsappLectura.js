@@ -291,6 +291,25 @@ async function enlaceMedia(env, linea, jid, id, descargar) {
   return enlaceR2(env, claveReal, { nombre: m.media.nombre || path.basename(m.media.archivo), descargar, mime: m.media.mime })
 }
 
+/**
+ * ¿Está andando el servidor del WhatsApp (la PC)? Se pregunta desde acá y no desde el
+ * navegador: con el dominio en Cloudflare, aunque la PC esté apagada Cloudflare contesta
+ * con su página de error (530/1033), y el navegador no puede leer esa respuesta para
+ * distinguirla. Cuenta solo si contesta el servidor de verdad: su /api/salud trae `conexion`
+ * (también con la línea desconectada, que es un 503 pero el servidor anda).
+ */
+async function servidorAnda(env) {
+  const base = String(env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
+  if (!/^https?:\/\//.test(base)) return { responde: false, motivo: 'Falta VITE_WHATSAPP_PANEL_URL' }
+  try {
+    const r = await fetch(`${base}/api/salud`, { signal: AbortSignal.timeout(6000), headers: { 'Cache-Control': 'no-cache' } })
+    const datos = await r.json().catch(() => null)
+    return { responde: typeof datos?.conexion === 'string', conexion: datos?.conexion || null }
+  } catch {
+    return { responde: false }
+  }
+}
+
 /* ---------------- Rutas ---------------- */
 
 /**
@@ -302,6 +321,8 @@ async function atender(env, req, res, ruta) {
   const partes = ruta.split('/').filter(Boolean).map(decodeURIComponent)
   const q = req.query || {}
 
+  // Sin sesión: solo dice si la PC servidor contesta (lo usa el CRM para elegir qué abrir).
+  if (partes[0] === 'servidor') return servidorAnda(env)
   if (partes[0] === 'publico') {
     const host = req.headers['x-forwarded-host'] || req.headers.host
     // En Vercel llega x-forwarded-proto; en desarrollo (localhost) es http.

@@ -24,10 +24,20 @@ const VISTAS = [
 const PUNTO = { '': 'bg-whatsapp', info: 'bg-sky-500', wait: 'bg-amber-500', off: 'bg-neifert' }
 
 /**
- * ¿Responde el servidor de WhatsApp? Se pregunta sin leer la respuesta (no-cors): alcanza
- * con saber si llega. Si la PC servidor está apagada o la app cerrada, falla la conexión.
+ * ¿Responde el servidor de WhatsApp (la PC)? Lo pregunta la función del CRM
+ * (/wa-lectura/api/servidor), que sí puede leer la respuesta: con el dominio en Cloudflare,
+ * aunque la PC esté apagada Cloudflare contesta con su página de error, y desde acá no se
+ * puede distinguir. Si esa función no contesta (un deploy viejo, por ejemplo), se pregunta
+ * directo como antes: alcanza con que llegue algo.
  */
 async function servidorResponde() {
+  try {
+    const r = await fetch('/wa-lectura/api/servidor', { cache: 'no-store', signal: AbortSignal.timeout(10000) })
+    const datos = await r.json()
+    if (typeof datos?.responde === 'boolean') return datos.responde
+  } catch {
+    // Sigue con la pregunta directa.
+  }
   try {
     await fetch(`${PANEL_URL}/api/salud`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(6000) })
     return true
@@ -43,6 +53,24 @@ function WhatsappIcono({ className }) {
       <path d="M11.42 9.49c-.19-.09-1.1-.54-1.27-.61s-.29-.09-.42.1-.48.6-.59.73-.21.14-.4 0a5.13 5.13 0 0 1-1.49-.92 5.25 5.25 0 0 1-1-1.29c-.11-.18 0-.28.08-.38s.18-.21.28-.32a1.39 1.39 0 0 0 .18-.31.38.38 0 0 0 0-.33c0-.09-.42-1-.58-1.37s-.3-.32-.41-.32h-.4a.72.72 0 0 0-.5.23 2.1 2.1 0 0 0-.65 1.55A3.59 3.59 0 0 0 5 8.2 8.32 8.32 0 0 0 8.19 11c.44.19.78.3 1.05.39a2.53 2.53 0 0 0 1.17.07 1.93 1.93 0 0 0 1.26-.88 1.67 1.67 0 0 0 .11-.88c-.05-.07-.17-.12-.36-.21z" />
       <path d="M13.29 2.68A7.36 7.36 0 0 0 8 .5a7.44 7.44 0 0 0-6.41 11.15l-1 3.85 3.94-1a7.4 7.4 0 0 0 3.55.9H8a7.44 7.44 0 0 0 5.29-12.72zM8 14.12a6.12 6.12 0 0 1-3.15-.87l-.22-.13-2.34.61.62-2.28-.14-.23a6.18 6.18 0 0 1 9.6-7.65 6.12 6.12 0 0 1 1.81 4.37A6.19 6.19 0 0 1 8 14.12z" />
     </svg>
+  )
+}
+
+/**
+ * Tapa el cuadro del WhatsApp mientras carga, con un aviso de qué está pasando (sin esto se
+ * ve el fondo gris del iframe vacío). `aviso`: el tono ámbar de "servidor apagado".
+ */
+function Cargando({ titulo, texto, aviso = false }) {
+  return (
+    <div className="glass absolute inset-0 z-10 grid place-items-center rounded-2xl p-6" role="status" aria-live="polite">
+      <div className="flex max-w-md flex-col items-center gap-3 text-center">
+        <span className={cn('grid h-14 w-14 place-items-center rounded-2xl', aviso ? 'bg-amber-500/15' : 'bg-whatsapp/10')}>
+          <Spinner size={28} className={aviso ? 'border-t-amber-500' : 'border-t-whatsapp'} />
+        </span>
+        <p className="font-display text-lg font-bold text-ink">{titulo}</p>
+        <p className="text-sm text-ink-2">{texto}</p>
+      </div>
+    </div>
   )
 }
 
@@ -260,9 +288,11 @@ export default function WhatsappPage() {
           // PC servidor apagada: el mismo panel, leyendo los chats guardados en la base.
           <>
             {!listo && !error && (
-              <div className="absolute inset-0 grid place-items-center">
-                <Spinner />
-              </div>
+              <Cargando
+                titulo="El servidor de WhatsApp está apagado"
+                texto="Abriendo los chats guardados en modo lectura: vas a poder ver los mensajes y bajar los archivos. Para escribir, la PC servidor tiene que estar encendida."
+                aviso
+              />
             )}
             <iframe
               ref={iframeRef}
@@ -275,9 +305,7 @@ export default function WhatsappPage() {
         ) : (
           <>
             {(servidor === 'probando' || (!listo && !error)) && (
-              <div className="absolute inset-0 grid place-items-center">
-                <Spinner />
-              </div>
+              <Cargando titulo="Conectando con el servidor de WhatsApp…" texto="Revisando que la PC servidor esté encendida." />
             )}
             {servidor === 'panel' && (
               <iframe

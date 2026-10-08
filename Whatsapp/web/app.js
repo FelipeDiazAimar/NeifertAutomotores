@@ -2520,7 +2520,8 @@ function renderPill() {
     return
   }
   let mensaje
-  if (conexion === 'nube') mensaje = '<b>Modo lectura.</b> La PC servidor del WhatsApp está apagada: ves los chats y mensajes guardados y podés bajar los archivos que ya estaban descargados. Para escribir tiene que estar encendida; se conecta sola cuando vuelva.'
+  if (conexion === 'nube' && state.conn.errorNube) mensaje = `<b>No se pudieron leer los chats guardados.</b> ${esc(state.conn.errorNube)} Probá de nuevo en un rato o avisale a quien administra el sistema.`
+  else if (conexion === 'nube') mensaje = '<b>Modo lectura.</b> La PC servidor del WhatsApp está apagada: ves los chats y mensajes guardados y podés bajar los archivos que ya estaban descargados. Para escribir tiene que estar encendida; se conecta sola cuando vuelva.'
   else if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
   else if (conexion === 'qr') mensaje = 'La línea no está vinculada: podés ver los chats guardados, pero no enviar.'
   else mensaje = `${esc(texto)} Mientras tanto podés ver los chats guardados.`
@@ -2789,8 +2790,10 @@ async function sincronizar() {
     terminarArranque()
     if (state.view === 'connect') renderLog()
     if (state.activo) abrirChat(state.activo)
-  } catch {
-    onEstado({ ...state.conn, conexion: 'servicio' })
+  } catch (err) {
+    // Leyendo de la base (PC apagada): si falla, se dice por qué en vez de "no responde".
+    if (NUBE) onEstado({ ...state.conn, conexion: 'nube', yo: state.conn.yo || {}, errorNube: err.message })
+    else onEstado({ ...state.conn, conexion: 'servicio' })
     terminarArranque()
   }
 }
