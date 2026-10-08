@@ -10,6 +10,8 @@ import { useUiStore } from '@/store/useUiStore'
 const PANEL_URL = (import.meta.env.VITE_WHATSAPP_PANEL_URL || '').replace(/\/+$/, '')
 const PANEL_ORIGEN = PANEL_URL ? new URL(PANEL_URL).origin : ''
 const REINTENTO_MS = 15_000
+// Cuánto se espera, con el panel en "sin conexión", antes de preguntar si la PC se apagó.
+const SIN_CONEXION_MS = 5_000
 // Con la PC servidor apagada se abre una copia del panel que lee los chats guardados en la
 // base (solo lectura; ver src/server/whatsappLectura.js). Es del mismo sitio que el CRM.
 const LECTURA_URL = '/wa-lectura/index.html'
@@ -241,12 +243,25 @@ export default function WhatsappPage() {
   // conexión"): se vuelve a preguntar. Si la PC se apagó, se saca el panel (que tiene los
   // chats en memoria) y se muestra lo que corresponde: la solo lectura, o el aviso si la
   // vista sin conexión está cerrada. Así los chats no quedan a la vista con la vista oculta.
+  // Un microcorte de la conexión en vivo también se ve como "sin conexión" y el panel se
+  // reconecta solo: recargarlo ahí (como se hacía) lo dejaba en un bucle de recargas en redes
+  // inestables y se perdía quién está en cada chat. Por eso se espera un poco y se pregunta:
+  // solo si la PC de verdad no contesta se cambia de vista.
   const sinConexion = servidor === 'panel' && estado?.conexion === 'servicio'
   useEffect(() => {
     if (!sinConexion) return undefined
-    const t = setTimeout(probar, 0)
-    return () => clearTimeout(t)
-  }, [sinConexion, probar])
+    let vigente = true
+    const t = setTimeout(async () => {
+      const { responde, lectura: l } = await servidorResponde()
+      if (!vigente) return
+      tomarAjuste(l)
+      if (!responde) probar()
+    }, SIN_CONEXION_MS)
+    return () => {
+      vigente = false
+      clearTimeout(t)
+    }
+  }, [sinConexion, probar, tomarAjuste])
 
   // Caído: se muestra el WhatsApp en solo lectura y se sigue probando en segundo plano (sin
   // cerrar lo que se está leyendo). Cuando la PC servidor vuelve, se pasa al panel normal.

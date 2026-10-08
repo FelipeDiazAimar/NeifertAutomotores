@@ -105,6 +105,7 @@ describe('WhatsappPage', () => {
   })
 
   it('si el panel abierto pierde el servidor, pasa al panel de solo lectura', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
     vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
     const fetch = vi.fn(async (url) =>
       String(url).startsWith('/wa-lectura/api/servidor')
@@ -120,8 +121,27 @@ describe('WhatsappPage', () => {
     await delPanel({ tipo: 'nf-wa:listo' })
     // El panel avisa "Servidor sin conexión": el CRM vuelve a preguntar y la PC está apagada.
     await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
+    // Espera unos segundos, pregunta y la PC está apagada: pasa a solo lectura.
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
     expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
     expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+  })
+
+  it('un microcorte de la conexión en vivo no recarga el panel si el servidor sigue andando', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = servidorQue(true)
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
+    // Preguntó, el servidor anda: el mismo panel sigue ahí (no se recargó).
+    expect(fetch.mock.calls.filter(([u]) => u === '/wa-lectura/api/servidor').length).toBe(2)
+    expect(screen.getByTitle('WhatsApp de la concesionaria')).toBe(iframe)
   })
 
   it('un administrador oculta los chats sin servidor con el interruptor', async () => {

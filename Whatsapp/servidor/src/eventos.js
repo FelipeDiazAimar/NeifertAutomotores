@@ -70,9 +70,13 @@ export function agentes() {
   for (const { usuario } of clientes.values()) {
     if (usuario && !porPersona.has(usuario.id)) porPersona.set(usuario.id, { id: usuario.id, nombre: usuario.nombre, chats: [] })
   }
+  // Quien tiene un chat tomado cuenta aunque su conexión en vivo esté reconectando en este
+  // momento (un microcorte): si no, a los demás se les borraba el candado de ese chat.
   for (const v of viendo.values()) {
+    if (!v.chatId) continue
+    if (!porPersona.has(v.id)) porPersona.set(v.id, { id: v.id, nombre: v.nombre, chats: [] })
     const p = porPersona.get(v.id)
-    if (p && v.chatId && !p.chats.includes(v.chatId)) p.chats.push(v.chatId)
+    if (!p.chats.includes(v.chatId)) p.chats.push(v.chatId)
   }
   return [...porPersona.values()]
 }

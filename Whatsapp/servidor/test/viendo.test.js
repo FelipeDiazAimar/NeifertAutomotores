@@ -6,7 +6,7 @@ let actual = null
 vi.mock('../src/auth.js', () => ({ usuarioActual: () => actual, manejaLinea: (u) => !!u?.linea }))
 
 vi.useFakeTimers()
-const { marcarViendo, ocupanteDe } = await import('../src/eventos.js')
+const { agentes, marcarViendo, ocupanteDe } = await import('../src/eventos.js')
 afterAll(() => vi.useRealTimers())
 
 const ANA = { id: 'u-ana', nombre: 'Ana Pérez', linea: true }
@@ -73,5 +73,17 @@ describe('un chat, una persona', () => {
       como(LU, () => marcarViendo('pl1', CHAT))
     }
     expect(ocupanteDe(CHAT, VICO.id)).toEqual({ id: LU.id, nombre: 'Lu' })
+  })
+
+  it('el candado se ve para todos, sin importar el rol ni si la conexión en vivo está reconectando', () => {
+    const ADMIN = { id: 'u-admin2', nombre: 'Admin', linea: true }
+    const BRUNO = { id: 'u-bruno', nombre: 'Bruno' }
+    const OTRO_CHAT = '5493406333333@s.whatsapp.net'
+    como(ADMIN, () => marcarViendo('padm', OTRO_CHAT))
+    // Nadie tiene la conexión en vivo abierta (en el test no hay ninguna): igual figura.
+    expect(agentes().find((a) => a.id === ADMIN.id)?.chats).toContain(OTRO_CHAT)
+    expect(() => como(BRUNO, () => marcarViendo('pbru', OTRO_CHAT))).toThrow(/Admin está atendiendo/)
+    como(ADMIN, () => marcarViendo('padm', null))
+    expect(agentes().find((a) => a.id === ADMIN.id)).toBeUndefined()
   })
 })
