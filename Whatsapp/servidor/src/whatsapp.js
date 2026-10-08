@@ -1824,15 +1824,79 @@ export async function cambiarMarca(chatId, accion, valor) {
     throw new Error('Acción desconocida')
   }
 
-  try {
-    await sock.chatModify(mod, jidMarcas(chatId))
-  } catch (err) {
-    volverAtras()
-    throw new Error(`WhatsApp no aceptó el cambio: ${err.message}`, { cause: err })
-  }
-  const como = !indiceWa.has(chatId) ? 'id sin confirmar por WhatsApp' : jidMarcas(chatId).endsWith('@lid') ? 'por LID' : 'por teléfono o grupo'
-  log('info', 'Cambio enviado al celular', `${accion}${valor === false ? ' (deshacer)' : ''} · ${nombreDe(chatId)} · ${como}`)
+  // El cambio ya se ve en el panel; hacia WhatsApp sale por la cola (ver encolarMarca).
+  encolarMarca(`${chatId}|${accion}`, {
+    chatId,
+    mod,
+    descripcion: `${accion}${valor === false ? ' (deshacer)' : ''}`,
+    alFallar: volverAtras,
+  })
   return vistaChat(buscarChat(chatId))
+}
+
+/* ---------------- Cola de marcas hacia WhatsApp ---------------- */
+
+/*
+ * Archivar, fijar, silenciar o marcar leído/no leído se manda al celular con chatModify.
+ * Si se mandan muchos seguidos (archivar varios chats de corrido), WhatsApp corta con
+ * "rate-overlimit" y rechaza los siguientes por un rato. Por eso salen de a uno, con una
+ * pausa, y si igual corta se espera y se reintenta. El panel no espera: el cambio se ve
+ * al instante y solo se vuelve atrás si WhatsApp lo rechaza del todo.
+ */
+const colaMarcas = new Map() // llave (chat|acción) → tarea; si llega otra igual, gana la última
+let marcandoCola = false
+const PAUSA_MARCAS_MS = 1200
+const ESPERAS_LIMITE_MS = [10_000, 30_000, 60_000, 120_000]
+const esLimite = (err) => /rate-overlimit|rate.?limit|429/i.test(`${err?.message || ''} ${err?.output?.statusCode || ''} ${err?.data || ''}`)
+
+function encolarMarca(llave, tarea) {
+  colaMarcas.delete(llave)
+  colaMarcas.set(llave, tarea)
+  trabajarMarcas()
+}
+
+async function trabajarMarcas() {
+  if (marcandoCola) return
+  marcandoCola = true
+  try {
+    while (colaMarcas.size) {
+      const [llave, tarea] = colaMarcas.entries().next().value
+      colaMarcas.delete(llave)
+      await enviarMarca(tarea)
+      await new Promise((r) => setTimeout(r, PAUSA_MARCAS_MS))
+    }
+  } finally {
+    marcandoCola = false
+  }
+}
+
+async function enviarMarca({ chatId, mod, descripcion, alFallar }) {
+  for (let intento = 0; ; intento++) {
+    try {
+      if (!sock || conexion !== 'conectado') throw new Error('WhatsApp no está conectado')
+      await sock.chatModify(mod, jidMarcas(chatId))
+      if (descripcion) {
+        const como = !indiceWa.has(chatId) ? 'id sin confirmar por WhatsApp' : jidMarcas(chatId).endsWith('@lid') ? 'por LID' : 'por teléfono o grupo'
+        log('info', 'Cambio enviado al celular', `${descripcion} · ${nombreDe(chatId)} · ${como}`)
+      }
+      return
+    } catch (err) {
+      if (esLimite(err) && intento < ESPERAS_LIMITE_MS.length) {
+        const espera = ESPERAS_LIMITE_MS[intento]
+        if (intento === 0) log('aviso', 'WhatsApp pidió ir más despacio', `Los cambios de chats (archivar, fijar…) siguen solos en ${espera / 1000} s`)
+        await new Promise((r) => setTimeout(r, espera))
+        continue
+      }
+      // No hubo caso: se vuelve atrás acá también y se avisa al panel.
+      log('aviso', 'WhatsApp no aceptó un cambio de chat', `${descripcion || 'leído'} · ${nombreDe(chatId)} · ${err.message}`)
+      if (alFallar) {
+        alFallar()
+        const chat = buscarChat(chatId)
+        if (chat) emitir('chat', vistaChat(chat))
+      }
+      return
+    }
+  }
 }
 
 /* ---------------- Multimedia ---------------- */
@@ -2430,9 +2494,9 @@ export async function confirmarLectura(chatId) {
   marcarLeido(chatId)
   if (!sock || conexion !== 'conectado') return
   if (teniaSinLeer) {
-    sock.chatModify({ markRead: true, lastMessages: ultimosMensajes(chatId) }, jidMarcas(chatId)).catch((err) => {
-      log('aviso', 'No se pudo marcar el chat como leído en el celular', `${nombreDe(chatId)} · ${err.message}`)
-    })
+    // Por la misma cola que archivar/fijar: abrir varios chats seguidos no tiene que hacer
+    // que WhatsApp corte con "rate-overlimit".
+    encolarMarca(`${chatId}|leido`, { chatId, mod: { markRead: true, lastMessages: ultimosMensajes(chatId) } })
   }
   if (!config().confirmarLectura) return
   const recibidos = listarMensajes(chatId).filter((m) => !m.deMi && m.tipo !== 'desconocido').slice(-20)

@@ -59,8 +59,32 @@ describe('WhatsappPage', () => {
     montar()
     expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
     expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
-    // Mientras carga hay un aviso, no un cuadro gris.
-    expect(screen.getByText(/el servidor de whatsapp está apagado/i)).toBeInTheDocument()
+    // Un solo cargando: el del CRM se va cuando aparece el panel (que muestra el suyo, igual).
+    expect(screen.queryByText(/verificando la línea/i)).toBeNull()
+  })
+
+  it('mientras pregunta por el servidor muestra "Verificando la línea…"', async () => {
+    let contestar
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((r) => (contestar = r))))
+    montar()
+    expect(await screen.findByText(/verificando la línea/i)).toBeInTheDocument()
+    await act(async () => contestar({ json: async () => ({ responde: false }) }))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    expect(screen.queryByText(/verificando la línea/i)).toBeNull()
+  })
+
+  it('con los chats ocultos (vista sin conexión cerrada) no abre ningún chat y borra lo guardado', async () => {
+    const borrar = vi.fn()
+    vi.stubGlobal('indexedDB', { deleteDatabase: borrar })
+    vi.stubGlobal('fetch', vi.fn(async (url) =>
+      String(url).startsWith('/wa-lectura/api/servidor')
+        ? { json: async () => ({ responde: false, lectura: { habilitada: false, borradoEn: Date.now(), motivo: 'apagado' } }) }
+        : {},
+    ))
+    montar()
+    expect(await screen.findByText(/al apagarlo se cerró la vista sin conexión/i)).toBeInTheDocument()
+    expect(screen.queryByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeNull()
+    expect(borrar).toHaveBeenCalledWith('nf-wa-lectura')
   })
 
   it('"Reintentar" vuelve a probar y, si la PC servidor ya responde, carga el panel normal', async () => {

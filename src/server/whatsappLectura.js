@@ -112,6 +112,58 @@ async function lineaActual(env) {
   return rows[0].linea
 }
 
+/* ---------------- Ajuste: ¿se puede usar la vista sin conexión? ---------------- */
+
+/*
+ * Guardado en wa.estado con la clave 'lectura' (el servidor de la PC no la toca):
+ *   { habilitada, borradoEn, motivo, por, ts }
+ * - habilitada: si es false, la vista sin conexión no entrega chats a nadie.
+ * - borradoEn: cuándo se pidió borrar los chats guardados en los navegadores. Cada
+ *   navegador que tenga una copia más vieja la borra al entrar.
+ * - motivo: 'admin' (lo cerró un administrador desde el CRM: queda así hasta que lo
+ *   reactive) o 'apagado' (se eligió al apagar el servidor: se reabre al volver a encenderlo).
+ */
+const LECTURA_POR_DEFECTO = { habilitada: true, borradoEn: 0, motivo: null }
+let ajusteCache = { ts: 0, linea: null, valor: null }
+async function ajusteLectura(env, linea, { fresco = false } = {}) {
+  if (!fresco && ajusteCache.linea === linea && Date.now() - ajusteCache.ts < 10_000) return ajusteCache.valor
+  const { rows } = await base(env).query("select valor from wa.estado where linea = $1 and clave = 'lectura'", [linea])
+  const valor = { ...LECTURA_POR_DEFECTO, ...(rows[0]?.valor || {}) }
+  ajusteCache = { ts: Date.now(), linea, valor }
+  return valor
+}
+
+async function guardarAjusteLectura(env, linea, valor) {
+  await base(env).query(
+    `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'lectura', $2::jsonb, now())
+     on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,
+    [linea, JSON.stringify(valor)],
+  )
+  ajusteCache = { ts: Date.now(), linea, valor }
+}
+
+/**
+ * POST ajustes { habilitada?, borrar? } con el token del CRM (Authorization: Bearer). Solo
+ * los que manejan la línea (admin y dueño, como en el servidor).
+ */
+async function cambiarAjusteLectura(env, req) {
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '')
+  const usuario = await usuarioDelCrm(env, token)
+  const rolesLinea = lista(env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
+  if (!rolesLinea.includes(usuario.rol)) throw fallo(403, 'Solo un administrador puede cambiar la vista sin conexión.')
+  const linea = await lineaActual(env)
+  const actual = await ajusteLectura(env, linea, { fresco: true })
+  const body = req.body || {}
+  const nuevo = { ...actual, por: usuario.nombre, ts: Date.now() }
+  if (typeof body.habilitada === 'boolean') {
+    nuevo.habilitada = body.habilitada
+    nuevo.motivo = body.habilitada ? null : 'admin'
+  }
+  if (body.borrar) nuevo.borradoEn = Date.now()
+  await guardarAjusteLectura(env, linea, nuevo)
+  return { lectura: nuevo }
+}
+
 /* ---------------- Sesión ---------------- */
 
 const secreto = (env) => crypto.createHash('sha256').update(`nf-wa-lectura:${env.WA_LECTURA_SECRETO || env.SUPABASE_SERVICE_ROLE_KEY || ''}`).digest()
@@ -152,7 +204,13 @@ function puedeEntrar(env, rol) {
 }
 
 async function iniciarSesion(env, req, res) {
-  const token = String(req.body?.token || '')
+  const usuario = await usuarioDelCrm(env, String(req.body?.token || ''))
+  ponerCookie(req, res, crearCookie(env, usuario), SESION_HORAS * 3600)
+  return { usuario, login: true }
+}
+
+/** El usuario del CRM dueño del token, si tiene acceso al WhatsApp. */
+async function usuarioDelCrm(env, token) {
   if (!token) throw fallo(401, 'Falta el token del CRM', { login: true })
   const url = env.VITE_SUPABASE_URL
   if (!url || !env.VITE_SUPABASE_ANON_KEY || !env.SUPABASE_SERVICE_ROLE_KEY) throw fallo(501, 'Faltan las credenciales de Supabase del CRM')
@@ -168,9 +226,7 @@ async function iniciarSesion(env, req, res) {
   if (!fila?.activo || !puedeEntrar(env, fila.rol)) {
     throw fallo(403, 'Tu usuario del CRM no tiene acceso al WhatsApp. Pedíselo a un administrador.', { login: true })
   }
-  const usuario = { id: fila.id, nombre: fila.nombre || fila.usuario || 'Sin nombre', rol: fila.rol, escribir: false, linea: false }
-  ponerCookie(req, res, crearCookie(env, usuario), SESION_HORAS * 3600)
-  return { usuario, login: true }
+  return { id: fila.id, nombre: fila.nombre || fila.usuario || 'Sin nombre', rol: fila.rol, escribir: false, linea: false }
 }
 
 /* ---------------- Lecturas ---------------- */
@@ -255,25 +311,31 @@ function mensajeDeFila(f) {
   return m
 }
 
-/** Una página de mensajes, igual que paginaDeMensajes() del servidor. */
-async function paginaDeMensajes(env, linea, jid, { limite, antes }) {
+/**
+ * Una tanda de mensajes, igual que paginaDeMensajes() del servidor: los últimos `limite`, o
+ * los anteriores al mensaje `antes`. Con `despuesTs` (segundos) trae los de esa hora en
+ * adelante, de más viejo a más nuevo: es lo que usa el panel para pedir solo lo nuevo de lo
+ * que ya tiene guardado en el navegador. Una sola consulta por tanda (sin contar el total).
+ */
+async function paginaDeMensajes(env, linea, jid, { limite, antes, despuesTs }) {
   const n = Math.min(Math.max(Number(limite) || 400, 1), 2000)
   const db = base(env)
-  let corte = null
-  if (antes) {
-    const { rows } = await db.query('select ts from wa.mensajes where linea = $1 and chat_jid = $2 and id = $3', [linea, jid, antes])
-    corte = rows[0] ? { ts: rows[0].ts, id: antes } : null
+  if (despuesTs !== undefined && despuesTs !== null && despuesTs !== '') {
+    const { rows } = await db.query(
+      `select ${COLUMNAS} from wa.mensajes where linea = $1 and chat_jid = $2 and ts >= to_timestamp($3) order by ts asc, id asc limit $4`,
+      [linea, jid, Number(despuesTs) || 0, n + 1],
+    )
+    return { mensajes: rows.slice(0, n).map(mensajeDeFila), hayPosteriores: rows.length > n }
   }
-  const filtro = corte ? 'and (ts, id) < ($4, $5)' : ''
-  const [pagina, total] = await Promise.all([
-    db.query(
-      `select ${COLUMNAS} from wa.mensajes where linea = $1 and chat_jid = $2 ${filtro} order by ts desc, id desc limit $3`,
-      corte ? [linea, jid, n + 1, corte.ts, corte.id] : [linea, jid, n + 1],
-    ),
-    db.query('select count(*)::int as n from wa.mensajes where linea = $1 and chat_jid = $2', [linea, jid]),
-  ])
+  const filtro = antes
+    ? 'and (ts, id) < (select ts, id from wa.mensajes where linea = $1 and chat_jid = $2 and id = $4)'
+    : ''
+  const pagina = await db.query(
+    `select ${COLUMNAS} from wa.mensajes where linea = $1 and chat_jid = $2 ${filtro} order by ts desc, id desc limit $3`,
+    antes ? [linea, jid, n + 1, antes] : [linea, jid, n + 1],
+  )
   const filas = pagina.rows.slice(0, n).reverse()
-  return { mensajes: filas.map(mensajeDeFila), hayAnteriores: pagina.rows.length > n, total: total.rows[0]?.n || 0 }
+  return { mensajes: filas.map(mensajeDeFila), hayAnteriores: pagina.rows.length > n }
 }
 
 async function unMensaje(env, linea, jid, id) {
@@ -296,7 +358,8 @@ async function buscar(env, linea, { q, chat, desde, limite }) {
     chat ? [...parametros, chat] : parametros,
   )
   const resultados = rows.slice(0, n).map((f) => ({ chatId: f.chat_jid, ...mensajeDeFila(f) }))
-  return { resultados, truncado: rows.length > n, desde: inicio }
+  // Sin contar todos: alcanza con saber si hay más (el panel muestra "Ver más").
+  return { resultados, truncado: rows.length > n, desde: inicio, total: inicio + resultados.length + (rows.length > n ? 1 : 0) }
 }
 
 /** Enlace temporal de R2 para un archivo de la línea (como servir() del servidor). */
@@ -312,7 +375,9 @@ async function enlaceR2(env, claveReal, { nombre, descargar, mime } = {}) {
       ...(disposicion ? { ResponseContentDisposition: disposicion } : {}),
       ...(mime ? { ResponseContentType: mime } : {}),
     }),
-    { expiresIn: 3600 },
+    // Firmado con la hora en punto: durante esa hora el enlace es siempre el mismo y el
+    // navegador reusa la foto o el archivo en vez de bajarlo de nuevo en cada refresco.
+    { expiresIn: 2 * 3600, signingDate: new Date(Math.floor(Date.now() / 3600e3) * 3600e3) },
   )
 }
 
@@ -355,7 +420,16 @@ async function atender(env, req, res, ruta) {
   const q = req.query || {}
 
   // Sin sesión: solo dice si la PC servidor contesta (lo usa el CRM para elegir qué abrir).
-  if (partes[0] === 'servidor') return servidorAnda(env)
+  if (partes[0] === 'servidor') {
+    // Junto con si la vista sin conexión está abierta y cuándo se pidió borrar lo guardado.
+    const [estado, lectura] = await Promise.all([
+      servidorAnda(env),
+      lineaActual(env).then((l) => ajusteLectura(env, l)).catch(() => null),
+    ])
+    return { ...estado, lectura: lectura && { habilitada: lectura.habilitada, borradoEn: lectura.borradoEn, motivo: lectura.motivo } }
+  }
+  // Cambiar el ajuste: con el token del CRM (no la cookie), solo administradores.
+  if (partes[0] === 'ajustes' && metodo === 'POST') return cambiarAjusteLectura(env, req)
   if (partes[0] === 'publico') {
     const host = req.headers['x-forwarded-host'] || req.headers.host
     // En Vercel llega x-forwarded-proto; en desarrollo (localhost) es http.
@@ -378,6 +452,12 @@ async function atender(env, req, res, ruta) {
   if (metodo !== 'GET') throw fallo(423, SOLO_LECTURA)
 
   const linea = await lineaActual(env)
+  const lectura = await ajusteLectura(env, linea)
+  if (!lectura.habilitada) {
+    throw fallo(403, 'Un administrador cerró la vista sin conexión: los chats se ven solo con la PC servidor encendida.', {
+      lecturaDesactivada: true,
+    })
+  }
   const [seccion, jid, sub, id, extra] = partes
   if (seccion === 'estado') {
     return {
@@ -387,13 +467,15 @@ async function atender(env, req, res, ruta) {
       numeroLinea: `+${linea}`,
       yo: { id: `${linea}@s.whatsapp.net`, telefono: `+${linea}`, nombre: null },
       config: { descargarMedia: false, confirmarLectura: false, crm: false },
+      // Si se pidió borrar lo guardado después de que este navegador lo guardó, lo borra.
+      lecturaBorradoEn: lectura.borradoEn || 0,
     }
   }
   if (seccion === 'agentes' || seccion === 'log') return []
   if (seccion === 'buscar') return buscar(env, linea, q)
   if (seccion === 'chats' && !jid) return listarChats(env, linea)
   if (seccion === 'chats' && chatValido(jid)) {
-    if (sub === 'mensajes' && !id) return paginaDeMensajes(env, linea, jid, { limite: q.limite, antes: q.antes || null })
+    if (sub === 'mensajes' && !id) return paginaDeMensajes(env, linea, jid, { limite: q.limite, antes: q.antes || null, despuesTs: q.despuesTs })
     if (sub === 'mensajes' && id) return unMensaje(env, linea, jid, id)
     if (sub === 'media' && id && extra === 'miniatura') {
       // La miniatura de 480 px que armó el servidor al bajar la foto o el video.

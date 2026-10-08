@@ -399,7 +399,8 @@ function arrancarTunel() {
 }
 
 /** Apaga el servidor ordenadamente (guarda lo pendiente); a los 12 s lo corta. */
-function apagarServidor() {
+/** `cerrarLectura`: además, oculta los chats en la vista sin conexión del CRM. */
+function apagarServidor({ cerrarLectura = false } = {}) {
   return new Promise((resolve) => {
     if (!servidor) return resolve()
     const s = servidor
@@ -414,7 +415,7 @@ function apagarServidor() {
       resolve()
     })
     try {
-      s.send({ tipo: 'cerrar' })
+      s.send({ tipo: 'cerrar', cerrarLectura })
     } catch {
       s.kill()
     }
@@ -669,7 +670,7 @@ function mostrarDialogo(opciones) {
     dialogosSueltos.set(id, {
       opciones,
       responder: (acepta) => {
-        respuesta = !!acepta
+        respuesta = acepta === 'alternativa' ? acepta : !!acepta
         win.close()
       },
     })
@@ -814,15 +815,18 @@ async function restaurarSesion() {
 }
 
 async function confirmarSalida() {
-  const acepta = await mostrarDialogo({
+  const respuesta = await mostrarDialogo({
     tipo: 'aviso',
     titulo: 'Apagar el servidor',
-    mensaje: 'Si apagás el servidor, nadie va a poder usar el WhatsApp desde el CRM hasta que se vuelva a abrir la app.\n\nLos mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.',
+    mensaje:
+      'Si apagás el servidor, nadie va a poder escribir por WhatsApp desde el CRM hasta que se vuelva a abrir la app. Los mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.\n\nMientras tanto, el CRM muestra los chats guardados en solo lectura. Si la PC va a quedar apagada varios días (un fin de semana, por ejemplo), podés ocultarlos: nadie los ve hasta que el servidor vuelva, y se borran de las PC donde estaban guardados.',
     aceptar: 'Apagar',
     cancelar: 'Cancelar',
+    alternativa: 'Apagar y ocultar los chats hasta que vuelva',
     foco: 'cancelar',
   })
-  if (acepta) salir()
+  if (respuesta === 'alternativa') salir({ cerrarLectura: true })
+  else if (respuesta) salir()
 }
 
 /**
@@ -845,10 +849,10 @@ async function cerrarHuerfano() {
   } catch {}
 }
 
-async function salir() {
+async function salir({ cerrarLectura = false } = {}) {
   saliendo = true
-  registrar('Apagando la app')
-  await apagarServidor()
+  registrar(cerrarLectura ? 'Apagando la app y ocultando los chats de la vista sin conexión' : 'Apagando la app')
+  await apagarServidor({ cerrarLectura })
   apagarTunel()
   app.exit(0)
 }
@@ -945,7 +949,7 @@ ipcMain.on('apagar-y-salir', confirmarSalida)
 ipcMain.on('dialogo-en-ventana', (e, id, acepta) => {
   const resolver = dialogosEnVentana.get(id)
   dialogosEnVentana.delete(id)
-  resolver?.(!!acepta)
+  resolver?.(acepta === 'alternativa' ? acepta : !!acepta)
 })
 ipcMain.handle('dialogo-opciones', (e) => dialogosSueltos.get(e.sender.id)?.opciones || {})
 ipcMain.on('dialogo-listo', (e, alto) => {

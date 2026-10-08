@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { RefreshCw } from 'lucide-react'
-import Spinner from '@/components/common/Spinner'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
+import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
+import { aplicarAjusteLectura } from '@/crm/lib/whatsappLectura'
 import { useUiStore } from '@/store/useUiStore'
 
 // Dirección del servidor de WhatsApp.
@@ -29,20 +30,22 @@ const PUNTO = { '': 'bg-whatsapp', info: 'bg-sky-500', wait: 'bg-amber-500', off
  * aunque la PC esté apagada Cloudflare contesta con su página de error, y desde acá no se
  * puede distinguir. Si esa función no contesta (un deploy viejo, por ejemplo), se pregunta
  * directo como antes: alcanza con que llegue algo.
+ * Devuelve { responde, lectura }: lectura es el ajuste de la vista sin conexión
+ * ({ habilitada, borradoEn, motivo }) o null si no se sabe.
  */
 async function servidorResponde() {
   try {
     const r = await fetch('/wa-lectura/api/servidor', { cache: 'no-store', signal: AbortSignal.timeout(10000) })
     const datos = await r.json()
-    if (typeof datos?.responde === 'boolean') return datos.responde
+    if (typeof datos?.responde === 'boolean') return { responde: datos.responde, lectura: datos.lectura || null }
   } catch {
     // Sigue con la pregunta directa.
   }
   try {
     await fetch(`${PANEL_URL}/api/salud`, { mode: 'no-cors', cache: 'no-store', signal: AbortSignal.timeout(6000) })
-    return true
+    return { responde: true, lectura: null }
   } catch {
-    return false
+    return { responde: false, lectura: null }
   }
 }
 
@@ -57,19 +60,110 @@ function WhatsappIcono({ className }) {
 }
 
 /**
- * Tapa el cuadro del WhatsApp mientras carga, con un aviso de qué está pasando (sin esto se
- * ve el fondo gris del iframe vacío). `aviso`: el tono ámbar de "servidor apagado".
+ * "Verificando la línea…" mientras se pregunta si la PC servidor está encendida. Es igual
+ * al del panel (Whatsapp/web, #viewCargando): cuando el panel aparece sigue el suyo, así
+ * se ve un solo cargando de punta a punta.
  */
-function Cargando({ titulo, texto, aviso = false }) {
+function VerificandoLinea() {
   return (
-    <div className="glass absolute inset-0 z-10 grid place-items-center rounded-2xl p-6" role="status" aria-live="polite">
-      <div className="flex max-w-md flex-col items-center gap-3 text-center">
-        <span className={cn('grid h-14 w-14 place-items-center rounded-2xl', aviso ? 'bg-amber-500/15' : 'bg-whatsapp/10')}>
-          <Spinner size={28} className={aviso ? 'border-t-amber-500' : 'border-t-whatsapp'} />
+    <div className="absolute inset-0 z-10 grid place-items-center p-6" role="status" aria-live="polite">
+      <div className="flex flex-col items-center gap-1.5 text-center">
+        <span className="relative grid h-16 w-16 place-items-center">
+          <span className="absolute inset-0 animate-spin rounded-full border-[3px] border-ink-3/20 border-t-whatsapp" aria-hidden="true" />
+          <WhatsappIcono className="h-[30px] w-[30px]" />
         </span>
-        <p className="font-display text-lg font-bold text-ink">{titulo}</p>
-        <p className="text-sm text-ink-2">{texto}</p>
+        <p className="mt-2 text-[15px] font-semibold text-ink">Verificando la línea…</p>
+        <p className="text-[13px] text-ink-3">Un momento: se revisa que el WhatsApp esté vinculado.</p>
       </div>
+    </div>
+  )
+}
+
+/**
+ * Para administradores (admin y dueño): abrir o cerrar la vista sin conexión (los chats
+ * leídos de la base con la PC servidor apagada) y borrar los chats que esa vista dejó
+ * guardados en los navegadores. Cada navegador los borra la próxima vez que entra.
+ */
+function ControlLectura({ lectura, onCambio }) {
+  const { rol } = useCrmPerfil()
+  const [abierto, setAbierto] = useState(false)
+  const [ocupado, setOcupado] = useState(false)
+  const [aviso, setAviso] = useState('')
+  if (!lectura || !['admin', 'dueno'].includes(rol)) return null
+
+  async function cambiar(cuerpo, listo) {
+    setOcupado(true)
+    setAviso('')
+    try {
+      const token = await tokenActual()
+      const r = await fetch('/wa-lectura/api/ajustes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify(cuerpo),
+      })
+      const datos = await r.json().catch(() => ({}))
+      if (!r.ok) throw new Error(datos.error || `Error ${r.status}`)
+      onCambio(datos.lectura)
+      setAviso(listo)
+    } catch (err) {
+      setAviso(`No se pudo: ${err.message}`)
+    } finally {
+      setOcupado(false)
+    }
+  }
+
+  const habilitada = lectura.habilitada !== false
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={() => setAbierto((v) => !v)}
+        aria-expanded={abierto}
+        className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-2 hover:text-ink"
+        title="Ver los chats con la PC servidor apagada"
+      >
+        <span className={cn('h-2 w-2 rounded-full', habilitada ? 'bg-whatsapp' : 'bg-neifert')} aria-hidden="true" />
+        Vista sin conexión: {habilitada ? 'abierta' : 'cerrada'}
+      </button>
+      {abierto && (
+        <div className="glass absolute left-0 top-full z-30 mt-2 w-80 rounded-2xl p-4 text-sm shadow-xl" role="dialog" aria-label="Vista sin conexión">
+          <p className="font-semibold text-ink">Vista sin conexión</p>
+          <p className="mt-1 text-xs text-ink-2">
+            Con la PC servidor apagada, el CRM muestra los chats guardados (solo lectura) y los deja guardados en el navegador
+            para que carguen rápido.
+          </p>
+          <div className="mt-3 flex flex-col gap-2">
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() =>
+                cambiar(
+                  habilitada ? { habilitada: false, borrar: true } : { habilitada: true },
+                  habilitada ? 'Cerrada: nadie ve los chats sin el servidor y se borran de las PC.' : 'Abierta.',
+                )
+              }
+              className={cn(
+                'rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50',
+                habilitada ? 'bg-neifert text-white hover:brightness-110' : 'bg-whatsapp text-white hover:brightness-110',
+              )}
+            >
+              {habilitada ? 'Cerrar la vista sin conexión' : 'Abrir la vista sin conexión'}
+            </button>
+            <button
+              type="button"
+              disabled={ocupado}
+              onClick={() => cambiar({ borrar: true }, 'Listo: cada PC borra sus chats guardados la próxima vez que entra.')}
+              className="rounded-xl border border-ink-3/30 px-3 py-2 text-sm font-semibold text-ink hover:border-neifert hover:text-neifert disabled:opacity-50"
+            >
+              Borrar los chats guardados en todas las PC
+            </button>
+          </div>
+          {aviso && <p className="mt-2 text-xs text-ink-2">{aviso}</p>}
+          {!habilitada && lectura.motivo === 'apagado' && (
+            <p className="mt-2 text-xs text-ink-3">Se cerró al apagar el servidor: se abre sola cuando vuelva a encenderse.</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
@@ -96,6 +190,14 @@ export default function WhatsappPage() {
   const [listo, setListo] = useState(false)
   const [error, setError] = useState('')
   const [estado, setEstado] = useState(null) // lo que avisa el panel: conexión, teléfono, vista…
+  const [lectura, setLectura] = useState(null) // ajuste de la vista sin conexión
+  // Cada respuesta trae el ajuste: si la vista sin conexión está cerrada, o un administrador
+  // pidió borrar lo guardado, este navegador lo borra.
+  const tomarAjuste = useCallback((l) => {
+    if (!l) return
+    setLectura(l)
+    aplicarAjusteLectura(l)
+  }, [])
 
   // Cada intento (al entrar, con "Reintentar" o solo cada 15 s) pregunta si el servidor llega.
   const [intento, setIntento] = useState(0)
@@ -109,13 +211,15 @@ export default function WhatsappPage() {
   useEffect(() => {
     if (!PANEL_URL) return undefined
     let vigente = true
-    servidorResponde().then((ok) => {
-      if (vigente) setServidor(ok ? 'panel' : 'caido')
+    servidorResponde().then(({ responde, lectura: l }) => {
+      if (!vigente) return
+      tomarAjuste(l)
+      setServidor(responde ? 'panel' : 'caido')
     })
     return () => {
       vigente = false
     }
-  }, [intento])
+  }, [intento, tomarAjuste])
 
   // Caído: se muestra el WhatsApp en solo lectura y se sigue probando en segundo plano (sin
   // cerrar lo que se está leyendo). Cuando la PC servidor vuelve, se pasa al panel normal.
@@ -123,17 +227,22 @@ export default function WhatsappPage() {
     if (servidor !== 'caido') return undefined
     let vigente = true
     const t = setInterval(async () => {
-      if ((await servidorResponde()) && vigente) probar()
+      const { responde, lectura: l } = await servidorResponde()
+      if (!vigente) return
+      tomarAjuste(l)
+      if (responde) probar()
     }, REINTENTO_MS)
     return () => {
       vigente = false
       clearInterval(t)
     }
-  }, [servidor, probar])
+  }, [servidor, probar, tomarAjuste])
 
   // A qué iframe se le habla: al panel de la PC servidor o a la copia de solo lectura.
   // (probar() ya deja listo y estado en cero cada vez que se cambia de uno a otro).
-  const enLectura = servidor === 'caido'
+  // Con la vista sin conexión cerrada no se abre: queda el aviso (ver más abajo).
+  const lecturaCerrada = servidor === 'caido' && lectura?.habilitada === false
+  const enLectura = servidor === 'caido' && !lecturaCerrada
   const origen = enLectura ? window.location.origin : PANEL_ORIGEN
   const origenRef = useRef(origen)
   // Antes de que el iframe nuevo pueda mandar nada: si no, su primer mensaje se descarta.
@@ -206,6 +315,7 @@ export default function WhatsappPage() {
           <WhatsappIcono className="h-6 w-6" />
           WhatsApp
         </h1>
+        <ControlLectura lectura={lectura} onCambio={tomarAjuste} />
 
         {enPanel && enLectura && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
@@ -284,29 +394,37 @@ export default function WhatsappPage() {
       )}
 
       <div className="relative min-h-0 flex-1">
-        {servidor === 'caido' ? (
+        {lecturaCerrada ? (
+          // PC servidor apagada y vista sin conexión cerrada: no se muestra ningún chat.
+          <div className="glass grid h-full place-items-center rounded-2xl p-6">
+            <div className="max-w-md text-center">
+              <p className="font-display text-lg font-bold text-ink">El servidor de WhatsApp está apagado</p>
+              <p className="mt-2 text-sm text-ink-2">
+                {lectura?.motivo === 'apagado'
+                  ? 'Al apagarlo se cerró la vista sin conexión: los chats se ven cuando la PC servidor vuelva a estar encendida.'
+                  : 'Un administrador cerró la vista sin conexión: los chats se ven solo con la PC servidor encendida.'}
+              </p>
+              <button
+                type="button"
+                onClick={probar}
+                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+              >
+                Reintentar ahora
+              </button>
+            </div>
+          </div>
+        ) : servidor === 'caido' ? (
           // PC servidor apagada: el mismo panel, leyendo los chats guardados en la base.
-          <>
-            {!listo && !error && (
-              <Cargando
-                titulo="El servidor de WhatsApp está apagado"
-                texto="Abriendo los chats guardados en modo lectura: vas a poder ver los mensajes y bajar los archivos. Para escribir, la PC servidor tiene que estar encendida."
-                aviso
-              />
-            )}
-            <iframe
-              ref={iframeRef}
-              src={LECTURA_URL}
-              title="WhatsApp de la concesionaria (solo lectura)"
-              allow="clipboard-write"
-              className="h-full w-full border-0 bg-transparent"
-            />
-          </>
+          <iframe
+            ref={iframeRef}
+            src={LECTURA_URL}
+            title="WhatsApp de la concesionaria (solo lectura)"
+            allow="clipboard-write"
+            className="h-full w-full border-0 bg-transparent"
+          />
         ) : (
           <>
-            {(servidor === 'probando' || (!listo && !error)) && (
-              <Cargando titulo="Conectando con el servidor de WhatsApp…" texto="Revisando que la PC servidor esté encendida." />
-            )}
+            {servidor === 'probando' && <VerificandoLinea />}
             {servidor === 'panel' && (
               <iframe
                 ref={iframeRef}

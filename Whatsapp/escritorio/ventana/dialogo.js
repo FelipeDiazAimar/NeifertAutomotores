@@ -20,11 +20,12 @@
 
   /**
    * Arma la tarjeta del diálogo. `opciones`: { tipo: info|aviso|error|ok, titulo, mensaje,
-   * detalle, aceptar, cancelar (sin cancelar es un aviso con un solo botón), foco: aceptar|cancelar }.
-   * `responder(true|false)` se llama con el botón elegido (Esc = cancelar).
+   * detalle, aceptar, cancelar (sin cancelar es un aviso con un solo botón), alternativa (un
+   * tercer botón, a lo ancho, arriba de los otros), foco: aceptar|cancelar }.
+   * `responder(true|false|'alternativa')` se llama con el botón elegido (Esc = cancelar).
    */
   function armar(opciones, responder) {
-    const { tipo = 'info', titulo = '', mensaje = '', detalle = '', aceptar = 'Aceptar', cancelar = null, foco = 'aceptar' } = opciones || {}
+    const { tipo = 'info', titulo = '', mensaje = '', detalle = '', aceptar = 'Aceptar', cancelar = null, alternativa = null, foco = 'aceptar' } = opciones || {}
     const tarjeta = crear('div', 'dialogo')
     tarjeta.setAttribute('role', cancelar ? 'alertdialog' : 'dialog')
     tarjeta.setAttribute('aria-modal', 'true')
@@ -38,6 +39,15 @@
     cabeza.append(icono, textos)
     tarjeta.append(cabeza)
     if (detalle) tarjeta.append(crear('div', 'dialogo-detalle', detalle))
+
+    if (alternativa) {
+      const fila = crear('div', 'acciones dialogo-alternativa')
+      const btn = crear('button', 'btn peligro', alternativa)
+      btn.type = 'button'
+      btn.addEventListener('click', () => responder('alternativa'))
+      fila.append(btn)
+      tarjeta.append(fila)
+    }
 
     const acciones = crear('div', 'acciones')
     const btnAceptar = crear('button', 'btn primario', aceptar)
@@ -60,7 +70,7 @@
       }
       // El foco no se escapa del diálogo con Tab.
       if (e.key === 'Tab') {
-        const botones = [...acciones.querySelectorAll('button')]
+        const botones = [...tarjeta.querySelectorAll('button')]
         const i = botones.indexOf(document.activeElement)
         e.preventDefault()
         botones[(i + (e.shiftKey ? -1 : 1) + botones.length) % botones.length].focus()

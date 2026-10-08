@@ -395,6 +395,181 @@ function guardarLeido(id) {
 // Sin servidor: se cortó la conexión con la PC ('servicio') o se lee de la base porque está apagada ('nube').
 const sinServidor = () => state.conn.conexion === 'servicio' || state.conn.conexion === 'nube'
 
+/* ---------------- Modo lectura (NUBE): precarga por tandas y caché del navegador ---------------- */
+
+/*
+ * Con la PC servidor apagada los mensajes salen de Supabase. Para no pedirle todo de golpe:
+ *   - Se precargan en segundo plano, del chat más reciente al más viejo, de a 5 chats a la
+ *     vez. Primero la tanda más nueva de cada chat; después las anteriores, también de la
+ *     más nueva a la más vieja.
+ *   - Todo lo que se trae queda en el navegador (IndexedDB: localStorage no alcanza para
+ *     miles de mensajes). Al volver a entrar se muestra al instante y a la base solo se le
+ *     piden los chats con mensajes nuevos, y de esos solo lo nuevo.
+ * Con el servidor encendido nada de esto se usa: los mensajes salen del servidor.
+ */
+const SEGMENTO_NUBE = 100
+const PARALELO_NUBE = 5
+
+const cacheNube = (() => {
+  let db = null
+  const abrir = () =>
+    (db ??= new Promise((resolve, reject) => {
+      const r = indexedDB.open('nf-wa-lectura', 1)
+      r.onupgradeneeded = () => {
+        r.result.createObjectStore('lista')
+        r.result.createObjectStore('chats')
+      }
+      r.onsuccess = () => resolve(r.result)
+      r.onerror = () => reject(r.error)
+    }))
+  const pedir = async (almacen, modo, fn) => {
+    const base = await abrir()
+    return new Promise((resolve, reject) => {
+      const tx = base.transaction(almacen, modo)
+      const req = fn(tx.objectStore(almacen))
+      tx.oncomplete = () => resolve(req.result)
+      tx.onerror = () => reject(tx.error)
+    })
+  }
+  // Si el navegador no deja guardar (modo privado, sin espacio), se sigue sin caché.
+  return {
+    leer: (almacen, clave) => pedir(almacen, 'readonly', (s) => s.get(clave)).catch(() => null),
+    guardar: (almacen, clave, valor) => pedir(almacen, 'readwrite', (s) => s.put(valor, clave)).catch(() => {}),
+  }
+})()
+
+// Todo va separado por número de línea: la base puede tener chats de más de una.
+const lineaNube = () => String(state.conn.yo?.telefono || leerLocal('nf-wa-lectura-linea', '') || '').replace(/\D/g, '')
+const claveNube = (chatId) => `${lineaNube()}|${chatId}`
+const unirMensajes = (a, b) => {
+  const porId = new Map(a.map((m) => [m.id, m]))
+  for (const m of b) porId.set(m.id, m)
+  return [...porId.values()].sort((x, y) => x.ts - y.ts || (x.id < y.id ? -1 : 1))
+}
+
+const pidiendoNube = new Map() // chatId → promesa: dos pedidos del mismo chat esperan el mismo
+function deUnaVez(llave, fn) {
+  if (!pidiendoNube.has(llave)) pidiendoNube.set(llave, fn().finally(() => pidiendoNube.delete(llave)))
+  return pidiendoNube.get(llave)
+}
+
+/**
+ * Lo guardado de un chat, al día: si no hay nada, la tanda más nueva; si hay pero el chat
+ * tuvo mensajes después, solo lo nuevo. Devuelve { mensajes, completo, vistoTs }.
+ */
+function alDiaNube(chatId) {
+  return deUnaVez(`nuevo|${chatId}`, async () => {
+    const clave = claveNube(chatId)
+    const ultimoTs = state.chats.get(chatId)?.ultimoTs || 0
+    let e = await cacheNube.leer('chats', clave)
+    if (!e) {
+      const r = await api(`/api/chats/${enc(chatId)}/mensajes?limite=${SEGMENTO_NUBE}`)
+      e = { mensajes: r.mensajes, completo: !r.hayAnteriores, vistoTs: ultimoTs }
+    } else if (ultimoTs > (e.vistoTs || 0)) {
+      let desde = e.mensajes.at(-1)?.ts || 0
+      try {
+        for (;;) {
+          const r = await api(`/api/chats/${enc(chatId)}/mensajes?despuesTs=${desde}&limite=${SEGMENTO_NUBE}`)
+          e.mensajes = unirMensajes(e.mensajes, r.mensajes)
+          if (!r.hayPosteriores || !r.mensajes.length) break
+          desde = r.mensajes.at(-1).ts
+        }
+      } catch {
+        // Sin conexión con la base: se muestra lo guardado y lo nuevo se pide la próxima vez.
+        return e
+      }
+      e.vistoTs = ultimoTs
+    } else {
+      return e
+    }
+    await cacheNube.guardar('chats', clave, e)
+    return e
+  })
+}
+
+/** Una tanda más vieja de un chat (si quedan), guardada junto con lo demás. */
+function anterioresNube(chatId) {
+  return deUnaVez(`viejo|${chatId}`, async () => {
+    const clave = claveNube(chatId)
+    const e = (await cacheNube.leer('chats', clave)) || (await alDiaNube(chatId))
+    if (!e || e.completo || !e.mensajes.length) return e
+    const r = await api(`/api/chats/${enc(chatId)}/mensajes?antes=${enc(e.mensajes[0].id)}&limite=${SEGMENTO_NUBE}`)
+    e.mensajes = unirMensajes(r.mensajes, e.mensajes)
+    e.completo = !r.hayAnteriores || !r.mensajes.length
+    await cacheNube.guardar('chats', clave, e)
+    return e
+  })
+}
+
+/** Si el chat que se está leyendo recibió mensajes de la precarga, se suman sin mover la vista. */
+function sumarAlAbierto(chatId, e) {
+  if (!e || state.activo !== chatId) return
+  const antes = state.mensajes.size
+  for (const m of e.mensajes) state.mensajes.set(m.id, m)
+  state.hayAnteriores = !e.completo
+  if (state.mensajes.size !== antes) renderMensajes({ mantenerPosicion: true })
+}
+
+/** Corre `fn` sobre cada elemento, de a `n` a la vez y en orden. */
+async function deANa(items, n, fn) {
+  let i = 0
+  const trabajador = async () => {
+    while (i < items.length) {
+      const item = items[i++]
+      try {
+        await fn(item)
+      } catch {
+        // Un chat que falla no frena a los demás: se reintenta la próxima vez que se entre.
+      }
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(n, items.length) }, trabajador))
+}
+
+let precargandoNube = false
+async function precargarNube() {
+  if (!NUBE || precargandoNube) return
+  precargandoNube = true
+  try {
+    const orden = [...state.chats.values()].sort((a, b) => (b.ultimoTs || 0) - (a.ultimoTs || 0)).map((c) => c.id)
+    // 1) La tanda más nueva de cada chat (o lo nuevo, si ya estaba guardado).
+    await deANa(orden, PARALELO_NUBE, async (id) => sumarAlAbierto(id, await alDiaNube(id)))
+    // 2) Las tandas anteriores, de la más nueva a la más vieja, hasta completar cada chat.
+    let quedan = orden
+    while (quedan.length) {
+      const siguen = new Set()
+      await deANa(quedan, PARALELO_NUBE, async (id) => {
+        const e = await anterioresNube(id)
+        sumarAlAbierto(id, e)
+        if (e && !e.completo) siguen.add(id)
+      })
+      quedan = orden.filter((id) => siguen.has(id))
+    }
+  } finally {
+    precargandoNube = false
+  }
+}
+
+/**
+ * Arranque en modo lectura: si ya se había entrado, la lista guardada se muestra al
+ * instante; después se trae la lista actual (un solo pedido) y arranca la precarga.
+ */
+async function arrancarNube() {
+  const guardada = await cacheNube.leer('lista', lineaNube())
+  if (guardada?.chats?.length && !state.chats.size) {
+    state.chats = new Map(guardada.chats.map((c) => [c.id, c]))
+    onEstado(guardada.estado)
+    renderList()
+    terminarArranque()
+  }
+  await sincronizar()
+  if (state.chats.size && state.conn.yo?.telefono) {
+    guardarLocal('nf-wa-lectura-linea', lineaNube())
+    cacheNube.guardar('lista', lineaNube(), { chats: [...state.chats.values()], estado: state.conn, ts: Date.now() })
+    precargarNube()
+  }
+}
+
 async function abrirChat(id) {
   const chat = state.chats.get(id)
   // Si otra persona lo está atendiendo, no se entra (ver entrarAlChat). Sin servidor no se
@@ -437,15 +612,22 @@ async function abrirChat(id) {
   let pagina
   let guardado = false
   try {
-    // Solo la última página: lo anterior se pide al subir (cargarAnteriores).
-    pagina = await api(`/api/chats/${enc(id)}/mensajes?limite=${PAGINA_SERVIDOR}`)
+    // Solo la última página: lo anterior se pide al subir (cargarAnteriores). En modo
+    // lectura, de lo guardado en el navegador (y de la base solo lo que falte).
+    if (NUBE) {
+      const e = await alDiaNube(id)
+      pagina = { mensajes: e.mensajes, hayAnteriores: !e.completo }
+    } else {
+      pagina = await api(`/api/chats/${enc(id)}/mensajes?limite=${PAGINA_SERVIDOR}`)
+    }
   } catch (err) {
     // El servidor no contesta: si el chat ya se había abierto en esta sesión, se lee eso.
     pagina = leidosEnSesion.get(id)
     guardado = true
     if (!pagina) {
       if (state.activo === id) {
-        $('#msgList').innerHTML = sinServidor()
+        // En modo lectura (nube) los mensajes vienen de la base: si fallan, se dice por qué.
+        $('#msgList').innerHTML = sinServidor() && !NUBE
           ? '<div class="sys">El servidor no responde y este chat no se abrió antes en esta sesión: sus mensajes se ven cuando vuelva.</div>'
           : `<div class="sys">No se pudieron cargar los mensajes: ${esc(err.message)}</div>`
       }
@@ -666,6 +848,15 @@ async function cargarAnteriores() {
   const chat = state.activo
   const masViejo = ordenados()[0]
   if (!chat || !state.hayAnteriores || !masViejo) return false
+  if (NUBE) {
+    // Modo lectura: una tanda más vieja, que queda guardada en el navegador.
+    const e = await anterioresNube(chat).catch(() => null)
+    if (!e || state.activo !== chat) return false
+    const antes = state.mensajes.size
+    for (const m of e.mensajes) state.mensajes.set(m.id, m)
+    state.hayAnteriores = !e.completo
+    return state.mensajes.size > antes
+  }
   const r = await api(`/api/chats/${enc(chat)}/mensajes?antes=${enc(masViejo.id)}&limite=${PAGINA_SERVIDOR}`).catch(() => null)
   if (!r || state.activo !== chat) return false
   for (const m of r.mensajes) state.mensajes.set(m.id, m)
@@ -2060,14 +2251,18 @@ function cerrarMenu() {
 }
 
 const AVISO_MARCA = {
-  archivar: (c) => (c.archivado ? 'Chat archivado, también en el celular.' : 'Chat desarchivado.'),
+  archivar: (c) => (c.archivado ? 'Chat archivado. En el celular se aplica en unos segundos.' : 'Chat desarchivado.'),
   fijar: (c) => (c.fijado ? 'Chat fijado arriba.' : 'El chat ya no está fijado.'),
-  silenciar: () => 'Chat silenciado, también en el celular.',
+  silenciar: () => 'Chat silenciado. En el celular se aplica en unos segundos.',
   'activar-sonido': () => 'Avisos reactivados.',
   'no-leido': () => 'Marcado como no leído.',
 }
 
-/** Archiva, fija o silencia. El servidor lo manda al celular y devuelve el chat ya actualizado. */
+/**
+ * Archiva, fija o silencia. El servidor lo aplica al instante y lo manda al celular por una
+ * cola (de a uno, para que WhatsApp no corte por "rate-overlimit"); si WhatsApp lo rechaza,
+ * el chat vuelve como estaba solo (llega por el evento "chat").
+ */
 async function accionChat(id, accion, valor) {
   cerrarMenu()
   if (!id) return
@@ -3352,5 +3547,5 @@ setView('inbox')
 renderList()
 entrar()
   // Leyendo de la base (PC servidor apagada) no hay eventos en vivo: se carga una vez.
-  .then((ok) => ok && (NUBE ? sincronizar() : conectarEventos()))
+  .then((ok) => ok && (NUBE ? arrancarNube() : conectarEventos()))
   .catch(() => pantallaSinSesion({ error: 'No se pudo conectar con el servidor del WhatsApp.' }))

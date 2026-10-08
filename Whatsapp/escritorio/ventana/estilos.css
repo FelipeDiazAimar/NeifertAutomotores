@@ -363,3 +363,6 @@ body.registros .cabecera { margin-bottom: 12px; }
 body.ventana-dialogo { background: transparent; padding: 14px 18px 26px; overflow: hidden; height: auto; }
 body.ventana-dialogo .dialogo { max-width: none; -webkit-app-region: drag; }
 body.ventana-dialogo .dialogo button, body.ventana-dialogo .dialogo-detalle { -webkit-app-region: no-drag; }
+/* Tercera opción del diálogo (por ejemplo, "Apagar y ocultar los chats"): a lo ancho, arriba. */
+.dialogo .dialogo-alternativa > .btn { flex: 1; }
+.dialogo .dialogo-alternativa + .acciones { margin-top: 8px; }

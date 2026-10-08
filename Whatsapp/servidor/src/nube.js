@@ -33,6 +33,40 @@ function base() {
 /** Consulta suelta, fuera de las tandas (auditoría, bandeja de salida, mantenimiento). */
 export const consultar = (sql, params) => base().query(sql, params)
 
+/*
+ * La vista sin conexión del CRM (los chats leídos de la base con este servidor apagado, ver
+ * src/server/whatsappLectura.js del CRM) se abre o cierra con la clave 'lectura' de
+ * wa.estado: { habilitada, borradoEn, motivo, por, ts }. Este servidor no la guarda con el
+ * resto del estado: solo la toca acá.
+ */
+const leerLectura = async () =>
+  (await base().query("select valor from wa.estado where linea = $1 and clave = 'lectura'", [LINEA])).rows[0]?.valor || {}
+const guardarLectura = (valor) =>
+  base().query(
+    `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'lectura', $2::jsonb, now())
+     on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,
+    [LINEA, JSON.stringify(valor)],
+  )
+
+/** Al apagar el servidor con "cerrar la vista sin conexión": nadie ve los chats y se borran de las PC. */
+export async function cerrarLecturaAlApagar() {
+  const actual = await leerLectura()
+  await guardarLectura({ ...actual, habilitada: false, motivo: 'apagado', borradoEn: Date.now(), por: 'Servidor (al apagar)', ts: Date.now() })
+}
+
+/**
+ * Al encender: si la vista se había cerrado al apagar, se reabre. Si la cerró un
+ * administrador desde el CRM, queda cerrada hasta que él la reabra.
+ */
+export async function reabrirLecturaAlEncender() {
+  const actual = await leerLectura()
+  if (actual.habilitada === false && actual.motivo === 'apagado') {
+    await guardarLectura({ ...actual, habilitada: true, motivo: null, por: 'Servidor (al encender)', ts: Date.now() })
+    return true
+  }
+  return false
+}
+
 /* ---------------- Conversión memoria ↔ filas ---------------- */
 
 // Segundos o milisegundos → fecha para la base. -1 (silenciado para siempre) → infinito.

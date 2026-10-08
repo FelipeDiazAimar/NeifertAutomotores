@@ -26,6 +26,7 @@ import * as crm from './src/crm.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, servir } from './src/archivos.js'
 import { crearZip, nombreArchivo, textoDeChat } from './src/exportar.js'
+import { cerrarLecturaAlApagar, reabrirLecturaAlEncender } from './src/nube.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
 // podría escribir con el número de la concesionaria. En ese caso no se arranca.
@@ -295,6 +296,12 @@ const servidor = app.listen(PUERTO, HOST, () => {
   log('info', 'Archivos (fotos, audios, videos, documentos)', DONDE)
   if (numeroLinea()) log('info', 'Solo se acepta el número de la concesionaria', `+${numeroLinea()}`)
   else log('aviso', 'WHATSAPP_NUMERO sin definir', 'Cualquiera que escanee el QR vincula su número')
+  // Si al apagar se cerró la vista sin conexión del CRM, se reabre (no si la cerró un administrador).
+  if (almacen.modo === 'supabase') {
+    reabrirLecturaAlEncender()
+      .then((si) => si && log('info', 'Vista sin conexión del CRM abierta de nuevo', 'Se había cerrado al apagar el servidor'))
+      .catch((err) => log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
+  }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()
     .then((n) => n && log('ok', 'Carpetas de archivos con el nombre del contacto', `${n} renombradas`))
@@ -344,21 +351,27 @@ servidor.on('error', (err) => {
 })
 
 let cerrando = false
-async function cerrar() {
+/** `cerrarLectura`: además, cierra la vista sin conexión del CRM (nadie ve los chats sin el servidor). */
+async function cerrar({ cerrarLectura = false } = {}) {
   if (cerrando) return
   cerrando = true
   log('info', 'Cerrando el servicio')
+  if (cerrarLectura && almacen?.modo === 'supabase') {
+    await Promise.race([cerrarLecturaAlApagar(), new Promise((r) => setTimeout(r, 5000))])
+      .then(() => log('info', 'Vista sin conexión del CRM cerrada', 'Nadie ve los chats hasta que el servidor vuelva'))
+      .catch((err) => log('aviso', 'No se pudo cerrar la vista sin conexión del CRM', err.message))
+  }
   wa.detener()
   servidor.close()
   // Lo que falta guardar en Supabase se escribe antes de salir (con un tope de 8 s).
   await Promise.race([cerrarAlmacen(), new Promise((r) => setTimeout(r, 8000))]).catch(() => {})
   process.exit(0)
 }
-process.on('SIGINT', cerrar)
-process.on('SIGTERM', cerrar)
+process.on('SIGINT', () => cerrar())
+process.on('SIGTERM', () => cerrar())
 // La app de escritorio (Whatsapp/escritorio) corre el servidor como proceso hijo; en
 // Windows no hay SIGTERM entre procesos, así que pide el cierre por este canal.
-process.on('message', (m) => m?.tipo === 'cerrar' && cerrar())
+process.on('message', (m) => m?.tipo === 'cerrar' && cerrar({ cerrarLectura: !!m.cerrarLectura }))
 // Si la app se cerró de golpe, el servidor no queda huérfano ocupando el puerto.
-process.on('disconnect', cerrar)
+process.on('disconnect', () => cerrar())
 process.on('unhandledRejection', (err) => log('error', 'Error no controlado', err?.message || String(err)))

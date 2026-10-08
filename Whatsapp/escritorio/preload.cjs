@@ -38,10 +38,10 @@ if (location.protocol === 'file:') {
     apagarYSalir: () => ipcRenderer.send('apagar-y-salir'),
     // Diálogos propios: los que pide el proceso principal adentro de esta ventana…
     alPedirDialogo: (fn) => ipcRenderer.on('dialogo', (_e, id, opciones) => fn(id, opciones)),
-    responderDialogoEnVentana: (id, acepta) => ipcRenderer.send('dialogo-en-ventana', id, !!acepta),
+    responderDialogoEnVentana: (id, acepta) => ipcRenderer.send('dialogo-en-ventana', id, acepta === 'alternativa' ? acepta : !!acepta),
     // …y la ventanita suelta (dialogo.html)
     dialogo: () => ipcRenderer.invoke('dialogo-opciones'),
     dialogoListo: (alto) => ipcRenderer.send('dialogo-listo', alto),
-    dialogoResponder: (acepta) => ipcRenderer.send('dialogo-respuesta', !!acepta),
+    dialogoResponder: (acepta) => ipcRenderer.send('dialogo-respuesta', acepta === 'alternativa' ? acepta : !!acepta),
   })
 }
