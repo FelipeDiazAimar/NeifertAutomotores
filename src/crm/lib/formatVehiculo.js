@@ -34,3 +34,15 @@ export const ESTADO_LABEL = {
 export function estadoLabel(estado) {
   return ESTADO_LABEL[estado] ?? estado
 }
+
+export const NUEVO_VIGENCIA_MS = 14 * 24 * 60 * 60 * 1000
+
+export function esNuevoVigente(v) {
+  if (!v) return false
+  if (!(v.is_new ?? v.es_nuevo ?? false)) return false
+  const ref = v.es_nuevo_en ?? v.created_at ?? v.creado_en ?? null
+  if (!ref) return true
+  const t = new Date(ref).getTime()
+  if (Number.isNaN(t)) return true
+  return Date.now() - t < NUEVO_VIGENCIA_MS
+}

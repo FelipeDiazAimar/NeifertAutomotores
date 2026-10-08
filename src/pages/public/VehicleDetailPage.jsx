@@ -9,6 +9,7 @@ import { similarVehicleMessage, vehicleWaLink } from '@/lib/whatsapp'
 import { trackVehicleClick, trackVehicleConversion, trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
+import { esNuevoVigente } from '@/crm/lib/formatVehiculo'
 import { shareOrCopy } from '@/lib/share'
 import { useSiteStore } from '@/store/useSiteStore'
 import { useIsLarge } from '@/hooks/useMediaQuery'
@@ -119,7 +120,7 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
             <VehicleGallery
               images={gallery}
               alt={`${v.brand} ${v.model}`}
-              isNew={v.is_new}
+              isNew={esNuevoVigente(v)}
               isZeroKm={v.is_zero_km}
               onActiveWideChange={setGalleryWide}
             />

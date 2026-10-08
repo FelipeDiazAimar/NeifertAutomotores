@@ -41,13 +41,20 @@ export const LOGO_ANCHO_PX = 140
 
 const HEADER_FILL = 'D9D9D9'
 const FONT = 'Arial'
-const HEADER_SIZE = 16 // 8pt (docx usa medios puntos)
-const BODY_SIZE = 17 // 8.5pt
+export const HEADER_SIZE = 22 // 11pt (docx usa medios puntos)
+export const BODY_SIZE = 22 // 11pt
 
-/** Miles estilo papel: 21000 → "21.000", 14100 → "14.100". */
+/** Miles estilo papel: 21000 → "21.000", 14100 → "14.100". Solo para KM. */
 export function formatearMilesDoc(n) {
   if (n == null || n === '') return ''
   return Number(n).toLocaleString('es-AR', { maximumFractionDigits: 0 })
+}
+
+/** Precios ÷1000 estilo papel: BD en pesos completos o USD directos.
+ *  21000000 → "21.000", 20500000 → "20.500", 14100 → "14,1", 10000 → "10". */
+export function formatearPrecioDoc(n) {
+  if (n == null || n === '') return ''
+  return (Number(n) / 1000).toLocaleString('es-AR', { maximumFractionDigits: 2 })
 }
 
 /** Líneas de la celda CONTACTO DUEÑO: nombre + apellido y contacto abajo. */
@@ -57,9 +64,9 @@ export function contactoDuenio(v) {
 }
 
 /** Una fila de la tabla como textos (contacto puede tener varias líneas).
- *  Devuelve null si el vehículo está dado de baja (no es stock). */
+ *  Devuelve null si el vehículo está dado de baja o es 0km (no van al papel). */
 export function filaStock(v) {
-  if (v.estado === 'baja') return null
+  if (v.estado === 'baja' || v.es_0km) return null
   return [
     v.marca ?? '',
     v.modelo ?? '',
@@ -67,8 +74,8 @@ export function filaStock(v) {
     v.anio != null ? String(v.anio) : '',
     formatearMilesDoc(v.km),
     contactoDuenio(v),
-    formatearMilesDoc(v.precio_canje),
-    formatearMilesDoc(v.precio_contado),
+    formatearPrecioDoc(v.precio_canje),
+    formatearPrecioDoc(v.precio_contado),
   ]
 }
 

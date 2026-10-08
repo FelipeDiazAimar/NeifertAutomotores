@@ -196,6 +196,7 @@ const EXTRA_SHOTS = [
 
 export const MOCK_VEHICLES = RAW_VEHICLES.map((v, i) => ({
   ...v,
+  ...(v.is_new ? { created_at: daysAgo(1), es_nuevo_en: daysAgo(1) } : {}),
   images: [
     v.main_image_url,
     EXTRA_SHOTS[i % EXTRA_SHOTS.length],

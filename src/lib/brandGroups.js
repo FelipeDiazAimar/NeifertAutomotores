@@ -1,3 +1,11 @@
+/** Sort que agrupa por marca; cualquier otro mantiene el orden pedido. */
+export const AGRUPA_SOLO = 'brand-asc'
+
+/** Solo 'brand-asc' agrupa visualmente por marca. */
+export function shouldGroupByBrand(sort) {
+  return sort === AGRUPA_SOLO
+}
+
 /** Normaliza el nombre de marca para agrupar (vacía → "Sin marca"). */
 export function brandKeyOf(vehicle) {
   const brand = String(vehicle?.brand ?? '').trim()

@@ -13,7 +13,7 @@ import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
-import { groupVehiclesByBrand, paginarPorMarcas } from '@/lib/brandGroups'
+import { groupVehiclesByBrand, paginarPorMarcas, shouldGroupByBrand } from '@/lib/brandGroups'
 import { useCatalogStore } from '@/store/useCatalogStore'
 import { useVehicles } from '@/hooks/useVehicles'
 
@@ -49,23 +49,32 @@ const MAX_AUTOS_POR_PAGINA = 20
 export default function CatalogPage({ variant = 'usados' }) {
   const copy = VARIANT_COPY[variant] || VARIANT_COPY.usados
   const { data: vehicles = [], isLoading } = useVehicles(copy.condition)
-  // Paginación por MARCAS (no por vehículos) para no cortar nunca una
-  // marca a la mitad: cada página acumula marcas enteras hasta ~20 autos.
-  const [paginasVisibles, setPaginasVisibles] = useState(1)
-  const groups = useMemo(() => groupVehiclesByBrand(vehicles), [vehicles])
-  const paginas = useMemo(
-    () => paginarPorMarcas(groups, MAX_AUTOS_POR_PAGINA),
-    [groups]
-  )
-  const shownGroups = paginas.slice(0, paginasVisibles).flat()
-  const shownCount = shownGroups.reduce((n, [, items]) => n + items.length, 0)
-  const shown = shownGroups.flatMap(([, items]) => items)
-
-  // Al cambiar filtros/búsqueda/orden se vuelve a la primera página de marcas.
   const category = useCatalogStore((s) => s.category)
   const sort = useCatalogStore((s) => s.sort)
   const search = useCatalogStore((s) => s.search)
   const filters = useCatalogStore((s) => s.filters)
+  const agrupar = shouldGroupByBrand(sort)
+  // Con brand-asc: páginas por marcas enteras (~20 autos). Si no, plano.
+  const [paginasVisibles, setPaginasVisibles] = useState(1)
+  const groups = useMemo(
+    () => (agrupar ? groupVehiclesByBrand(vehicles) : []),
+    [vehicles, agrupar]
+  )
+  const paginas = useMemo(
+    () => (agrupar ? paginarPorMarcas(groups, MAX_AUTOS_POR_PAGINA) : []),
+    [groups, agrupar]
+  )
+  const shownGroups = agrupar ? paginas.slice(0, paginasVisibles).flat() : []
+  const flatShown = agrupar ? [] : vehicles.slice(0, paginasVisibles * MAX_AUTOS_POR_PAGINA)
+  const shown = agrupar ? shownGroups.flatMap(([, items]) => items) : flatShown
+  const shownCount = agrupar
+    ? shownGroups.reduce((n, [, items]) => n + items.length, 0)
+    : flatShown.length
+  const hayMas = agrupar
+    ? paginasVisibles < paginas.length
+    : flatShown.length < vehicles.length
+
+  // Al cambiar filtros/búsqueda/orden se vuelve a la primera página.
   const queryKey = JSON.stringify({ category, sort, search, filters, condition: copy.condition })
   const [prevQueryKey, setPrevQueryKey] = useState(queryKey)
   if (queryKey !== prevQueryKey) {
@@ -128,24 +137,30 @@ export default function CatalogPage({ variant = 'usados' }) {
             <Spinner size={32} />
           </div>
         ) : (
-          <VehicleGrid vehicles={shown} basePath={copy.basePath} emptyText={copy.emptyText} />
+          <VehicleGrid vehicles={shown} basePath={copy.basePath} emptyText={copy.emptyText} agrupar={agrupar} />
         )}
       </div>
 
       {!isLoading && vehicles.length > 0 && (
         <div className="mt-4 text-center sm:mt-12">
-          <p className="text-sm text-ink-3">
-            Mostrando {shownGroups.length} de {groups.length}{' '}
-            {groups.length === 1 ? 'marca' : 'marcas'} · {shownCount} de{' '}
-            {vehicles.length} {copy.countLabel}
-          </p>
-          {paginasVisibles < paginas.length && (
+          {agrupar ? (
+            <p className="text-sm text-ink-3">
+              Mostrando {shownGroups.length} de {groups.length}{' '}
+              {groups.length === 1 ? 'marca' : 'marcas'} · {shownCount} de{' '}
+              {vehicles.length} {copy.countLabel}
+            </p>
+          ) : (
+            <p className="text-sm text-ink-3">
+              Mostrando {shownCount} de {vehicles.length} {copy.countLabel}
+            </p>
+          )}
+          {hayMas && (
             <Button
               variant="glass"
               className="mt-4"
               onClick={() => setPaginasVisibles((v) => v + 1)}
             >
-              Cargar más marcas
+              {agrupar ? 'Cargar más marcas' : 'Cargar más'}
             </Button>
           )}
         </div>

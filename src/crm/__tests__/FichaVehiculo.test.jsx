@@ -49,4 +49,28 @@ describe('FichaVehiculo', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: /vendido/i }))
     expect(onCambiarEstado).toHaveBeenCalledWith('vendido')
   })
+
+  it('muestra el badge Nuevo cuando es_nuevo está vigente', () => {
+    wrap(
+      <FichaVehiculo
+        vehiculo={{ ...v, es_nuevo: true, es_nuevo_en: new Date().toISOString() }}
+        onCambiarEstado={vi.fn()}
+        onEliminar={vi.fn()}
+        puedeEliminar={false}
+      />,
+    )
+    expect(screen.getByText('Nuevo')).toBeInTheDocument()
+  })
+
+  it('oculta el badge Nuevo cuando la vigencia venció', () => {
+    wrap(
+      <FichaVehiculo
+        vehiculo={{ ...v, es_nuevo: true, es_nuevo_en: new Date(Date.now() - 15 * 86_400_000).toISOString() }}
+        onCambiarEstado={vi.fn()}
+        onEliminar={vi.fn()}
+        puedeEliminar={false}
+      />,
+    )
+    expect(screen.queryByText('Nuevo')).not.toBeInTheDocument()
+  })
 })

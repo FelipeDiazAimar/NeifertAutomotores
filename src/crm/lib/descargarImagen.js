@@ -4,8 +4,11 @@ import { toast } from 'sonner'
  *  el blob primero — el atributo `download` de un <a> no alcanza con URLs
  *  cross-origin. */
 export async function descargarImagen(url, nombre) {
+  let status = null
   try {
     const res = await fetch(url)
+    status = res?.status ?? null
+    if (!res?.ok) throw new Error(`HTTP ${status}`)
     const blob = await res.blob()
     const objectUrl = URL.createObjectURL(blob)
     const a = document.createElement('a')
@@ -14,8 +17,15 @@ export async function descargarImagen(url, nombre) {
     document.body.appendChild(a)
     a.click()
     a.remove()
-    URL.revokeObjectURL(objectUrl)
-  } catch {
-    toast.error('No se pudo descargar la imagen.')
+    setTimeout(() => URL.revokeObjectURL(objectUrl), 10000)
+    return true
+  } catch (err) {
+    console.error('[descargarImagen] no se pudo descargar', url, status ?? err?.message ?? err)
+    try {
+      window.open(url, '_blank')
+    } catch {
+      toast.error('No se pudo descargar la imagen.')
+    }
+    return false
   }
 }

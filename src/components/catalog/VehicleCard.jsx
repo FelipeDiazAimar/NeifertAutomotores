@@ -15,6 +15,7 @@ import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
 import PriceAmount from '@/components/catalog/PriceAmount'
 import SoldRibbon from '@/components/catalog/SoldRibbon'
+import { esNuevoVigente } from '@/crm/lib/formatVehiculo'
 
 function ImgPlaceholder({ brand }) {
   return (
@@ -371,13 +372,13 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
             <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
               {vehicle.year}
             </span>
-            {vehicle.is_new && (
+            {esNuevoVigente(vehicle) && (
               <span className="rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
                 Nuevo
               </span>
             )}
             {vehicle.is_zero_km && (
-              <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">
                 0 km
               </span>
             )}
@@ -390,13 +391,13 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
             <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
               {vehicle.brand}
             </p>
-            {vehicle.is_new && (
+            {esNuevoVigente(vehicle) && (
               <span className="rounded-full bg-neifert px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
                 Nuevo
               </span>
             )}
             {vehicle.is_zero_km && (
-              <span className="rounded-full bg-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
+              <span className="rounded-full bg-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bg sm:hidden">
                 0 km
               </span>
             )}

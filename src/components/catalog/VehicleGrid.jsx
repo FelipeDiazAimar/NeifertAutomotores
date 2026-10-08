@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import VehicleCard from './VehicleCard'
 import { useCatalogStore } from '@/store/useCatalogStore'
-import { groupVehiclesByBrand } from '@/lib/brandGroups'
+import { groupVehiclesByBrand, shouldGroupByBrand } from '@/lib/brandGroups'
 import { useMediaQuery } from '@/hooks/useMediaQuery'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
@@ -13,8 +13,10 @@ import { cn } from '@/lib/cn'
  *  cálculo puro (K columnas de card + K-1 gaps, según breakpoint), sin
  *  medir el DOM: nunca se desfasa. Sin spans ni reordenamientos: orden
  *  estricto y cero huecos. */
-export default function VehicleGrid({ vehicles, basePath = '/catalogo', emptyText }) {
+export default function VehicleGrid({ vehicles, basePath = '/catalogo', emptyText, agrupar }) {
   const view = useCatalogStore((s) => s.viewMode)
+  const sort = useCatalogStore((s) => s.sort)
+  const agrupado = agrupar ?? shouldGroupByBrand(sort)
   // Mismas columnas y gaps que la grilla (ver className abajo).
   const isXl = useMediaQuery('(min-width: 1280px)')
   const isLg = useMediaQuery('(min-width: 1024px)')
@@ -22,7 +24,10 @@ export default function VehicleGrid({ vehicles, basePath = '/catalogo', emptyTex
   const cols = isXl ? 4 : isLg ? 3 : 2
   const gap = isSm ? 20 : 12
 
-  const groups = useMemo(() => groupVehiclesByBrand(vehicles), [vehicles])
+  const groups = useMemo(
+    () => (agrupado ? groupVehiclesByBrand(vehicles) : []),
+    [vehicles, agrupado]
+  )
 
   if (vehicles.length === 0) {
     return (
@@ -31,6 +36,43 @@ export default function VehicleGrid({ vehicles, basePath = '/catalogo', emptyTex
           {emptyText || 'No encontramos vehículos con esos filtros.'}
         </p>
       </div>
+    )
+  }
+
+  if (!agrupado) {
+    if (view !== 'grid') {
+      return (
+        <div className="flex flex-col gap-4">
+          <AnimatePresence mode="popLayout">
+            {vehicles.map((v) => (
+              <VehicleCard key={v.id} vehicle={v} view={view} basePath={basePath} />
+            ))}
+          </AnimatePresence>
+        </div>
+      )
+    }
+    return (
+      <motion.div
+        layout
+        className={cn(
+          'grid grid-cols-2 gap-x-3 gap-y-4 sm:gap-x-5 lg:grid-cols-3 xl:grid-cols-4'
+        )}
+      >
+        <AnimatePresence mode="popLayout">
+          {vehicles.map((v) => (
+            <motion.div
+              key={v.id}
+              layout
+              initial={{ opacity: 0, scale: 0.96 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.96 }}
+              transition={{ duration: 0.4, ease: EASE }}
+            >
+              <VehicleCard vehicle={v} view={view} basePath={basePath} />
+            </motion.div>
+          ))}
+        </AnimatePresence>
+      </motion.div>
     )
   }
 

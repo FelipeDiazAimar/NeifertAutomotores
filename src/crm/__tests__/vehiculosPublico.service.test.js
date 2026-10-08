@@ -41,6 +41,7 @@ describe('vehiculosPublico.service', () => {
     }
     expect(columnasSeleccionadas).toContain('precio_contado')
     expect(columnasSeleccionadas).toContain('es_0km')
+    expect(columnasSeleccionadas).toContain('es_nuevo_en')
   })
 
   it('listarPublicos mapea filas de crm.vehiculos al shape en inglés que usa la UI', async () => {
@@ -170,5 +171,26 @@ describe('vehiculosPublico.service', () => {
     selectMock.mockReturnValue(chain({ data: null, error: null }))
     const v = await obtenerPublicoPorId('nope')
     expect(v).toBeNull()
+  })
+
+  it('mapea es_nuevo_en con la misma key', async () => {
+    const fila = {
+      id: 'v1', marca: 'Ford', modelo: 'Fiesta', es_nuevo: true, es_nuevo_en: '2026-10-07T12:00:00Z',
+      creado_en: '2026-01-01', estado: 'disponible', vehiculo_fotos: [],
+    }
+    selectMock.mockReturnValue(chain({ data: [fila], error: null }))
+    const [v] = await listarPublicos()
+    expect(v.is_new).toBe(true)
+    expect(v.es_nuevo_en).toBe('2026-10-07T12:00:00Z')
+  })
+
+  it('mapea es_nuevo_en null cuando la fila no la trae', async () => {
+    const fila = {
+      id: 'v1', marca: 'Ford', modelo: 'Fiesta', es_nuevo: false,
+      creado_en: '2026-01-01', estado: 'disponible', vehiculo_fotos: [],
+    }
+    selectMock.mockReturnValue(chain({ data: [fila], error: null }))
+    const [v] = await listarPublicos()
+    expect(v.es_nuevo_en).toBeNull()
   })
 })

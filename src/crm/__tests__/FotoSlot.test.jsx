@@ -75,11 +75,11 @@ describe('FotoSlot', () => {
   })
 
   it('el nombre de descarga incluye marca/modelo/patente, no solo el tipo de foto', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ blob: () => Promise.resolve(new Blob(['x'])) })
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 200, blob: () => Promise.resolve(new Blob(['x'])) })
     const createObjectURL = vi.fn().mockReturnValue('blob:x')
     const revokeObjectURL = vi.fn()
-    global.URL.createObjectURL = createObjectURL
-    global.URL.revokeObjectURL = revokeObjectURL
+    globalThis.URL.createObjectURL = createObjectURL
+    globalThis.URL.revokeObjectURL = revokeObjectURL
     let nombreDescargado = null
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
       nombreDescargado = this.download
@@ -101,5 +101,52 @@ describe('FotoSlot', () => {
     await waitFor(() => expect(clickSpy).toHaveBeenCalled())
     expect(nombreDescargado).toBe('ford_ranger_ab123cd_titulo_frente.jpg')
     clickSpy.mockRestore()
+  })
+
+  it('el visor muestra zoom con botones +/−, 100% y doble-click toggle', async () => {
+    render(
+      <FotoSlot label="Título — frente" url="https://r2/y.jpg" carpeta="crm/gestoria/1" onChange={vi.fn()} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /ver título — frente/i }))
+    expect(await screen.findByRole('button', { name: /aumentar zoom/i })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /reducir zoom/i })).toBeInTheDocument()
+    expect(screen.getAllByText('100%')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /aumentar zoom/i }))
+    expect(screen.getByText('125%')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', { name: /reducir zoom/i }))
+    expect(screen.getAllByText('100%')).toHaveLength(2)
+
+    fireEvent.click(screen.getByRole('button', { name: /aumentar zoom/i }))
+    fireEvent.click(screen.getByRole('button', { name: /restablecer zoom/i }))
+    expect(screen.getAllByText('100%')).toHaveLength(2)
+
+    fireEvent.doubleClick(screen.getByAltText('titulo_frente.jpg'))
+    expect(screen.getByText('200%')).toBeInTheDocument()
+  })
+
+  it('si R2 responde sin ok (CORS), hace fallback a window.open y loguea url+status', async () => {
+    const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: false, status: 403, blob: () => Promise.resolve(new Blob(['x'])) })
+    const openSpy = vi.fn()
+    Object.defineProperty(window, 'open', { value: openSpy, writable: true, configurable: true })
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+
+    render(
+      <FotoSlot label="Título — frente" url="https://r2/y.jpg" carpeta="crm/gestoria/1" onChange={vi.fn()} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /ver título — frente/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /descargar/i }))
+
+    await waitFor(() => expect(openSpy).toHaveBeenCalledWith('https://r2/y.jpg', '_blank'))
+    expect(clickSpy).not.toHaveBeenCalled()
+    expect(consoleErrorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[descargarImagen]'),
+      'https://r2/y.jpg',
+      expect.anything(),
+    )
+    clickSpy.mockRestore()
+    consoleErrorSpy.mockRestore()
   })
 })

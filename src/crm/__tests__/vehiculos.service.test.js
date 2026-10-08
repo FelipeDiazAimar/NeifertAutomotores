@@ -97,6 +97,34 @@ describe('contarPorEstado', () => {
   })
 })
 
+describe('listarTodoStock', () => {
+  it('trae todo en una tanda (< 1000 filas)', async () => {
+    const filas = [{ marca: 'CHEV' }, { marca: 'FORD' }]
+    const { client, calls } = makeSupabase({ 'select:vehiculos': { data: filas, error: null } })
+    holder.client = client
+    const r = await svc.listarTodoStock({})
+    expect(r).toEqual(filas)
+    expect(calls.filter((c) => c.table === 'vehiculos')).toHaveLength(1)
+  })
+
+  it('excluye 0km por defecto (or null-safe) cuando no hay condicion', async () => {
+    const { client, calls } = makeSupabase({ 'select:vehiculos': { data: [], error: null } })
+    holder.client = client
+    await svc.listarTodoStock({})
+    const or = calls.find((c) => c.table === 'vehiculos').filters.find((f) => f[0] === 'or')
+    expect(or?.[1]).toBe('es_0km.is.false,es_0km.is.null')
+  })
+
+  it("con condicion 'cero' respeta el filtro del usuario (sin or es_0km)", async () => {
+    const { client, calls } = makeSupabase({ 'select:vehiculos': { data: [], error: null } })
+    holder.client = client
+    await svc.listarTodoStock({ filtros: { condicion: 'cero' } })
+    const call = calls.find((c) => c.table === 'vehiculos')
+    expect(call.filters).toContainEqual(['eq', 'es_0km', true])
+    expect(call.filters.some((f) => f[0] === 'or' && String(f[1]).includes('es_0km'))).toBe(false)
+  })
+})
+
 describe('crear', () => {
   it('inyecta creado_por y registra evento alta', async () => {
     const { client } = makeSupabase({ 'insert:vehiculos': { data: [{ id: 'v9' }], error: null } })
