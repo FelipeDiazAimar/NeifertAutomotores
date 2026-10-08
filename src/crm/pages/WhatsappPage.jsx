@@ -212,6 +212,7 @@ export default function WhatsappPage() {
   const [error, setError] = useState('')
   const [estado, setEstado] = useState(null) // lo que avisa el panel: conexión, teléfono, vista…
   const [lectura, setLectura] = useState(null) // ajuste de la vista sin conexión
+  const [vistaOculta, setVistaOculta] = useState('inbox') // pestaña elegida con los chats ocultos
   // Cada respuesta trae el ajuste: si la vista sin conexión está cerrada, o un administrador
   // pidió borrar lo guardado, este navegador lo borra.
   const tomarAjuste = useCallback((l) => {
@@ -349,83 +350,73 @@ export default function WhatsappPage() {
         </h1>
         <ControlLectura lectura={lectura} onCambio={tomarAjuste} />
 
-        {lecturaCerrada && (
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span
-              className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
-              title="La PC servidor está apagada y los chats están ocultos"
-            >
-              <span className="h-2 w-2 rounded-full bg-neifert" aria-hidden="true" />
-              Servidor apagado · chats ocultos
-            </span>
-          </div>
-        )}
-
-        {enPanel && enLectura && (
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <span
-              className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
-              title="La PC servidor está apagada: se ven los chats guardados. Se conecta sola cuando vuelva."
-            >
-              <span className="h-2 w-2 rounded-full bg-amber-500" aria-hidden="true" />
-              Solo lectura · servidor apagado
-            </span>
-            <button
-              type="button"
-              onClick={probar}
-              className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] dark:hover:text-whatsapp"
-              title="Probar ahora si la PC servidor ya está encendida"
-            >
-              <RefreshCw size={16} />
-              Reintentar
-            </button>
-          </div>
-        )}
-
-        {enPanel && !enLectura && (
+        {(enPanel || lecturaCerrada) && (
+          // Las mismas pestañas con el servidor encendido o apagado. Con los chats ocultos no
+          // hay panel: la pestaña la maneja el CRM (Bandeja = el aviso, Conexión = el estado).
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div role="tablist" aria-label="Secciones del WhatsApp" className="glass flex rounded-full p-1">
-              {VISTAS.map((v) => (
-                <button
-                  key={v.id}
-                  type="button"
-                  role="tab"
-                  aria-selected={estado.vista === v.id}
-                  disabled={v.id === 'inbox' && !estado.hayLinea}
-                  title={v.id === 'inbox' && !estado.hayLinea ? 'Vinculá la línea para ver los chats' : undefined}
-                  onClick={() => enviar({ tipo: 'nf-wa:vista', vista: v.id })}
-                  className={cn(
-                    'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
-                    estado.vista === v.id ? 'bg-ink text-surface-solid' : 'text-ink-2 hover:text-ink',
-                  )}
-                >
-                  {v.label}
-                </button>
-              ))}
+              {VISTAS.map((v) => {
+                const elegida = lecturaCerrada ? vistaOculta === v.id : estado.vista === v.id
+                const sinLinea = !lecturaCerrada && v.id === 'inbox' && !estado.hayLinea
+                return (
+                  <button
+                    key={v.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={elegida}
+                    disabled={sinLinea}
+                    title={sinLinea ? 'Vinculá la línea para ver los chats' : undefined}
+                    onClick={() => (lecturaCerrada ? setVistaOculta(v.id) : enviar({ tipo: 'nf-wa:vista', vista: v.id }))}
+                    className={cn(
+                      'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+                      elegida ? 'bg-ink text-surface-solid' : 'text-ink-2 hover:text-ink',
+                    )}
+                  >
+                    {v.label}
+                  </button>
+                )
+              })}
             </div>
 
             <button
               type="button"
-              onClick={() => enviar({ tipo: 'nf-wa:vista', vista: 'connect' })}
+              onClick={() => (lecturaCerrada ? setVistaOculta('connect') : enviar({ tipo: 'nf-wa:vista', vista: 'connect' }))}
               className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
               title="Ver la conexión de la línea"
             >
-              <span className={cn('h-2 w-2 rounded-full', PUNTO[estado.clase] ?? PUNTO.info)} aria-hidden="true" />
-              <span>{estado.texto}</span>
-              {estado.telefono && <span className="font-normal tabular-nums text-ink-2">{telefonoLegible(estado.telefono)}</span>}
+              <span
+                className={cn('h-2 w-2 rounded-full', lecturaCerrada ? 'bg-neifert' : enLectura ? 'bg-amber-500' : (PUNTO[estado.clase] ?? PUNTO.info))}
+                aria-hidden="true"
+              />
+              <span>{lecturaCerrada ? 'Servidor apagado · chats ocultos' : enLectura ? 'Solo lectura · servidor apagado' : estado.texto}</span>
+              {!lecturaCerrada && !enLectura && estado.telefono && (
+                <span className="font-normal tabular-nums text-ink-2">{telefonoLegible(estado.telefono)}</span>
+              )}
             </button>
 
-            {estado.puedeActualizar && (
+            {enLectura || lecturaCerrada ? (
               <button
                 type="button"
-                onClick={() => enviar({ tipo: 'nf-wa:actualizar' })}
-                disabled={!estado.actualizarHabilitado || estado.actualizando}
-                title="Trae del celular los chats (archivados, fijados, silenciados) y los grupos"
-                className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-whatsapp"
+                onClick={probar}
+                className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] dark:hover:text-whatsapp"
+                title="Probar ahora si la PC servidor ya está encendida"
               >
-                <RefreshCw size={16} className={estado.actualizando ? 'animate-spin' : ''} />
-                {estado.actualizando ? 'Recargando…' : 'Recargar'}
+                <RefreshCw size={16} />
+                Reintentar
               </button>
+            ) : (
+              estado.puedeActualizar && (
+                <button
+                  type="button"
+                  onClick={() => enviar({ tipo: 'nf-wa:actualizar' })}
+                  disabled={!estado.actualizarHabilitado || estado.actualizando}
+                  title="Trae del celular los chats (archivados, fijados, silenciados) y los grupos"
+                  className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] disabled:cursor-not-allowed disabled:opacity-40 dark:hover:text-whatsapp"
+                >
+                  <RefreshCw size={16} className={estado.actualizando ? 'animate-spin' : ''} />
+                  {estado.actualizando ? 'Recargando…' : 'Recargar'}
+                </button>
+              )
             )}
           </div>
         )}
@@ -438,7 +429,37 @@ export default function WhatsappPage() {
       )}
 
       <div className="relative min-h-0 flex-1">
-        {lecturaCerrada ? (
+        {lecturaCerrada && vistaOculta === 'connect' ? (
+          // Conexión con los chats ocultos: el estado de la línea, sin ningún chat.
+          <div className="glass h-full overflow-y-auto rounded-2xl p-6">
+            <div className="max-w-xl">
+              <p className="font-display text-lg font-bold text-ink">Línea de WhatsApp</p>
+              <p className="mt-1 text-sm text-ink-2">El número de la concesionaria. Se vincula una sola vez y lo usan todos.</p>
+              <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line p-4">
+                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-neifert" aria-hidden="true" />
+                <div>
+                  <p className="text-sm font-semibold text-ink">Servidor apagado</p>
+                  <p className="text-sm text-ink-2">
+                    La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta
+                    solo y se puede volver a escribir.
+                  </p>
+                </div>
+              </div>
+              <p className="mt-4 text-sm text-ink-2">
+                {lectura?.motivo === 'apagado'
+                  ? 'Los chats se ocultaron al apagar el servidor: vuelven a verse cuando se encienda.'
+                  : 'Un administrador ocultó los chats: se ven solo con el servidor encendido.'}
+              </p>
+              <button
+                type="button"
+                onClick={probar}
+                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
+              >
+                Reintentar ahora
+              </button>
+            </div>
+          </div>
+        ) : lecturaCerrada ? (
           // PC servidor apagada y vista sin conexión cerrada: no se muestra ningún chat.
           <div className="glass grid h-full place-items-center rounded-2xl p-6" role="status">
             <div className="flex max-w-md flex-col items-center text-center">

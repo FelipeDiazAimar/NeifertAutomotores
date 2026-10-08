@@ -2740,7 +2740,7 @@ function renderConexion() {
     <div class="status-row">
       <span class="avatar">${ic('phone')}</span>
       <div>
-        <div class="phone tnum">${esc(conexion === 'conectado' ? yo?.telefono || yo?.id : 'Sin vincular')}</div>
+        <div class="phone tnum">${esc(conexion === 'conectado' || conexion === 'nube' ? yo?.telefono || yo?.id : 'Sin vincular')}</div>
         <div class="state"><span class="dot ${cls}"></span>${esc(texto)}${conexion === 'conectando' && intentos ? ` · intento ${intentos}` : ''}</div>
       </div>
       <div class="actions">${acciones}</div>
@@ -2770,6 +2770,9 @@ function renderConexion() {
           <p class="timer">El código se renueva solo cada unos segundos.${numeroLinea ? ' Con otro número no se vincula.' : ''}</p>
         </div>
       </div>`
+  } else if (conexion === 'nube') {
+    // Leyendo de la base con la PC servidor apagada: la línea sigue vinculada.
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta solo y se puede volver a escribir. Mientras tanto se ven los chats guardados.</div></div>`
   } else {
     cuerpo = `<div class="conn-ok">${ic('clock')}<div>${esc(texto)}</div></div>`
   }

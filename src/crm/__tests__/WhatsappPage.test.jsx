@@ -53,8 +53,9 @@ describe('WhatsappPage', () => {
     await delPanel({ tipo: 'nf-wa:listo' })
     await delPanel({ tipo: 'nf-wa:estado', conexion: 'nube', clase: 'wait', texto: 'Solo lectura', vista: 'inbox', hayLinea: true, puedeActualizar: false })
     expect(screen.getByText(/solo lectura · servidor apagado/i)).toBeInTheDocument()
-    // En solo lectura no hay pestañas: Conexión no sirve con la PC apagada.
-    expect(screen.queryByRole('tab', { name: 'Conexión' })).toBeNull()
+    // Las pestañas siguen con el servidor apagado, y van al panel de solo lectura.
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, window.location.origin)
   })
 
   it('con la PC apagada Cloudflare igual contesta: si la función dice que no responde, va a solo lectura', async () => {
@@ -111,6 +112,12 @@ describe('WhatsappPage', () => {
     expect(await screen.findByText('Los chats están ocultos')).toBeInTheDocument()
     expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
     expect(screen.getByText(/servidor apagado · chats ocultos/i)).toBeInTheDocument()
+    // Las pestañas siguen: en Conexión se ve el estado de la línea, sin ningún chat.
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(screen.getByText('Línea de WhatsApp')).toBeInTheDocument()
+    expect(screen.getByText(/la línea sigue vinculada/i)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Bandeja' }))
+    expect(screen.getByText('Los chats están ocultos')).toBeInTheDocument()
   })
 
   it('un administrador oculta los chats sin servidor con el interruptor', async () => {
