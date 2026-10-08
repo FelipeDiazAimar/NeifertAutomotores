@@ -15,6 +15,10 @@ if (location.protocol === 'file:') {
     estadoLinea: () => ipcRenderer.invoke('estado-linea'),
     alCambiarEstado: (fn) => ipcRenderer.on('estado', (_e, estado) => fn(estado)),
     abrirWhatsapp: () => ipcRenderer.send('abrir-whatsapp'),
+    // Chats en el CRM con el servidor apagado: verlos, ocultarlos o mostrarlos
+    lectura: () => ipcRenderer.invoke('lectura'),
+    cambiarLectura: (mostrar) => ipcRenderer.invoke('lectura-cambiar', !!mostrar),
+    alCambiarLectura: (fn) => ipcRenderer.on('lectura', (_e, lectura) => fn(lectura)),
     // Número de la línea y arranque del servidor
     validarNumero: (numero) => ipcRenderer.invoke('validar-numero', numero),
     iniciarServidor: (opciones) => ipcRenderer.invoke('iniciar-servidor', opciones),

@@ -197,6 +197,8 @@ let servidor = null
 let tunel = null
 let saliendo = false
 let reintentos = 0
+// Si el CRM llega a esta PC por el túnel de Cloudflare: 'sin-token' | 'conectando' | 'ok' | 'error'.
+let estadoTunel = { estado: 'conectando', detalle: null }
 
 function salidaA(nombre, flujo) {
   flujo?.on('data', (d) => {
@@ -373,12 +375,19 @@ async function buscarYAvisar(manual = false) {
   return resultado
 }
 
+function ponerEstadoTunel(estadoNuevo, detalle = null) {
+  if (estadoTunel.estado === estadoNuevo && estadoTunel.detalle === detalle) return
+  estadoTunel = { estado: estadoNuevo, detalle }
+  ventana?.webContents.send('estado', vistaEstado())
+}
+
 function arrancarTunel() {
   if (tunel || saliendo || !iniciado) return
   const config = leerConfig()
-  if (!config?.WA_TUNEL_TOKEN) return
+  if (!config?.WA_TUNEL_TOKEN) return ponerEstadoTunel('sin-token')
   const token = tokenTunel(config)
   // Sin un token que sirva, reintentar cada 10 s solo llena el registro.
+  if (!token) ponerEstadoTunel('error', 'WA_TUNEL_TOKEN no es un token de Cloudflare (tiene que empezar con eyJ).')
   if (!token) return registrar('WA_TUNEL_TOKEN no es un token de Cloudflare (empieza con eyJ): el túnel no arranca. Corregilo en "Cambiar configuración".')
   if (!fs.existsSync(CLOUDFLARED)) return registrar(`Falta cloudflared en ${CLOUDFLARED}: el CRM no va a llegar a esta PC`)
   registrar('Iniciando Cloudflare Tunnel')
@@ -390,8 +399,18 @@ function arrancarTunel() {
   })
   salidaA('túnel', tunel.stdout)
   salidaA('túnel', tunel.stderr)
+  ponerEstadoTunel('conectando')
+  // cloudflared escribe todo por stderr: de ahí sale si el CRM ya llega a esta PC.
+  for (const f of [tunel.stdout, tunel.stderr]) {
+    f?.on('data', (d) => {
+      const texto = String(d)
+      if (/Registered tunnel connection/i.test(texto)) ponerEstadoTunel('ok')
+      else if (/Unauthorized|Invalid tunnel secret/i.test(texto)) ponerEstadoTunel('error', 'Cloudflare rechazó el token del túnel. Copiá de nuevo el token (WA_TUNEL_TOKEN) desde Cloudflare y cambiá la configuración.')
+    })
+  }
   tunel.on('exit', (codigo) => {
     tunel = null
+    if (estadoTunel.estado === 'ok') ponerEstadoTunel('conectando')
     if (saliendo) return
     registrar(`El túnel se cerró (código ${codigo}); se reinicia en 10 s`)
     setTimeout(arrancarTunel, 10_000)
@@ -505,6 +524,7 @@ function vistaEstado() {
     rechazo: estado.rechazo || null,
     crm: config.CRM_URL || null,
     version: servidorActual().version,
+    tunel: estadoTunel,
     // Para la pantalla de inicio: número guardado (10 dígitos) y si arranca solo con la PC.
     iniciado,
     numero: leerAjustes().numero || '',
@@ -530,6 +550,8 @@ async function iniciarServidor({ numero, autoInicio = true } = {}) {
   }
   actualizarIcono()
   setTimeout(consultarEstado, 1500)
+  // Al encender, el servidor reabre los chats si se habían ocultado al apagar.
+  setTimeout(() => verLectura().then(actualizarIcono), 15_000)
   return { ok: true, linea: r.linea }
 }
 
@@ -742,6 +764,16 @@ function actualizarIcono() {
         ? { label: 'Ver estado de la línea', click: abrirVentana }
         : { label: 'Iniciar servidor…', enabled: !!leerConfig(), click: abrirVentana },
       { label: 'Abrir WhatsApp en el navegador', enabled: !!leerConfig()?.CRM_URL, click: abrirWhatsappWeb },
+      ...(lectura?.ok
+        ? [
+            {
+              label: 'Mostrar los chats en el CRM con el servidor apagado',
+              type: 'checkbox',
+              checked: lectura.habilitada,
+              click: (item) => cambiarLectura(item.checked),
+            },
+          ]
+        : []),
       { label: 'Reiniciar el servidor', enabled: iniciado, click: () => reiniciarTodo() },
       { label: buscando ? 'Buscando actualización…' : 'Buscar actualización ahora', enabled: ACTUALIZA && !buscando && !!leerConfig(), click: () => buscarYAvisar(true) },
       { label: 'Ver registros', click: abrirRegistros },
@@ -849,6 +881,67 @@ async function cerrarHuerfano() {
   } catch {}
 }
 
+/* ---------------- Chats en el CRM con el servidor apagado ---------------- */
+
+/*
+ * La vista sin conexión del CRM muestra los chats guardados en la base mientras esta PC
+ * está apagada. Desde acá se pueden ocultar (por ejemplo, un fin de semana) o volver a
+ * mostrar, con el servidor andando o no: lo hace el script lectura.mjs del servidor, que
+ * habla directo con la base.
+ */
+let lectura = null // { ok, habilitada, motivo, por, ts } | { ok: false, error }
+let consultandoLectura = null
+
+function correrLectura(accion) {
+  const config = leerConfig()
+  if (!config) return Promise.resolve({ ok: false, error: 'Falta la configuración.' })
+  const carpeta = path.join(servidorActual().dir, 'servidor')
+  const script = path.join(carpeta, 'scripts', 'lectura.mjs')
+  if (!fs.existsSync(script)) return Promise.resolve({ ok: false, error: 'Esta versión del servidor no lo permite: actualizalo desde Ajustes.' })
+  return new Promise((resolve) => {
+    const salida = []
+    const p = fork(script, [accion], {
+      cwd: carpeta,
+      env: entornoServidor(config),
+      execPath: process.execPath,
+      stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
+    })
+    p.stdout.on('data', (d) => salida.push(String(d)))
+    const corte = setTimeout(() => p.kill(), 30_000)
+    p.on('exit', () => {
+      clearTimeout(corte)
+      const ultima = salida.join('').trim().split(/\r?\n/).pop()
+      try {
+        resolve(JSON.parse(ultima))
+      } catch {
+        resolve({ ok: false, error: 'No se pudo consultar la base del WhatsApp.' })
+      }
+    })
+  })
+}
+
+async function verLectura() {
+  consultandoLectura ??= correrLectura('ver').finally(() => (consultandoLectura = null))
+  lectura = await consultandoLectura
+  avisarLectura()
+  return lectura
+}
+
+async function cambiarLectura(mostrarChats) {
+  const r = await correrLectura(mostrarChats ? 'mostrar' : 'ocultar')
+  if (r.ok) {
+    lectura = r
+    registrar(mostrarChats ? 'Chats visibles en el CRM con el servidor apagado' : 'Chats ocultos en el CRM con el servidor apagado')
+  }
+  avisarLectura()
+  actualizarIcono()
+  return r
+}
+
+function avisarLectura() {
+  ventana?.webContents.send('lectura', lectura)
+}
+
 async function salir({ cerrarLectura = false } = {}) {
   saliendo = true
   registrar(cerrarLectura ? 'Apagando la app y ocultando los chats de la vista sin conexión' : 'Apagando la app')
@@ -919,6 +1012,8 @@ ipcMain.handle('config-guardar', async (e, { borrarOriginal } = {}) => {
 })
 
 ipcMain.handle('estado-linea', () => vistaEstado())
+ipcMain.handle('lectura', () => verLectura())
+ipcMain.handle('lectura-cambiar', (e, mostrarChats) => cambiarLectura(!!mostrarChats))
 ipcMain.handle('validar-numero', (e, numero) => validarNumero(numero))
 ipcMain.handle('iniciar-servidor', (e, opciones) => iniciarServidor(opciones))
 ipcMain.handle('detener-servidor', () => detenerServidor())
@@ -993,6 +1088,8 @@ app.whenReady().then(async () => {
   }
   consultarEstado()
   programarConsulta()
+  // Si los chats se ven en el CRM con el servidor apagado (para el menú del ícono).
+  if (leerConfig() && lineaGuardada()) setTimeout(() => verLectura().then(actualizarIcono), iniciado ? 15_000 : 1000)
   // Versiones nuevas del servidor: apenas arranca (para no quedar con una vieja) y después
   // cada 10 minutos (cada consulta es una lectura chica de R2).
   setTimeout(() => buscarYAvisar(), 5000)

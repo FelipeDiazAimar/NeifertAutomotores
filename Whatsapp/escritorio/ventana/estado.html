@@ -151,26 +151,33 @@
           </div>
         </div>
 
-        <!-- Conectada -->
-        <div id="vistaOk" hidden>
-          <div class="aviso-caja">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
-            <span>El WhatsApp se usa desde el <b>CRM</b>, en el navegador. Cerrá esta ventana tranquilo: el servidor sigue andando en segundo plano.</span>
-          </div>
-        </div>
+        <!-- Qué anda y qué no, de un vistazo -->
+        <ul class="chequeos" id="chequeos">
+          <li id="chkWhatsapp"><span class="luz"></span><span class="textos"><b>WhatsApp</b><span></span></span></li>
+          <li id="chkCrm"><span class="luz"></span><span class="textos"><b>Acceso desde el CRM</b><span></span></span><button class="btn secundario chico" id="chkCrmArreglar" type="button" hidden>Cambiar configuración</button></li>
+        </ul>
 
-      </div>
-
-      <div class="acciones" id="filaWhatsapp">
-        <button class="btn secundario" id="whatsapp" type="button">
+        <button class="btn primario ancho mt" id="whatsapp" type="button" hidden>
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
-          Abrir WhatsApp
+          Abrir WhatsApp en el CRM
         </button>
       </div>
-      <div class="acciones">
-        <button class="btn secundario" id="cambiar" type="button">Cambiar número</button>
-        <button class="btn primario" id="cerrar" type="button">Listo</button>
-      </div>
+    </div>
+
+    <!-- ============ Chats en el CRM con el servidor apagado (con el servidor andando o no) ============ -->
+    <div class="tarjeta" id="tarjetaChats" hidden>
+      <label class="interruptor">
+        <span class="textos">
+          <b>Ver los chats con el servidor apagado</b>
+          <span id="chatsTexto">Consultando…</span>
+        </span>
+        <input type="checkbox" id="chatsVisibles" disabled />
+      </label>
+    </div>
+
+    <div class="acciones" id="accionesServidor" hidden>
+      <button class="btn secundario" id="cambiar" type="button">Cambiar número</button>
+      <button class="btn secundario" id="cerrar" type="button" title="La ventana se cierra; el servidor sigue andando">Seguir en segundo plano</button>
     </div>
 
     <footer class="pie">
@@ -217,6 +224,9 @@
         $('vistaServidor').hidden = !e.iniciado || enAjustes
         $('vistaAjustes').hidden = !enAjustes
         $('verAjustes').hidden = enAjustes
+        $('accionesServidor').hidden = !e.iniciado || enAjustes
+        // Ocultar o mostrar los chats sirve con el servidor andando o apagado: con un número guardado.
+        $('tarjetaChats').hidden = enAjustes || !e.numero || (lectura && !lectura.ok && /WA_DATABASE_URL/.test(lectura.error || ''))
         if (!e.iniciado) {
           if (!numeroCargado) {
             $('numero').value = formatear(e.numero)
@@ -246,7 +256,7 @@
         $('linea').textContent = e.numero ? `+54 9 ${formatear(e.numero)}` : ''
         $('lineaChip').hidden = !e.numero
         $('vistaQr').hidden = e.conexion !== 'qr'
-        $('vistaOk').hidden = e.conexion !== 'conectado'
+        mostrarChequeos(e)
         if (e.conexion === 'qr' && e.qr && $('qr').src !== e.qr) $('qr').src = e.qr
         $('qr').hidden = !e.qr
         $('qrCargando').hidden = !!e.qr
@@ -259,8 +269,86 @@
           b.textContent = 'Número equivocado. '
           $('rechazo').append(b, `Se escaneó con ${telefonoLindo(e.rechazo.telefono)}, que no es el de esta línea (+54 9 ${formatear(e.numero)}). Se desvinculó solo: escaneá el código nuevo con el celular correcto, o tocá "Cambiar número".`)
         }
-        $('filaWhatsapp').hidden = !e.crm || e.conexion !== 'conectado'
+        $('whatsapp').hidden = !e.crm || e.conexion !== 'conectado'
       }
+
+      // Una fila por cosa que tiene que andar: verde, amarillo (esperando) o rojo (hay que hacer algo).
+      function chequeo(id, luz, texto) {
+        const li = $(id)
+        li.dataset.luz = luz
+        li.querySelector('.textos > span').textContent = texto
+      }
+      const TEXTO_WHATSAPP = {
+        conectado: ['ok', 'Conectada: recibe y manda mensajes'],
+        qr: ['error', 'Falta vincular: escaneá el código de arriba'],
+        conectando: ['espera', 'Conectando con WhatsApp…'],
+        iniciando: ['espera', 'Arrancando el servidor…'],
+        desconectado: ['espera', 'Sin conexión: se reintenta solo. Revisá que la PC tenga internet.'],
+      }
+      function mostrarChequeos(e) {
+        const [luzWa, textoWa] = TEXTO_WHATSAPP[e.conexion] || ['espera', e.texto || '']
+        chequeo('chkWhatsapp', luzWa, textoWa)
+        const t = e.tunel || {}
+        const crm = e.crm ? e.crm.replace(/^https?:\/\//, '') : 'el CRM'
+        const [luzCrm, textoCrm] =
+          t.estado === 'ok' ? ['ok', `Se usa desde ${crm}`]
+          : t.estado === 'error' ? ['error', t.detalle || 'El túnel de Cloudflare no conecta.']
+          : t.estado === 'sin-token' ? ['espera', 'Sin túnel (falta WA_TUNEL_TOKEN): el CRM no llega a esta PC.']
+          : ['espera', 'Conectando el túnel de Cloudflare…']
+        chequeo('chkCrm', luzCrm, textoCrm)
+        $('chkCrmArreglar').hidden = !['error', 'sin-token'].includes(t.estado)
+      }
+
+      /* ---------- Chats en el CRM con el servidor apagado ---------- */
+      let lectura = null
+      const cuando = (ts) => (ts ? new Date(ts).toLocaleString('es-AR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '')
+      function mostrarLectura(l) {
+        lectura = l
+        const caja = $('chatsVisibles')
+        if (!l) {
+          caja.disabled = true
+          $('chatsTexto').textContent = 'Consultando…'
+          return
+        }
+        if (!l.ok) {
+          caja.disabled = true
+          $('chatsTexto').textContent = l.error || 'No se pudo consultar.'
+          if (ultimoEstado) mostrar(ultimoEstado)
+          return
+        }
+        caja.disabled = false
+        caja.checked = l.habilitada
+        const quien = l.por ? ` (${l.por}${l.ts ? `, ${cuando(l.ts)}` : ''})` : ''
+        $('chatsTexto').textContent = l.habilitada
+          ? 'Si esta PC se apaga, en el CRM se siguen viendo los chats guardados, solo para leer.'
+          : l.motivo === 'apagado'
+            ? `Ocultos hasta que vuelva a encender el servidor${quien}. No se borra nada.`
+            : `Ocultos: con el servidor apagado nadie los ve en el CRM${quien}. No se borra nada.`
+      }
+      $('chatsVisibles').addEventListener('change', async () => {
+        const mostrarChats = $('chatsVisibles').checked
+        if (!mostrarChats) {
+          const seguir = await window.nfDialogo.preguntar({
+            tipo: 'aviso',
+            titulo: 'Ocultar los chats',
+            mensaje: 'Con el servidor apagado, en el CRM nadie va a ver los chats hasta que los vuelvas a mostrar. No se borra nada y con el servidor encendido se ven como siempre.',
+            aceptar: 'Ocultar',
+            cancelar: 'Cancelar',
+          })
+          if (!seguir) {
+            $('chatsVisibles').checked = true
+            return
+          }
+        }
+        $('chatsVisibles').disabled = true
+        $('chatsTexto').textContent = mostrarChats ? 'Mostrando…' : 'Ocultando…'
+        const r = await window.nfApp.cambiarLectura(mostrarChats)
+        if (!r.ok) {
+          await window.nfDialogo.preguntar({ tipo: 'error', titulo: 'No se pudo cambiar', mensaje: r.error })
+          mostrarLectura(await window.nfApp.lectura())
+        } else mostrarLectura(r)
+      })
+      $('chkCrmArreglar').addEventListener('click', () => window.nfApp.abrirConfig())
 
       // Aviso mientras se escribe (la validación de verdad la hace la app al iniciar).
       $('numero').addEventListener('input', async () => {
@@ -384,7 +472,9 @@
       })
 
       window.nfApp.alCambiarEstado(mostrar)
+      window.nfApp.alCambiarLectura(mostrarLectura)
       window.nfApp.estadoLinea().then(mostrar)
+      window.nfApp.lectura().then(mostrarLectura)
     </script>
   </body>
 </html>

@@ -48,6 +48,23 @@ const guardarLectura = (valor) =>
     [LINEA, JSON.stringify(valor)],
   )
 
+/** Cómo está la vista sin conexión: { habilitada, motivo, por, ts }. */
+export async function verLectura() {
+  const v = await leerLectura()
+  return { habilitada: v.habilitada !== false, motivo: v.motivo || null, por: v.por || null, ts: v.ts || null }
+}
+
+/**
+ * Ocultar o mostrar los chats en la vista sin conexión, desde la app de escritorio (como el
+ * botón de los administradores en el CRM). Oculto así queda hasta que alguien los vuelva a
+ * mostrar: encender el servidor no los reabre (eso es solo para 'apagado').
+ */
+export async function cambiarLectura(habilitada, por = 'App del servidor') {
+  const actual = await leerLectura()
+  await guardarLectura({ ...actual, habilitada: !!habilitada, motivo: habilitada ? null : 'admin', por, ts: Date.now() })
+  return verLectura()
+}
+
 /** Al apagar el servidor con "ocultar los chats": nadie los ve hasta que vuelva (no se borra nada). */
 export async function cerrarLecturaAlApagar() {
   const actual = await leerLectura()
