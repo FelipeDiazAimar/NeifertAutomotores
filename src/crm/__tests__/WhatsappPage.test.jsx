@@ -78,7 +78,7 @@ describe('WhatsappPage', () => {
     expect(screen.queryByText(/verificando la línea/i)).toBeNull()
   })
 
-  it('con los chats ocultos (vista sin conexión cerrada) no abre ningún chat y borra lo guardado', async () => {
+  it('con los chats ocultos abre el mismo panel (Conexión igual) y borra lo guardado en el navegador', async () => {
     const borrar = vi.fn()
     vi.stubGlobal('indexedDB', { deleteDatabase: borrar })
     vi.stubGlobal('fetch', vi.fn(async (url) =>
@@ -87,13 +87,22 @@ describe('WhatsappPage', () => {
         : {},
     ))
     montar()
-    expect(await screen.findByText('Los chats están ocultos')).toBeInTheDocument()
-    expect(screen.getByText(/al apagarlo se ocultaron los chats/i)).toBeInTheDocument()
-    expect(screen.queryByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeNull()
+    // El panel de siempre (el aviso de chats ocultos lo muestra él, en Bandeja).
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
     expect(borrar).toHaveBeenCalledWith('nf-wa-lectura')
+    const panel = lectura.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'nube', clase: 'wait', texto: 'Solo lectura', vista: 'inbox', hayLinea: true })
+    expect(screen.getByText(/servidor apagado · chats ocultos/i)).toBeInTheDocument()
+    // Las pestañas son las del panel: Conexión se ve igual que siempre.
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, window.location.origin)
   })
 
-  it('si el panel abierto pierde el servidor y los chats están ocultos, saca el panel y avisa', async () => {
+  it('si el panel abierto pierde el servidor, pasa al panel de solo lectura', async () => {
     vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
     const fetch = vi.fn(async (url) =>
       String(url).startsWith('/wa-lectura/api/servidor')
@@ -109,15 +118,8 @@ describe('WhatsappPage', () => {
     await delPanel({ tipo: 'nf-wa:listo' })
     // El panel avisa "Servidor sin conexión": el CRM vuelve a preguntar y la PC está apagada.
     await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
-    expect(await screen.findByText('Los chats están ocultos')).toBeInTheDocument()
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
     expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
-    expect(screen.getByText(/servidor apagado · chats ocultos/i)).toBeInTheDocument()
-    // Las pestañas siguen: en Conexión se ve el estado de la línea, sin ningún chat.
-    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
-    expect(screen.getByText('Línea de WhatsApp')).toBeInTheDocument()
-    expect(screen.getByText(/la línea sigue vinculada/i)).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'Bandeja' }))
-    expect(screen.getByText('Los chats están ocultos')).toBeInTheDocument()
   })
 
   it('un administrador oculta los chats sin servidor con el interruptor', async () => {

@@ -97,6 +97,13 @@
 
   <!-- ===================== BANDEJA ===================== -->
   <section id="viewInbox" class="inbox" aria-label="Bandeja de WhatsApp" hidden>
+    <!-- Servidor apagado con los chats ocultos: en vez de la bandeja, este aviso. -->
+    <div class="pane glass shadow aviso-ocultos" id="avisoOcultos" role="status" hidden>
+      <span class="aviso-ocultos-icono"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg></span>
+      <h2>Los chats están ocultos</h2>
+      <p id="avisoOcultosTxt">El servidor de WhatsApp está apagado y los chats están ocultos. Se ven solo con la PC servidor encendida.</p>
+      <small>Mientras tanto nadie puede ver los mensajes desde el CRM.</small>
+    </div>
     <div class="pane glass shadow list-pane">
       <div class="list-head">
         <div class="list-tools">

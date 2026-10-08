@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Eye, EyeOff, Lock, RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
@@ -212,7 +212,6 @@ export default function WhatsappPage() {
   const [error, setError] = useState('')
   const [estado, setEstado] = useState(null) // lo que avisa el panel: conexión, teléfono, vista…
   const [lectura, setLectura] = useState(null) // ajuste de la vista sin conexión
-  const [vistaOculta, setVistaOculta] = useState('inbox') // pestaña elegida con los chats ocultos
   // Cada respuesta trae el ajuste: si la vista sin conexión está cerrada, o un administrador
   // pidió borrar lo guardado, este navegador lo borra.
   const tomarAjuste = useCallback((l) => {
@@ -273,9 +272,9 @@ export default function WhatsappPage() {
 
   // A qué iframe se le habla: al panel de la PC servidor o a la copia de solo lectura.
   // (probar() ya deja listo y estado en cero cada vez que se cambia de uno a otro).
-  // Con la vista sin conexión cerrada no se abre: queda el aviso (ver más abajo).
+  // Con los chats ocultos se abre igual (Conexión se ve como siempre); solo cambia la píldora.
   const lecturaCerrada = servidor === 'caido' && lectura?.habilitada === false
-  const enLectura = servidor === 'caido' && !lecturaCerrada
+  const enLectura = servidor === 'caido'
   const origen = enLectura ? window.location.origin : PANEL_ORIGEN
   const origenRef = useRef(origen)
   // Antes de que el iframe nuevo pueda mandar nada: si no, su primer mensaje se descarta.
@@ -350,14 +349,13 @@ export default function WhatsappPage() {
         </h1>
         <ControlLectura lectura={lectura} onCambio={tomarAjuste} />
 
-        {(enPanel || lecturaCerrada) && (
-          // Las mismas pestañas con el servidor encendido o apagado. Con los chats ocultos no
-          // hay panel: la pestaña la maneja el CRM (Bandeja = el aviso, Conexión = el estado).
+        {enPanel && (
+          // Las mismas pestañas con el servidor encendido o apagado (con chats visibles u ocultos).
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <div role="tablist" aria-label="Secciones del WhatsApp" className="glass flex rounded-full p-1">
               {VISTAS.map((v) => {
-                const elegida = lecturaCerrada ? vistaOculta === v.id : estado.vista === v.id
-                const sinLinea = !lecturaCerrada && v.id === 'inbox' && !estado.hayLinea
+                const elegida = estado.vista === v.id
+                const sinLinea = v.id === 'inbox' && !estado.hayLinea
                 return (
                   <button
                     key={v.id}
@@ -366,7 +364,7 @@ export default function WhatsappPage() {
                     aria-selected={elegida}
                     disabled={sinLinea}
                     title={sinLinea ? 'Vinculá la línea para ver los chats' : undefined}
-                    onClick={() => (lecturaCerrada ? setVistaOculta(v.id) : enviar({ tipo: 'nf-wa:vista', vista: v.id }))}
+                    onClick={() => enviar({ tipo: 'nf-wa:vista', vista: v.id })}
                     className={cn(
                       'rounded-full px-4 py-1.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
                       elegida ? 'bg-ink text-surface-solid' : 'text-ink-2 hover:text-ink',
@@ -380,7 +378,7 @@ export default function WhatsappPage() {
 
             <button
               type="button"
-              onClick={() => (lecturaCerrada ? setVistaOculta('connect') : enviar({ tipo: 'nf-wa:vista', vista: 'connect' }))}
+              onClick={() => enviar({ tipo: 'nf-wa:vista', vista: 'connect' })}
               className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
               title="Ver la conexión de la línea"
             >
@@ -429,63 +427,12 @@ export default function WhatsappPage() {
       )}
 
       <div className="relative min-h-0 flex-1">
-        {lecturaCerrada && vistaOculta === 'connect' ? (
-          // Conexión con los chats ocultos: el estado de la línea, sin ningún chat.
-          <div className="glass h-full overflow-y-auto rounded-2xl p-6">
-            <div className="max-w-xl">
-              <p className="font-display text-lg font-bold text-ink">Línea de WhatsApp</p>
-              <p className="mt-1 text-sm text-ink-2">El número de la concesionaria. Se vincula una sola vez y lo usan todos.</p>
-              <div className="mt-4 flex items-center gap-3 rounded-2xl border border-line p-4">
-                <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-neifert" aria-hidden="true" />
-                <div>
-                  <p className="text-sm font-semibold text-ink">Servidor apagado</p>
-                  <p className="text-sm text-ink-2">
-                    La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta
-                    solo y se puede volver a escribir.
-                  </p>
-                </div>
-              </div>
-              <p className="mt-4 text-sm text-ink-2">
-                {lectura?.motivo === 'apagado'
-                  ? 'Los chats se ocultaron al apagar el servidor: vuelven a verse cuando se encienda.'
-                  : 'Un administrador ocultó los chats: se ven solo con el servidor encendido.'}
-              </p>
-              <button
-                type="button"
-                onClick={probar}
-                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-              >
-                Reintentar ahora
-              </button>
-            </div>
-          </div>
-        ) : lecturaCerrada ? (
-          // PC servidor apagada y vista sin conexión cerrada: no se muestra ningún chat.
-          <div className="glass grid h-full place-items-center rounded-2xl p-6" role="status">
-            <div className="flex max-w-md flex-col items-center text-center">
-              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-neifert/10 text-neifert" aria-hidden="true">
-                <Lock size={26} />
-              </span>
-              <p className="mt-4 font-display text-lg font-bold text-ink">Los chats están ocultos</p>
-              <p className="mt-2 text-sm text-ink-2">
-                El servidor de WhatsApp está apagado y{' '}
-                {lectura?.motivo === 'apagado'
-                  ? 'al apagarlo se ocultaron los chats. Se vuelven a ver cuando la PC servidor esté encendida.'
-                  : 'un administrador ocultó los chats. Se ven solo con la PC servidor encendida.'}
-              </p>
-              <p className="mt-2 text-xs text-ink-3">Mientras tanto nadie puede ver los mensajes desde el CRM.</p>
-              <button
-                type="button"
-                onClick={probar}
-                className="mt-4 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white hover:brightness-110"
-              >
-                Reintentar ahora
-              </button>
-            </div>
-          </div>
-        ) : servidor === 'caido' ? (
-          // PC servidor apagada: el mismo panel, leyendo los chats guardados en la base.
+        {servidor === 'caido' ? (
+          // PC servidor apagada: el mismo panel, leyendo de la base. Con los chats ocultos
+          // muestra Conexión igual y en Bandeja el aviso (no recibe ningún chat).
           <iframe
+            // Si se ocultan o se vuelven a mostrar los chats, el panel se recarga con el ajuste nuevo.
+            key={lecturaCerrada ? 'chats-ocultos' : 'chats-visibles'}
             ref={iframeRef}
             src={LECTURA_URL}
             title="WhatsApp de la concesionaria (solo lectura)"

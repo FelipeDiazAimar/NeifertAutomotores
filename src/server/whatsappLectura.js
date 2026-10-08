@@ -453,12 +453,15 @@ async function atender(env, req, res, ruta) {
 
   const linea = await lineaActual(env)
   const lectura = await ajusteLectura(env, linea)
-  if (!lectura.habilitada) {
-    throw fallo(403, 'Un administrador cerró la vista sin conexión: los chats se ven solo con la PC servidor encendida.', {
-      lecturaDesactivada: true,
-    })
-  }
   const [seccion, jid, sub, id, extra] = partes
+  // Chats ocultos: el panel se sigue viendo (Conexión con el estado de la línea), pero no
+  // se entrega ningún chat, mensaje, archivo ni foto.
+  if (!lectura.habilitada) {
+    if (seccion === 'chats' && !jid) return []
+    if (seccion === 'chats' || seccion === 'buscar') {
+      throw fallo(403, 'Los chats están ocultos: se ven solo con la PC servidor encendida.', { lecturaDesactivada: true })
+    }
+  }
   if (seccion === 'estado') {
     return {
       conexion: 'nube',
@@ -469,6 +472,9 @@ async function atender(env, req, res, ruta) {
       config: { descargarMedia: false, confirmarLectura: false, crm: false },
       // Si se pidió borrar lo guardado después de que este navegador lo guardó, lo borra.
       lecturaBorradoEn: lectura.borradoEn || 0,
+      // El panel muestra el aviso en Bandeja y no guarda nada en el navegador.
+      chatsOcultos: !lectura.habilitada,
+      motivoOcultos: lectura.habilitada ? null : lectura.motivo || 'admin',
     }
   }
   if (seccion === 'agentes' || seccion === 'log') return []

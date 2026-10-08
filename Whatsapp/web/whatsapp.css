@@ -512,3 +512,14 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 
 /* Grupo: los integrantes debajo del nombre, en una línea */
 .conv-head .who .integrantes { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Servidor apagado con los chats ocultos: Bandeja muestra solo el aviso (Conexión no cambia). */
+.aviso-ocultos { grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; text-align: center; padding: 32px; min-height: 0; }
+.aviso-ocultos[hidden] { display: none; }
+.aviso-ocultos-icono { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; background: var(--red-soft); color: var(--red); margin-bottom: 6px; }
+.aviso-ocultos-icono svg.i { width: 26px; height: 26px; }
+.aviso-ocultos h2 { font-size: 19px; }
+.aviso-ocultos p { max-width: 460px; color: var(--ink-2); font-size: 14px; margin: 0; }
+.aviso-ocultos small { color: var(--ink-3); font-size: 12.5px; }
+.chats-ocultos #viewInbox > :not(#avisoOcultos) { display: none !important; }
+.chats-ocultos #viewInbox { grid-template-columns: minmax(0, 1fr); }

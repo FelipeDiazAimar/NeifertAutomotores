@@ -435,6 +435,20 @@ const cacheNube = (() => {
   return {
     leer: (almacen, clave) => pedir(almacen, 'readonly', (s) => s.get(clave)).catch(() => null),
     guardar: (almacen, clave, valor) => pedir(almacen, 'readwrite', (s) => s.put(valor, clave)).catch(() => {}),
+    // Cierra la conexión propia (si no, el navegador no borra) y borra todo lo guardado.
+    borrarTodo: async () => {
+      try {
+        if (db) (await db).close()
+      } catch {
+        // No se había podido abrir: no hay nada que cerrar.
+      }
+      db = null
+      try {
+        indexedDB.deleteDatabase('nf-wa-lectura')
+      } catch {
+        // Sin IndexedDB no había nada guardado.
+      }
+    },
   }
 })()
 
@@ -563,6 +577,13 @@ async function arrancarNube() {
     terminarArranque()
   }
   await sincronizar()
+  // Chats ocultos: nada queda en el navegador (la lista ya viene vacía de la base).
+  if (state.conn.chatsOcultos) {
+    state.chats = new Map()
+    renderList()
+    await cacheNube.borrarTodo()
+    return
+  }
   if (state.chats.size && state.conn.yo?.telefono) {
     guardarLocal('nf-wa-lectura-linea', lineaNube())
     cacheNube.guardar('lista', lineaNube(), { chats: [...state.chats.values()], estado: state.conn, ts: Date.now() })
@@ -2715,7 +2736,8 @@ function renderPill() {
     return
   }
   let mensaje
-  if (conexion === 'nube' && state.conn.errorNube) mensaje = `<b>No se pudieron leer los chats guardados.</b> ${esc(state.conn.errorNube)} Probá de nuevo en un rato o avisale a quien administra el sistema.`
+  if (conexion === 'nube' && state.conn.chatsOcultos) mensaje = '<b>Chats ocultos.</b> La PC servidor del WhatsApp está apagada y los chats no se pueden ver hasta que vuelva.'
+  else if (conexion === 'nube' && state.conn.errorNube) mensaje = `<b>No se pudieron leer los chats guardados.</b> ${esc(state.conn.errorNube)} Probá de nuevo en un rato o avisale a quien administra el sistema.`
   else if (conexion === 'nube') mensaje = '<b>Modo lectura.</b> La PC servidor del WhatsApp está apagada: ves los chats y mensajes guardados y podés bajar los archivos que ya estaban descargados. Para escribir tiene que estar encendida; se conecta sola cuando vuelva.'
   else if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
   else if (conexion === 'qr') mensaje = 'La línea no está vinculada: podés ver los chats guardados, pero no enviar.'
@@ -2772,7 +2794,7 @@ function renderConexion() {
       </div>`
   } else if (conexion === 'nube') {
     // Leyendo de la base con la PC servidor apagada: la línea sigue vinculada.
-    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta solo y se puede volver a escribir. Mientras tanto se ven los chats guardados.</div></div>`
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta solo y se puede volver a escribir. ${state.conn.chatsOcultos ? 'Mientras tanto los chats están ocultos.' : 'Mientras tanto se ven los chats guardados.'}</div></div>`
   } else {
     cuerpo = `<div class="conn-ok">${ic('clock')}<div>${esc(texto)}</div></div>`
   }
@@ -2826,6 +2848,14 @@ function onEstado(nuevo) {
   // Sin servidor no se puede leer ni mandar nada: se vuelve a la bandeja, se cierra el chat
   // y la lista queda bloqueada hasta que vuelva (ver servidorCaido / .sin-servidor).
   const caido = nuevo.conexion === 'servicio' || nuevo.conexion === 'nube'
+  // Servidor apagado con los chats ocultos: Bandeja muestra solo el aviso (Conexión igual).
+  document.documentElement.classList.toggle('chats-ocultos', !!nuevo.chatsOcultos)
+  $('#avisoOcultos').hidden = !nuevo.chatsOcultos
+  if (nuevo.chatsOcultos) {
+    $('#avisoOcultosTxt').textContent = nuevo.motivoOcultos === 'apagado'
+      ? 'El servidor de WhatsApp está apagado y al apagarlo se ocultaron los chats. Se vuelven a ver cuando la PC servidor esté encendida.'
+      : 'El servidor de WhatsApp está apagado y un administrador ocultó los chats. Se ven solo con la PC servidor encendida.'
+  }
   document.documentElement.classList.toggle('sin-servidor', caido)
   // En modo lectura (nube) no se "perdió" nada: se entró así a propósito.
   if (nuevo.conexion === 'servicio' && antes.conexion !== 'servicio') servidorCaido()
