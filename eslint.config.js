@@ -4,7 +4,7 @@ import reactHooks from 'eslint-plugin-react-hooks'
 import reactRefresh from 'eslint-plugin-react-refresh'
 
 export default [
-  { ignores: ['dist', 'node_modules'] },
+  { ignores: ['dist', 'node_modules', 'Whatsapp/escritorio/dist', 'Whatsapp/escritorio/build'] },
   {
     files: ['**/*.{js,jsx}'],
     languageOptions: {
@@ -45,5 +45,64 @@ export default [
     languageOptions: {
       globals: { ...globals.node },
     },
+  },
+  {
+    // Servicio de WhatsApp (Whatsapp/servidor): Node puro, con su propio package.json.
+    // No entra al build de Vite; se corre aparte con `npm start` desde esa carpeta.
+    files: ['Whatsapp/servidor/**/*.js'],
+    languageOptions: {
+      globals: { ...globals.node },
+    },
+    rules: {
+      // useMultiFileAuthState es de Baileys, no un hook de React.
+      'react-hooks/rules-of-hooks': 'off',
+      // `catch {}` a propósito: fallas que no cambian el curso (ver el comentario de cada una).
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    // Panel y mockup: corren en el navegador sin bundler. data.js define sus datos de
+    // ejemplo como globals porque se carga con <script> antes que app.js.
+    files: ['Whatsapp/web/**/*.js', 'Whatsapp/mockup/**/*.js'],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        CHATS: 'readonly',
+        ESTADOS: 'readonly',
+        LINE_PHONE: 'readonly',
+        LOG: 'readonly',
+        ME: 'readonly',
+        UNITS: 'readonly',
+        VENDEDORES: 'readonly',
+        carSvg: 'readonly',
+        fmtKm: 'readonly',
+      },
+    },
+    rules: {
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    // App de escritorio de la PC servidor (Electron): proceso principal y scripts en Node.
+    files: ['Whatsapp/escritorio/**/*.{cjs,mjs}'],
+    languageOptions: {
+      ecmaVersion: 'latest',
+      sourceType: 'module',
+      globals: { ...globals.node },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      'no-unused-vars': ['warn', { varsIgnorePattern: '^[A-Z_]' }],
+      'no-empty': ['error', { allowEmptyCatch: true }],
+    },
+  },
+  {
+    files: ['Whatsapp/escritorio/**/*.cjs'],
+    languageOptions: { sourceType: 'commonjs' },
+  },
+  {
+    // El preload corre en la página (usa location) con el require de Electron.
+    files: ['Whatsapp/escritorio/preload.cjs'],
+    languageOptions: { globals: { ...globals.browser, ...globals.node } },
   },
 ]

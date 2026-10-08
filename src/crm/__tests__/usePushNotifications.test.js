@@ -6,8 +6,8 @@ vi.mock('@/crm/services/usuarios.service', () => ({ tokenActual: vi.fn().mockRes
 
 describe('usePushNotifications', () => {
   beforeEach(() => {
-    global.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
-    global.navigator.serviceWorker = {
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ok: true }) })
+    globalThis.navigator.serviceWorker = {
       register: vi.fn().mockResolvedValue({
         pushManager: {
           subscribe: vi.fn().mockResolvedValue({
@@ -17,7 +17,7 @@ describe('usePushNotifications', () => {
         },
       }),
     }
-    global.Notification = { requestPermission: vi.fn().mockResolvedValue('granted'), permission: 'default' }
+    globalThis.Notification = { requestPermission: vi.fn().mockResolvedValue('granted'), permission: 'default' }
     window.PushManager = window.PushManager || class {}
     import.meta.env.VITE_VAPID_PUBLIC_KEY = 'BLRrISy-ll4jdEYZ8k2d0NYVsQuAnE2wWHwZRWKWVoj-LauDMM953Mrrcgk3r9WEmA4_TVsDqbnyyAQ6Zo3_U3Y'
   })
@@ -26,16 +26,16 @@ describe('usePushNotifications', () => {
     const { usePushNotifications } = await import('../hooks/usePushNotifications.js')
     const { result } = renderHook(() => usePushNotifications())
     await act(async () => { await result.current.activar() })
-    expect(global.fetch).toHaveBeenCalledWith('/api/crm/usuarios', expect.objectContaining({ method: 'POST' }))
-    const body = JSON.parse(global.fetch.mock.calls[0][1].body)
+    expect(globalThis.fetch).toHaveBeenCalledWith('/api/crm/usuarios', expect.objectContaining({ method: 'POST' }))
+    const body = JSON.parse(globalThis.fetch.mock.calls[0][1].body)
     expect(body).toEqual({ accion: 'push_subscribe', endpoint: 'https://x/1', p256dh: 'p', auth: 'a' })
   })
 
   it('si el usuario no da permiso, no llama al backend', async () => {
-    global.Notification.requestPermission = vi.fn().mockResolvedValue('denied')
+    globalThis.Notification.requestPermission = vi.fn().mockResolvedValue('denied')
     const { usePushNotifications } = await import('../hooks/usePushNotifications.js')
     const { result } = renderHook(() => usePushNotifications())
     await act(async () => { await result.current.activar() })
-    expect(global.fetch).not.toHaveBeenCalled()
+    expect(globalThis.fetch).not.toHaveBeenCalled()
   })
 })

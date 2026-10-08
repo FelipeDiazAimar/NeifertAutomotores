@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self'" />
+    <title>Registros — Neifert WhatsApp</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body class="registros">
+    <header class="cabecera">
+      <div>
+        <img src="img/logo-light.png" alt="Neifert Automotores" class="marca clara" />
+        <img src="img/logo-dark.png" alt="" aria-hidden="true" class="marca oscura" />
+      </div>
+      <span class="etiqueta">Registros</span>
+    </header>
+
+    <div class="barra">
+      <div class="filtros" role="tablist">
+        <button class="filtro on" data-filtro="problemas" type="button">Errores y avisos <span id="cantProblemas"></span></button>
+        <button class="filtro" data-filtro="todo" type="button">Todo</button>
+      </div>
+      <input type="search" id="buscar" placeholder="Buscar…" autocomplete="off" />
+      <button class="btn secundario chico-btn" id="copiar" type="button" title="Copiar lo que se ve, para mandarlo">Copiar</button>
+      <button class="btn secundario chico-btn" id="carpeta" type="button" title="Abrir la carpeta de registros">Carpeta</button>
+    </div>
+
+    <ul class="lista-registros" id="lista"></ul>
+    <p class="vacio" id="vacio" hidden>No hay nada para mostrar.</p>
+
+    <footer class="pie">
+      <span class="version" id="pie">Se actualiza solo cada 3 segundos · últimos 2 días</span>
+    </footer>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      let filtro = 'problemas'
+      let datos = []
+      const abiertos = new Set()
+      const NIVEL = { error: 'Error', aviso: 'Aviso', ok: 'OK', info: 'Info' }
+      const hora = (ts) => {
+        const d = new Date(ts)
+        const hoy = new Date().toDateString() === d.toDateString()
+        const h = d.toLocaleTimeString('es-AR', { hour12: false })
+        return hoy ? h : `${d.toLocaleDateString('es-AR', { day: '2-digit', month: '2-digit' })} ${h}`
+      }
+      const clave = (r) => `${r.ts}|${r.texto}`
+      const el = (tag, clase, texto) => {
+        const e = document.createElement(tag)
+        if (clase) e.className = clase
+        if (texto != null) e.textContent = texto
+        return e
+      }
+
+      function visibles() {
+        const q = $('buscar').value.trim().toLowerCase()
+        return datos.filter((r) => {
+          if (filtro === 'problemas' && !['error', 'aviso'].includes(r.nivel)) return false
+          if (q && !`${r.texto} ${r.detalle} ${r.origen}`.toLowerCase().includes(q)) return false
+          return true
+        })
+      }
+
+      function dibujar() {
+        const lista = visibles()
+        $('cantProblemas').textContent = String(datos.filter((r) => ['error', 'aviso'].includes(r.nivel)).length)
+        $('vacio').hidden = lista.length > 0
+        $('vacio').textContent = filtro === 'problemas' ? 'Sin errores ni avisos. 👌' : 'No hay nada para mostrar.'
+        const filas = lista.map((r) => {
+          const li = el('li', `registro niv-${r.nivel}${r.que ? ' con-ayuda' : ''}${abiertos.has(clave(r)) ? ' abierto' : ''}`)
+          li.dataset.clave = clave(r)
+          const fila = el('div', 'fila-reg')
+          fila.append(el('span', 'hora', hora(r.ts)), el('span', `nivel niv-${r.nivel}`, NIVEL[r.nivel] || r.nivel), el('span', 'origen', r.origen))
+          const textos = el('div', 'textos-reg')
+          const linea = el('span', 'texto-reg', r.texto)
+          if (r.veces > 1) linea.append(el('span', 'veces', `×${r.veces}`))
+          textos.append(linea)
+          if (r.veces > 1) textos.append(el('span', 'detalle-reg', `Se repitió ${r.veces} veces desde las ${hora(r.desde)}`))
+          if (r.detalle) textos.append(el('span', 'detalle-reg', r.detalle))
+          fila.append(textos)
+          if (r.que) fila.append(el('span', 'mas', abiertos.has(clave(r)) ? 'Ocultar' : '¿Qué hago?'))
+          li.append(fila)
+          if (r.que) {
+            const ayuda = el('div', 'ayuda-reg')
+            ayuda.append(el('p', null, ''), el('p', null, ''))
+            ayuda.children[0].append(el('b', null, 'Qué pasó: '), document.createTextNode(r.que))
+            ayuda.children[1].append(el('b', null, 'Qué hacer: '), document.createTextNode(r.hacer))
+            li.append(ayuda)
+          }
+          return li
+        })
+        $('lista').replaceChildren(...filas)
+      }
+
+      async function cargar() {
+        datos = await window.nfApp.registros()
+        dibujar()
+      }
+
+      $('lista').addEventListener('click', (e) => {
+        const li = e.target.closest('.registro.con-ayuda')
+        if (!li) return
+        const k = li.dataset.clave
+        if (abiertos.has(k)) abiertos.delete(k)
+        else abiertos.add(k)
+        dibujar()
+      })
+      for (const b of document.querySelectorAll('[data-filtro]')) {
+        b.addEventListener('click', () => {
+          filtro = b.dataset.filtro
+          document.querySelectorAll('[data-filtro]').forEach((x) => x.classList.toggle('on', x === b))
+          dibujar()
+        })
+      }
+      $('buscar').addEventListener('input', dibujar)
+      $('copiar').addEventListener('click', () => {
+        const texto = visibles()
+          .map((r) => `[${new Date(r.ts).toLocaleString('es-AR', { hour12: false })}] ${(NIVEL[r.nivel] || r.nivel).toUpperCase()} · ${r.origen} · ${r.texto}${r.detalle ? ` · ${r.detalle}` : ''}${r.que ? `\n    Qué pasó: ${r.que}\n    Qué hacer: ${r.hacer}` : ''}`)
+          .join('\n')
+        window.nfApp.copiar(texto)
+        $('copiar').textContent = '¡Copiado!'
+        setTimeout(() => ($('copiar').textContent = 'Copiar'), 1500)
+      })
+      $('carpeta').addEventListener('click', () => window.nfApp.abrirCarpetaRegistros())
+
+      cargar()
+      setInterval(cargar, 3000)
+    </script>
+  </body>
+</html>

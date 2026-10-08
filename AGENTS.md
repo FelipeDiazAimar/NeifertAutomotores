@@ -111,6 +111,9 @@ All in `src/plugins/`: `instagramProxy`, `crmProxy`, `r2Proxy`, `usersProxy`, `i
 | `VITE_VAPID_PUBLIC_KEY` | Sí (prod, alertas) | Web Push (la usa el frontend para suscribirse) |
 | `VAPID_PRIVATE_KEY` | Sí (prod, alertas) | Web Push (solo servidor) |
 | `VAPID_SUBJECT` | Sí (prod, alertas) | Web Push (`mailto:alertas@neifertautomotores.com`) |
+| `WA_SUPABASE_URL` (o `WA_DATABASE_URL`) | Sí (WhatsApp en solo lectura) | Base del WhatsApp: el CRM lee los chats guardados cuando la PC servidor está apagada (`/wa-lectura/`) |
+| `WA_R2_BUCKET`, `WA_R2_ENDPOINT`, `WA_R2_ACCESS_KEY_ID`, `WA_R2_SECRET_ACCESS_KEY` | Sí (WhatsApp en solo lectura) | Archivos y fotos del WhatsApp en R2 (enlaces temporales de descarga) |
+| `WA_LINEA` | No | Qué línea mostrar en solo lectura (si no, la de actividad más reciente) |
 
 `loadEnv(mode, cwd, '')` in vite.config.js loads ALL env vars (not just `VITE_` prefix) so proxies can use service-role keys.
 

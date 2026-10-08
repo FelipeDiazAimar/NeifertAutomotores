@@ -1,6 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { emailDeUsuario } from '../../src/crm/lib/authEmail.js'
 import { handleCheckAlertas } from './check-alertas.js'
+import { handleWhatsappLectura } from '../../src/server/whatsappLectura.js'
 
 /** Serverless — alta de usuario, reset de contraseña, suscripción a push y
  *  email propio del CRM nuevo. `push_subscribe` y `guardar_mi_email` las puede
@@ -133,5 +134,8 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
 }
 
 export default function handler(req, res) {
+  // WhatsApp en solo lectura (PC servidor apagada): vercel.json manda /wa-lectura/api/*
+  // acá con ?wa=<ruta>. Va en esta función por el tope de 12 funciones del plan Hobby.
+  if (req.query?.wa !== undefined) return handleWhatsappLectura(req, res)
   return handleUsuarios(req, res)
 }

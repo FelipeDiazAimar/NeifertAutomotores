@@ -8,7 +8,9 @@ vi.mock('../hooks/useTareas.js', () => ({
   useTareas: () => ({
     data: [
       { id: 't1', titulo: 'Vencida X', fecha: '2020-01-01', done: false, prioridad: 'normal' },
-      { id: 't2', titulo: 'Hoy Y', fecha: new Date().toISOString().slice(0, 10), done: false, prioridad: 'alta' },
+      // Fecha de HOY en hora local (la página agrupa por día local). Con toISOString, de 21 a
+      // 24 h en Argentina ya es "mañana" en UTC y el test fallaba.
+      { id: 't2', titulo: 'Hoy Y', fecha: new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10), done: false, prioridad: 'alta' },
       { id: 't3', titulo: 'Hecha Z', fecha: '2020-01-01', done: true, prioridad: 'normal' },
     ],
     isLoading: false,

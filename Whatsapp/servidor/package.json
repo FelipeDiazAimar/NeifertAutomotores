@@ -1,0 +1,29 @@
+{
+  "name": "neifert-whatsapp-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Servicio local de WhatsApp (Baileys) para probar la bandeja antes de integrarla al CRM",
+  "type": "module",
+  "main": "index.js",
+  "engines": {
+    "node": ">=20.12"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "importar": "node scripts/importar-a-supabase.mjs",
+    "subir-r2": "node scripts/subir-a-r2.mjs",
+    "respaldar": "node scripts/respaldar.mjs",
+    "restaurar": "node scripts/restaurar.mjs",
+    "mudar-a-lineas": "node scripts/mudar-a-lineas.mjs"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1146.0",
+    "baileys": "7.0.0-rc14",
+    "express": "^5.2.1",
+    "ffmpeg-static": "^5.3.0",
+    "pg": "^8.23.0",
+    "pino": "^10.3.1",
+    "qrcode": "^1.5.4"
+  }
+}

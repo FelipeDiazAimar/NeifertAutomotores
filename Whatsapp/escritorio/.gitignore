@@ -1,0 +1,6 @@
+node_modules/
+build/
+dist/
+icono.png
+# Configuración local con claves: nunca al repo
+*.env

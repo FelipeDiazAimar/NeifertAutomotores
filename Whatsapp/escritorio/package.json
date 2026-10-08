@@ -1,0 +1,54 @@
+{
+  "name": "neifert-whatsapp-escritorio",
+  "version": "1.1.2",
+  "private": true,
+  "description": "App de escritorio de la PC que hace de servidor de WhatsApp de Neifert",
+  "author": "Neifert Automotores",
+  "main": "main.cjs",
+  "scripts": {
+    "start": "electron .",
+    "preparar": "node scripts/preparar.mjs",
+    "empaquetar": "node scripts/preparar.mjs && electron-builder --win nsis",
+    "publicar": "node scripts/publicar.mjs"
+  },
+  "devDependencies": {
+    "electron": "44.5.1",
+    "electron-builder": "26.15.3"
+  },
+  "build": {
+    "appId": "ar.neifert.whatsapp",
+    "productName": "Neifert WhatsApp",
+    "artifactName": "Neifert WhatsApp Setup ${version}.${ext}",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "main.cjs",
+      "preload.cjs",
+      "r2.cjs",
+      "registros.cjs",
+      "ventana/**",
+      "icono.png"
+    ],
+    "extraResources": [
+      {
+        "from": "build/app-servidor",
+        "to": "app-servidor"
+      },
+      {
+        "from": "build/bin",
+        "to": "bin"
+      }
+    ],
+    "win": {
+      "target": "nsis",
+      "icon": "build/icon.ico"
+    },
+    "nsis": {
+      "oneClick": true,
+      "perMachine": false,
+      "shortcutName": "Neifert WhatsApp",
+      "deleteAppDataOnUninstall": false
+    }
+  }
+}

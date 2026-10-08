@@ -1,0 +1,252 @@
+// @vitest-environment jsdom
+import { afterEach, describe, expect, it, vi } from 'vitest'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
+
+vi.mock('@/crm/services/usuarios.service', () => ({ tokenActual: async () => 'token' }))
+vi.mock('@/store/useUiStore', () => ({ useUiStore: (sel) => sel({ theme: 'light' }) }))
+// Rol del usuario logueado: se cambia en cada test que lo necesita.
+let rolActual = 'vendedor'
+vi.mock('@/crm/hooks/useCrmPerfil', () => ({ useCrmPerfil: () => ({ rol: rolActual }) }))
+vi.stubEnv('VITE_WHATSAPP_PANEL_URL', 'http://localhost:3100')
+const { default: WhatsappPage } = await import('../pages/WhatsappPage.jsx')
+
+const montar = () => render(<MemoryRouter><WhatsappPage /></MemoryRouter>)
+
+/**
+ * fetch de mentira: la función del CRM (/wa-lectura/api/servidor) contesta, en orden, si
+ * la PC servidor responde (la última respuesta se repite). Lo demás contesta vacío.
+ */
+const servidorQue = (...respuestas) => {
+  const cola = [...respuestas]
+  return vi.fn(async (url) => {
+    if (String(url).startsWith('/wa-lectura/api/servidor')) {
+      const responde = cola.length > 1 ? cola.shift() : cola[0]
+      return { json: async () => ({ responde }) }
+    }
+    return {}
+  })
+}
+
+afterEach(() => {
+  rolActual = 'vendedor'
+  vi.unstubAllGlobals()
+  vi.useRealTimers()
+})
+
+describe('WhatsappPage', () => {
+  it('si el servidor no responde, abre el WhatsApp en solo lectura (los chats guardados en la base)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    montar()
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
+    expect(lectura).toHaveAttribute('src', '/wa-lectura/index.html')
+    expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+
+    // La copia de solo lectura es del mismo sitio que el CRM: se le habla con ese origen.
+    const panel = lectura.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:pedir-token' })
+    await waitFor(() => expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:token', token: 'token' }, window.location.origin))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'nube', clase: 'wait', texto: 'Solo lectura', vista: 'inbox', hayLinea: true, puedeActualizar: false })
+    expect(screen.getByText(/solo lectura · servidor apagado/i)).toBeInTheDocument()
+    // Las pestañas siguen con el servidor apagado, y van al panel de solo lectura.
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, window.location.origin)
+  })
+
+  it('con la PC apagada Cloudflare igual contesta: si la función dice que no responde, va a solo lectura', async () => {
+    // La pregunta directa "llegaría" (Cloudflare devuelve su página de error), pero no cuenta.
+    vi.stubGlobal('fetch', servidorQue(false))
+    montar()
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+    // Un solo cargando: el del CRM se va cuando aparece el panel (que muestra el suyo, igual).
+    expect(screen.queryByText(/verificando la línea/i)).toBeNull()
+  })
+
+  it('mientras pregunta por el servidor muestra "Verificando la línea…"', async () => {
+    let contestar
+    vi.stubGlobal('fetch', vi.fn(() => new Promise((r) => (contestar = r))))
+    montar()
+    expect(await screen.findByText(/verificando la línea/i)).toBeInTheDocument()
+    await act(async () => contestar({ json: async () => ({ responde: false }) }))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    expect(screen.queryByText(/verificando la línea/i)).toBeNull()
+  })
+
+  it('con los chats ocultos abre el mismo panel (Conexión igual) sin borrar nada', async () => {
+    const borrar = vi.fn()
+    vi.stubGlobal('indexedDB', { deleteDatabase: borrar })
+    vi.stubGlobal('fetch', vi.fn(async (url) =>
+      String(url).startsWith('/wa-lectura/api/servidor')
+        ? { json: async () => ({ responde: false, lectura: { habilitada: false, borradoEn: Date.now(), motivo: 'apagado' } }) }
+        : {},
+    ))
+    montar()
+    // El panel de siempre (el aviso de chats ocultos lo muestra él, en Bandeja).
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
+    // Ocultar no borra lo guardado en el navegador; el panel no lo muestra (?ocultos=1).
+    expect(borrar).not.toHaveBeenCalled()
+    expect(lectura).toHaveAttribute('src', '/wa-lectura/index.html?ocultos=1')
+    const panel = lectura.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'nube', clase: 'wait', texto: 'Solo lectura', vista: 'inbox', hayLinea: true })
+    expect(screen.getByText(/servidor apagado · chats ocultos/i)).toBeInTheDocument()
+    // Las pestañas son las del panel: Conexión se ve igual que siempre.
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, window.location.origin)
+  })
+
+  it('si el panel abierto pierde el servidor, pasa al panel de solo lectura', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
+    const fetch = vi.fn(async (url) =>
+      String(url).startsWith('/wa-lectura/api/servidor')
+        ? { json: async () => (fetch.mock.calls.length <= 1 ? { responde: true, lectura: { habilitada: true } } : { responde: false, lectura: { habilitada: false, motivo: 'admin' } }) }
+        : {},
+    )
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    // El panel avisa "Servidor sin conexión": el CRM vuelve a preguntar y la PC está apagada.
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
+    // Espera unos segundos, pregunta y la PC está apagada: pasa a solo lectura.
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+  })
+
+  it('un microcorte de la conexión en vivo no recarga el panel si el servidor sigue andando', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = servidorQue(true)
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
+    await act(() => vi.advanceTimersByTimeAsync(6_000))
+    // Preguntó, el servidor anda: el mismo panel sigue ahí (no se recargó).
+    expect(fetch.mock.calls.filter(([u]) => u === '/wa-lectura/api/servidor').length).toBe(2)
+    expect(screen.getByTitle('WhatsApp de la concesionaria')).toBe(iframe)
+  })
+
+  it('un administrador oculta los chats sin servidor con el interruptor', async () => {
+    rolActual = 'admin'
+    vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
+    const fetch = vi.fn(async (url, opciones) => {
+      if (String(url).startsWith('/wa-lectura/api/servidor')) return { json: async () => ({ responde: true, lectura: { habilitada: true, borradoEn: 0 } }) }
+      if (url === '/wa-lectura/api/ajustes') return { ok: true, json: async () => ({ lectura: { habilitada: false, motivo: 'admin', borradoEn: Date.now() }, cuerpo: JSON.parse(opciones.body) }) }
+      return {}
+    })
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    await userEvent.click(await screen.findByRole('button', { name: /chats sin servidor: visibles/i }))
+    await userEvent.click(screen.getByRole('switch', { name: /mostrar los chats/i }))
+    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/ajustes', expect.objectContaining({ method: 'POST', body: JSON.stringify({ habilitada: false }) }))
+    expect(await screen.findByRole('button', { name: /chats sin servidor: ocultos/i })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /mostrar los chats/i })).toHaveAttribute('aria-checked', 'false')
+    // No hay botón aparte para borrar.
+    expect(screen.queryByText(/borrar los chats guardados/i)).toBeNull()
+    // Tocar afuera (también sobre el panel) cierra el cuadro.
+    await userEvent.pointer({ keys: '[MouseLeft]', target: document.querySelector('.fixed.inset-0') })
+    expect(screen.queryByRole('dialog', { name: /chats con el servidor apagado/i })).toBeNull()
+  })
+
+  it('un vendedor no ve el control', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => (String(url).startsWith('/wa-lectura/api/servidor') ? { json: async () => ({ responde: true, lectura: { habilitada: true } }) } : {})))
+    montar()
+    await screen.findByTitle('WhatsApp de la concesionaria')
+    expect(screen.queryByRole('button', { name: /chats sin servidor/i })).toBeNull()
+  })
+
+  it('"Reintentar" vuelve a probar y, si la PC servidor ya responde, carga el panel normal', async () => {
+    const fetch = servidorQue(false, true)
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
+    const panel = lectura.contentWindow
+    await act(() =>
+      window.dispatchEvent(new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', tipo: 'nf-wa:listo' } })),
+    )
+    await act(() =>
+      window.dispatchEvent(
+        new MessageEvent('message', { origin: window.location.origin, source: panel, data: { origen: 'nf-wa', tipo: 'nf-wa:estado', conexion: 'nube', vista: 'inbox', hayLinea: true } }),
+      ),
+    )
+    await userEvent.click(screen.getByRole('button', { name: /reintentar/i }))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria')).toHaveAttribute('src', 'http://localhost:3100/')
+    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/servidor', expect.objectContaining({ cache: 'no-store' }))
+  })
+
+  it('con la PC apagada sigue probando sola y pasa al panel normal cuando vuelve', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = servidorQue(false, false, true)
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    expect(await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    // Primer reintento: sigue apagada, la lectura no se cierra.
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    expect(screen.getByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeInTheDocument()
+    // Segundo: ya responde.
+    await act(() => vi.advanceTimersByTimeAsync(15_000))
+    expect(await screen.findByTitle('WhatsApp de la concesionaria')).toHaveAttribute('src', 'http://localhost:3100/')
+  })
+
+  it('el encabezado (pestañas, estado y actualizar) lo dibuja el CRM con lo que avisa el panel', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({}))
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+
+    await delPanel({ tipo: 'nf-wa:listo' })
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'conectado', clase: '', texto: 'Conectada', telefono: '5493406518585', vista: 'inbox', hayLinea: true, puedeActualizar: true, actualizarHabilitado: true, actualizando: false })
+
+    expect(screen.getByRole('tab', { name: 'Bandeja' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByText('+54 9 3406518585')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Conexión' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:vista', vista: 'connect' }, 'http://localhost:3100')
+    await userEvent.click(screen.getByRole('button', { name: 'Recargar' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:actualizar' }, 'http://localhost:3100')
+  })
+
+  it('si el panel nunca termina de cargar, vuelve a probar en vez de quedar cargando', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const fetch = servidorQue(true)
+    vi.stubGlobal('fetch', fetch)
+    const pruebas = () => fetch.mock.calls.filter(([url]) => url === '/wa-lectura/api/servidor').length
+    montar()
+    await screen.findByTitle('WhatsApp de la concesionaria')
+    expect(pruebas()).toBe(1)
+    await act(() => vi.advanceTimersByTimeAsync(25_000))
+    await waitFor(() => expect(pruebas()).toBe(2))
+  })
+
+  it('un mensaje que no viene del panel no cambia nada', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({}))
+    montar()
+    const panel = (await screen.findByTitle('WhatsApp de la concesionaria')).contentWindow
+    for (const tipo of ['nf-wa:listo', 'nf-wa:estado']) {
+      const data = { origen: 'nf-wa', tipo, conexion: 'conectado', vista: 'inbox', hayLinea: true }
+      await act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'https://otro.com', source: panel, data })))
+    }
+    expect(screen.queryByRole('tab', { name: 'Bandeja' })).toBeNull()
+  })
+})

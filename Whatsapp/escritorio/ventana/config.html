@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self'" />
+    <title>Configuración — Neifert WhatsApp</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <header class="cabecera">
+      <div>
+        <img src="img/logo-light.png" alt="Neifert Automotores" class="marca clara" />
+        <img src="img/logo-dark.png" alt="" aria-hidden="true" class="marca oscura" />
+      </div>
+      <span class="etiqueta">Configuración</span>
+    </header>
+
+    <h1>Configurar el servidor</h1>
+    <p class="bajada">Esta PC va a ser el servidor del WhatsApp de la concesionaria. Necesitás el archivo de configuración (<b>.env</b>) que te pasaron.</p>
+
+    <!-- Zona para soltar el archivo -->
+    <div class="zona" id="zona">
+      <div id="sinArchivo">
+        <div class="icono">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/></svg>
+        </div>
+        <b>Arrastrá el archivo .env acá</b>
+        <p class="o">o</p>
+        <button class="btn secundario" id="elegir" type="button">Elegir archivo…</button>
+      </div>
+      <div id="conArchivo" hidden>
+        <div class="archivo">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="M14 2v6h6"/></svg>
+          <div>
+            <div class="nombre" id="nombre"></div>
+            <div class="ruta" id="ruta"></div>
+          </div>
+          <button class="btn texto cambiar" id="otro" type="button">Cambiar</button>
+        </div>
+        <ul class="chequeo" id="chequeo"></ul>
+      </div>
+    </div>
+    <p class="error" id="error" hidden></p>
+
+    <div class="tarjeta">
+      <label class="interruptor">
+        <span class="textos"><b>Borrar el archivo original</b><span>Recomendado: la app guarda su propia copia cifrada.</span></span>
+        <input type="checkbox" id="borrar" checked />
+      </label>
+    </div>
+
+    <div class="acciones">
+      <button class="btn primario ancho" id="guardar" disabled>Guardar y continuar</button>
+    </div>
+
+    <footer class="pie">
+      <span class="seguridad">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+        Se guarda cifrado en esta PC y no se envía a ningún lado.
+      </span>
+    </footer>
+
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const ICONO = {
+        ok: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m8 12 3 3 5-6"/></svg>',
+        falta: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6M9 9l6 6"/></svg>',
+        aviso: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0Z"/><path d="M12 9v4M12 17h.01"/></svg>',
+      }
+      const item = (tipo, html) => {
+        const li = document.createElement('li')
+        li.className = tipo
+        li.innerHTML = ICONO[tipo]
+        const span = document.createElement('div')
+        span.innerHTML = html
+        li.append(span)
+        return li
+      }
+      const texto = (t) => Object.assign(document.createElement('span'), { textContent: t }).outerHTML
+
+      function mostrar(r) {
+        $('error').hidden = true
+        if (!r) return
+        if (r.error && !r.faltan) {
+          $('error').textContent = r.error
+          $('error').hidden = false
+          $('guardar').disabled = true
+          return
+        }
+        $('sinArchivo').hidden = true
+        $('conArchivo').hidden = false
+        $('nombre').textContent = r.ruta.split(/[\\/]/).pop()
+        $('ruta').textContent = r.ruta
+        const filas = []
+        if (r.ok) filas.push(item('ok', 'Tiene todo lo necesario para arrancar'))
+        for (const f of r.faltan || []) filas.push(item('falta', `Falta <b>${texto(f)}</b> <span>(obligatoria)</span>`))
+        for (const a of r.avisos || []) {
+          const [clave, efecto] = a.split(': ')
+          filas.push(item('aviso', `<b>${texto(clave)}</b> <span>— ${texto(efecto || '')}</span>`))
+        }
+        if (r.crm) filas.push(item('ok', `CRM: <span>${texto(r.crm)}</span>`))
+        $('chequeo').replaceChildren(...filas)
+        $('guardar').disabled = !r.ok
+      }
+
+      $('elegir').addEventListener('click', async () => mostrar(await window.nfApp.elegirConfig()))
+      $('otro').addEventListener('click', async () => mostrar(await window.nfApp.elegirConfig()))
+
+      // Arrastrar y soltar: en toda la ventana (así soltarlo un poco afuera también vale).
+      const zona = $('zona')
+      let profundidad = 0
+      window.addEventListener('dragenter', (e) => {
+        e.preventDefault()
+        profundidad++
+        zona.classList.add('encima')
+      })
+      window.addEventListener('dragleave', () => {
+        if (--profundidad <= 0) zona.classList.remove('encima')
+      })
+      window.addEventListener('dragover', (e) => e.preventDefault())
+      window.addEventListener('drop', async (e) => {
+        e.preventDefault()
+        profundidad = 0
+        zona.classList.remove('encima')
+        const archivo = e.dataTransfer?.files?.[0]
+        if (!archivo) return
+        mostrar(await window.nfApp.configDesdeArchivo(archivo))
+      })
+
+      $('guardar').addEventListener('click', async () => {
+        $('guardar').disabled = true
+        $('guardar').textContent = 'Guardando…'
+        const r = await window.nfApp.guardarConfig({ borrarOriginal: $('borrar').checked })
+        if (!r.ok) {
+          $('error').textContent = r.error
+          $('error').hidden = false
+          $('guardar').disabled = false
+          $('guardar').textContent = 'Guardar y continuar'
+        }
+      })
+    </script>
+  </body>
+</html>
