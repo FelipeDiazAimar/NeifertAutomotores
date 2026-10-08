@@ -12,9 +12,9 @@ vi.mock('@/lib/mediaFormats', () => ({
 import ImageCropper from '../ImageCropper'
 
 beforeEach(() => {
-  global.URL.createObjectURL = vi.fn().mockReturnValue('blob:x')
-  global.URL.revokeObjectURL = vi.fn()
-  global.ResizeObserver = vi.fn().mockImplementation(() => ({
+  globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:x')
+  globalThis.URL.revokeObjectURL = vi.fn()
+  globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
     observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn(),
   }))
   cropImage.mockReset()

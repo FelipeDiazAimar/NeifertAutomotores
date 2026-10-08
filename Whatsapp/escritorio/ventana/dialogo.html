@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:" />
+    <title>Neifert WhatsApp</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <!-- Ventanita sin marco para los avisos del proceso principal (ver mostrarDialogo en main.cjs). -->
+  <body class="ventana-dialogo">
+    <script src="dialogo.js"></script>
+    <script>
+      window.nfApp.dialogo().then((opciones) => {
+        const tarjeta = window.nfDialogo.armar(opciones, (acepta) => window.nfApp.dialogoResponder(acepta))
+        document.body.append(tarjeta)
+        // La ventana se ajusta al alto del contenido y recién ahí se muestra.
+        requestAnimationFrame(() => {
+          window.nfApp.dialogoListo(Math.ceil(document.documentElement.scrollHeight))
+          tarjeta.enfocar()
+        })
+      })
+    </script>
+  </body>
+</html>

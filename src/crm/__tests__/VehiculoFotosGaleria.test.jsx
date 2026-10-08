@@ -34,9 +34,9 @@ function renderGaleria() {
 
 describe('VehiculoFotosGaleria', () => {
   it('soltar un archivo sobre el "+" alimenta el mismo flujo de carga (abre el recorte)', async () => {
-    global.URL.createObjectURL = vi.fn().mockReturnValue('blob:x')
-    global.URL.revokeObjectURL = vi.fn()
-    global.ResizeObserver = vi.fn().mockImplementation(() => ({
+    globalThis.URL.createObjectURL = vi.fn().mockReturnValue('blob:x')
+    globalThis.URL.revokeObjectURL = vi.fn()
+    globalThis.ResizeObserver = vi.fn().mockImplementation(() => ({
       observe: vi.fn(), unobserve: vi.fn(), disconnect: vi.fn(),
     }))
 

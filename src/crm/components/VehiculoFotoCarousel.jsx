@@ -20,11 +20,9 @@ export default function VehiculoFotoCarousel({ vehiculoId, patente }) {
     return () => clearInterval(t)
   }, [lista.length])
 
-  useEffect(() => {
-    if (i >= lista.length) setI(0)
-  }, [lista.length, i])
-
-  const actual = lista[i]
+  // Si la lista se achica, se vuelve a la primera (calculado, sin efecto que corrija el estado).
+  const iActual = i < lista.length ? i : 0
+  const actual = lista[iActual]
   const actualRota = actual && rotas.has(actual.id)
 
   return (
@@ -52,7 +50,7 @@ export default function VehiculoFotoCarousel({ vehiculoId, patente }) {
           {lista.map((f, idx) => (
             <span
               key={f.id}
-              className={cn('h-1.5 w-1.5 rounded-full transition-colors', idx === i ? 'bg-white' : 'bg-white/40')}
+              className={cn('h-1.5 w-1.5 rounded-full transition-colors', idx === iActual ? 'bg-white' : 'bg-white/40')}
             />
           ))}
         </div>

@@ -1,0 +1,390 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self'; img-src 'self' data:" />
+    <title>Servidor de WhatsApp — Neifert</title>
+    <link rel="stylesheet" href="estilos.css" />
+  </head>
+  <body>
+    <header class="cabecera">
+      <div>
+        <img src="img/logo-light.png" alt="Neifert Automotores" class="marca clara" />
+        <img src="img/logo-dark.png" alt="" aria-hidden="true" class="marca oscura" />
+      </div>
+      <span class="etiqueta">
+        <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2a10 10 0 0 0-8.6 15.1L2 22l5-1.3A10 10 0 1 0 12 2Zm5.3 14.1c-.2.6-1.3 1.2-1.8 1.2-.5.1-1 .2-3.3-.7-2.8-1.1-4.6-3.9-4.7-4.1-.1-.2-1.1-1.5-1.1-2.8s.7-2 1-2.3c.2-.3.5-.3.7-.3h.5c.2 0 .4 0 .6.5l.8 2c.1.2.1.4 0 .5l-.4.6-.4.4c-.1.1-.3.3-.1.6.2.3.8 1.3 1.6 2.1 1.1 1 2 1.3 2.3 1.4.3.1.5.1.6-.1l.9-1.1c.2-.3.4-.2.6-.1l1.9.9c.3.1.5.2.5.3.1.2.1.8-.1 1.4Z"/></svg>
+        Servidor de WhatsApp
+      </span>
+    </header>
+
+    <!-- ============ Ajustes: lo mismo que el menú del ícono junto al reloj ============ -->
+    <div id="vistaAjustes" hidden>
+      <div class="titulo-vista">
+        <button class="btn-icono" id="volver" type="button" aria-label="Volver">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18 9 12l6-6"/></svg>
+        </button>
+        <h1>Ajustes</h1>
+      </div>
+
+      <p class="grupo-ajustes">Apariencia</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Tema</b><span>Con "Sistema" sigue el modo claro u oscuro de Windows.</span></div>
+          <div class="segmentado" id="ajTema" role="radiogroup" aria-label="Tema">
+            <button type="button" role="radio" data-tema="system">Sistema</button>
+            <button type="button" role="radio" data-tema="light">Claro</button>
+            <button type="button" role="radio" data-tema="dark">Oscuro</button>
+          </div>
+        </div>
+      </div>
+
+      <p class="grupo-ajustes">Arranque</p>
+      <div class="tarjeta ajustes">
+        <label class="interruptor">
+          <span class="textos"><b>Iniciar con la PC</b><span>Al prender la PC la app arranca oculta y el servidor vuelve solo con el número guardado (por ejemplo, después de un corte de luz).</span></span>
+          <input type="checkbox" id="ajInicioPc" />
+        </label>
+      </div>
+
+      <p class="grupo-ajustes">Servidor</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Actualización</b><span id="ajVersion"></span></div>
+          <button class="btn secundario chico" id="ajActualizar" type="button">Buscar ahora</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Reiniciar el servidor</b><span>Corta la conexión unos segundos y vuelve a arrancar.</span></div>
+          <button class="btn secundario chico" id="ajReiniciar" type="button">Reiniciar</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Registros</b><span>Qué hizo el servidor, la app y el túnel, con qué significa cada error.</span></div>
+          <button class="btn secundario chico" id="ajRegistros" type="button">Ver</button>
+        </div>
+      </div>
+
+      <p class="grupo-ajustes">Configuración</p>
+      <div class="tarjeta ajustes">
+        <div class="fila-ajuste">
+          <div class="textos"><b>Archivo de configuración (.env)</b><span id="ajConfig">Guardado cifrado en esta PC.</span></div>
+          <button class="btn secundario chico" id="ajCambiarConfig" type="button">Cambiar</button>
+        </div>
+        <div class="separador"></div>
+        <div class="fila-ajuste">
+          <div class="textos"><b>Restaurar la sesión desde el respaldo</b><span id="ajRespaldo"></span></div>
+          <button class="btn secundario chico" id="ajRestaurar" type="button">Restaurar</button>
+        </div>
+      </div>
+
+      <div class="acciones">
+        <button class="btn peligro ancho" id="ajApagar" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+          Apagar el servidor y salir
+        </button>
+      </div>
+      <p class="chico centro mt" id="ajVersionApp"></p>
+    </div>
+
+    <!-- ============ Inicio: número de la línea + Iniciar servidor ============ -->
+    <form id="vistaInicio" hidden>
+      <h1>Iniciar el servidor</h1>
+      <p class="bajada">Escribí el número de WhatsApp que va a usar esta PC.</p>
+
+      <div class="tarjeta">
+        <label class="rotulo" for="numero">Número de la línea</label>
+        <div class="campo-numero" id="campoNumero">
+          <span class="prefijo">+54 9</span>
+          <input type="text" id="numero" inputmode="numeric" autocomplete="off" placeholder="3492 123456" maxlength="20" />
+        </div>
+        <ul class="reglas">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg><span><b>Característica sin el 0</b> + <b>número sin el 15</b> (10 dígitos)</span></li>
+          <li class="no"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg><span>Sin +54 ni 9: ya están puestos</span></li>
+        </ul>
+        <div class="ejemplos"><span class="ejemplo">3492 123456</span><span class="ejemplo">341 1234567</span><span class="ejemplo">11 2345 6789</span></div>
+        <p class="error" id="errorNumero" hidden></p>
+
+        <div class="separador"></div>
+        <label class="interruptor">
+          <span class="textos"><b>Iniciar solo al prender la PC</b><span>Después de un corte de luz vuelve sin que nadie toque nada.</span></span>
+          <input type="checkbox" id="autoInicio" checked />
+        </label>
+      </div>
+
+      <div class="acciones">
+        <button class="btn primario ancho" id="iniciar">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.8 0"/></svg>
+          Iniciar servidor
+        </button>
+      </div>
+      <p class="chico centro mt">Cada número tiene sus propios chats y archivos: cambiarlo no borra los de otro.</p>
+    </form>
+
+    <!-- ============ Servidor andando ============ -->
+    <div id="vistaServidor" hidden>
+      <div class="tarjeta">
+        <div class="error rechazo" id="rechazo" hidden></div>
+        <div class="estado-hero">
+          <div class="circulo" id="circulo"><div class="spinner"></div></div>
+          <div>
+            <h2 id="titulo">Iniciando…</h2>
+            <p id="subtitulo">Arrancando el servidor</p>
+            <span class="linea-chip" id="lineaChip"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="2" width="12" height="20" rx="2"/><path d="M11 18h2"/></svg><span id="linea"></span></span>
+          </div>
+        </div>
+
+        <!-- Hay que vincular la línea -->
+        <div id="vistaQr" hidden>
+          <div class="qr-marco">
+            <img id="qr" alt="Código QR para vincular WhatsApp" hidden />
+            <div class="cargando" id="qrCargando">Generando código…</div>
+          </div>
+          <ol class="pasos">
+            <li>Abrí WhatsApp en el celular de esta línea</li>
+            <li>Tocá <b>&nbsp;Dispositivos vinculados&nbsp;</b> → <b>&nbsp;Vincular</b></li>
+            <li>Apuntá la cámara a este código</li>
+          </ol>
+          <div class="aviso-caja">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
+            <span>Después de escanearlo dejá WhatsApp abierto en el celular unos minutos: ahí manda el historial de chats.</span>
+          </div>
+        </div>
+
+        <!-- Conectada -->
+        <div id="vistaOk" hidden>
+          <div class="aviso-caja">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="14" rx="2"/><path d="M8 21h8M12 18v3"/></svg>
+            <span>El WhatsApp se usa desde el <b>CRM</b>, en el navegador. Cerrá esta ventana tranquilo: el servidor sigue andando en segundo plano.</span>
+          </div>
+        </div>
+
+      </div>
+
+      <div class="acciones" id="filaWhatsapp">
+        <button class="btn secundario" id="whatsapp" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h6v6M10 14 21 3M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+          Abrir WhatsApp
+        </button>
+      </div>
+      <div class="acciones">
+        <button class="btn secundario" id="cambiar" type="button">Cambiar número</button>
+        <button class="btn primario" id="cerrar" type="button">Listo</button>
+      </div>
+    </div>
+
+    <footer class="pie">
+      <span class="version" id="version"></span>
+      <span class="pie-enlaces">
+        <button class="enlace" id="verRegistros" type="button">Ver registros</button>
+        <button class="enlace con-icono" id="verAjustes" type="button">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.8l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.8v-.4a2 2 0 0 1 1-1.8l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2Z"/><circle cx="12" cy="12" r="3"/></svg>
+          Ajustes
+        </button>
+      </span>
+    </footer>
+
+    <script src="dialogo.js"></script>
+    <script>
+      const $ = (id) => document.getElementById(id)
+      const ICONOS = {
+        conectado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>',
+        qr: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3M21 14v.01M14 21h.01M17 21h4v-4"/></svg>',
+        desconectado: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m2 2 20 20M8.5 16.5a5 5 0 0 1 7 0M5 13a10 10 0 0 1 5.2-2.8M19 13a10 10 0 0 0-2-1.5M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8A15 15 0 0 0 11 4.1M12 20h.01"/></svg>',
+        espera: '<div class="spinner"></div>',
+      }
+      const TEXTOS = {
+        conectado: ['Línea conectada', null],
+        qr: ['Vinculá la línea', 'Escaneá el código con el celular de esta línea'],
+        conectando: ['Conectando…', 'Hablando con WhatsApp'],
+        iniciando: ['Iniciando…', 'Arrancando el servidor'],
+        desconectado: ['Sin conexión', 'Revisá que la PC tenga internet; se reintenta solo'],
+      }
+      // "+5493406518585" → "+54 9 3406 518585"
+      const telefonoLindo = (t) => {
+        const d = String(t || '').replace(/\D/g, '')
+        return /^549\d{10}$/.test(d) ? `+54 9 ${formatear(d.slice(3))}` : t || 'otro número'
+      }
+      const formatear = (d) => (d && d.length === 10 ? `${d.slice(0, d.length - 6)} ${d.slice(-6)}` : d || '')
+      let numeroCargado = false
+      let enAjustes = false
+      let ultimoEstado = null
+
+      function mostrar(e) {
+        ultimoEstado = e
+        $('version').textContent = `Servidor ${e.version}`
+        $('vistaInicio').hidden = e.iniciado || enAjustes
+        $('vistaServidor').hidden = !e.iniciado || enAjustes
+        $('vistaAjustes').hidden = !enAjustes
+        $('verAjustes').hidden = enAjustes
+        if (!e.iniciado) {
+          if (!numeroCargado) {
+            $('numero').value = formatear(e.numero)
+            $('autoInicio').checked = e.autoInicio
+            numeroCargado = true
+            if (!enAjustes) $('numero').focus()
+          }
+          return
+        }
+        numeroCargado = false
+        const clase = ['conectado', 'qr', 'desconectado'].includes(e.conexion) ? e.conexion : 'espera'
+        const circulo = $('circulo')
+        if (circulo.dataset.estado !== clase) {
+          circulo.innerHTML = ICONOS[clase]
+          circulo.dataset.estado = clase
+          circulo.className = `circulo est-${e.conexion}`
+        }
+        let [titulo, sub] = TEXTOS[e.conexion] || [e.texto, '']
+        // Después de un número equivocado, mientras se arma el código nuevo.
+        if (e.rechazo && !['qr', 'conectado'].includes(e.conexion)) [titulo, sub] = ['Generando un código nuevo…', 'Esperá unos segundos']
+        $('titulo').textContent = titulo
+        $('subtitulo').innerHTML = e.conexion === 'conectado'
+          ? `<span class="punto"></span>${e.nombre ? `Conectada como <b></b>` : 'Funcionando'}`
+          : ''
+        if (e.conexion === 'conectado' && e.nombre) $('subtitulo').querySelector('b').textContent = e.nombre
+        if (e.conexion !== 'conectado') $('subtitulo').textContent = sub || ''
+        $('linea').textContent = e.numero ? `+54 9 ${formatear(e.numero)}` : ''
+        $('lineaChip').hidden = !e.numero
+        $('vistaQr').hidden = e.conexion !== 'qr'
+        $('vistaOk').hidden = e.conexion !== 'conectado'
+        if (e.conexion === 'qr' && e.qr && $('qr').src !== e.qr) $('qr').src = e.qr
+        $('qr').hidden = !e.qr
+        $('qrCargando').hidden = !!e.qr
+        // Escanearon con otro número: el servidor lo desvinculó y arma un QR nuevo.
+        const rechazado = !!e.rechazo && e.conexion !== 'conectado'
+        $('rechazo').hidden = !rechazado
+        if (rechazado) {
+          $('rechazo').replaceChildren()
+          const b = document.createElement('b')
+          b.textContent = 'Número equivocado. '
+          $('rechazo').append(b, `Se escaneó con ${telefonoLindo(e.rechazo.telefono)}, que no es el de esta línea (+54 9 ${formatear(e.numero)}). Se desvinculó solo: escaneá el código nuevo con el celular correcto, o tocá "Cambiar número".`)
+        }
+        $('filaWhatsapp').hidden = !e.crm || e.conexion !== 'conectado'
+      }
+
+      // Aviso mientras se escribe (la validación de verdad la hace la app al iniciar).
+      $('numero').addEventListener('input', async () => {
+        const v = $('numero').value
+        const r = v.trim() ? await window.nfApp.validarNumero(v) : { ok: true }
+        const incompleto = v.replace(/\D/g, '').length < 10 && !/[^\d\s-]/.test(v) && !/^\s*(0|54|9|\+)/.test(v)
+        const mostrarError = !r.ok && !incompleto
+        $('errorNumero').hidden = !mostrarError
+        $('errorNumero').textContent = r.error || ''
+        $('campoNumero').classList.toggle('invalido', mostrarError)
+      })
+
+      $('vistaInicio').addEventListener('submit', async (ev) => {
+        ev.preventDefault()
+        $('iniciar').disabled = true
+        const r = await window.nfApp.iniciarServidor({ numero: $('numero').value, autoInicio: $('autoInicio').checked })
+        $('iniciar').disabled = false
+        if (!r.ok) {
+          $('errorNumero').textContent = r.error
+          $('errorNumero').hidden = false
+          $('campoNumero').classList.add('invalido')
+          $('numero').select()
+          return
+        }
+        mostrar(await window.nfApp.estadoLinea())
+      })
+
+      $('cambiar').addEventListener('click', async () => {
+        const seguir = await window.nfDialogo.preguntar({
+          tipo: 'aviso',
+          titulo: 'Cambiar el número',
+          mensaje: 'Para cambiar el número se detiene el servidor. Mientras esté detenido, nadie puede usar el WhatsApp desde el CRM.',
+          aceptar: 'Detener y cambiar',
+          cancelar: 'Cancelar',
+        })
+        if (!seguir) return
+        await window.nfApp.detenerServidor()
+        mostrar(await window.nfApp.estadoLinea())
+      })
+      $('whatsapp').addEventListener('click', () => window.nfApp.abrirWhatsapp())
+      $('cerrar').addEventListener('click', () => window.nfApp.ocultar())
+      $('verRegistros').addEventListener('click', () => window.nfApp.abrirRegistros())
+
+      /* ---------- Ajustes ---------- */
+      function mostrarAjustes(a) {
+        for (const b of $('ajTema').querySelectorAll('button')) {
+          b.classList.toggle('on', b.dataset.tema === a.tema)
+          b.setAttribute('aria-checked', String(b.dataset.tema === a.tema))
+        }
+        $('ajInicioPc').checked = a.inicioConPc
+        const revisado = a.ultimaBusqueda ? ` · ${a.ultimaBusqueda.resultado}` : ''
+        $('ajVersion').textContent = a.actualiza ? `Versión ${a.versionServidor}${revisado}` : `Versión ${a.versionServidor} · en modo desarrollo no se actualiza sola.`
+        $('ajActualizar').disabled = !a.actualiza || a.buscando
+        $('ajActualizar').textContent = a.buscando ? 'Buscando…' : 'Buscar ahora'
+        $('ajReiniciar').disabled = !a.iniciado
+        $('ajConfig').textContent = a.crm ? `Guardado cifrado en esta PC · CRM: ${a.crm}` : 'Guardado cifrado en esta PC · sin CRM_URL.'
+        $('ajRespaldo').textContent = a.respaldo
+          ? 'Para pasar la línea a esta PC sin escanear el QR. La PC anterior tiene que estar apagada.'
+          : 'No disponible: la configuración no tiene WA_BACKUP_CLAVE y R2.'
+        $('ajRestaurar').disabled = !a.respaldo
+        $('ajVersionApp').textContent = `App ${a.versionApp}`
+      }
+      const recargarAjustes = async () => mostrarAjustes(await window.nfApp.ajustes())
+
+      async function abrirAjustes() {
+        enAjustes = true
+        if (ultimoEstado) mostrar(ultimoEstado)
+        await recargarAjustes()
+        window.scrollTo(0, 0)
+        document.body.scrollTop = 0
+      }
+      function cerrarAjustes() {
+        enAjustes = false
+        if (ultimoEstado) mostrar(ultimoEstado)
+      }
+      // Un botón queda deshabilitado y con otro texto mientras la acción corre.
+      async function mientras(boton, texto, accion) {
+        const antes = boton.textContent
+        boton.disabled = true
+        boton.textContent = texto
+        try {
+          await accion()
+        } finally {
+          boton.textContent = antes
+          boton.disabled = false
+          await recargarAjustes()
+        }
+      }
+
+      $('verAjustes').addEventListener('click', abrirAjustes)
+      $('volver').addEventListener('click', cerrarAjustes)
+      document.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Escape' && enAjustes && !document.querySelector('.velo')) cerrarAjustes()
+      })
+      $('ajTema').addEventListener('click', async (ev) => {
+        const tema = ev.target.closest('[data-tema]')?.dataset.tema
+        if (tema) mostrarAjustes(await window.nfApp.ponerTema(tema))
+      })
+      $('ajInicioPc').addEventListener('change',async () => mostrarAjustes(await window.nfApp.ponerInicioConLaPc($('ajInicioPc').checked)))
+      $('ajActualizar').addEventListener('click', () => mientras($('ajActualizar'), 'Buscando…', () => window.nfApp.buscarActualizacion()))
+      $('ajReiniciar').addEventListener('click', async () => {
+        const seguir = await window.nfDialogo.preguntar({
+          tipo: 'aviso',
+          titulo: 'Reiniciar el servidor',
+          mensaje: 'El WhatsApp del CRM se corta unos segundos mientras el servidor vuelve a arrancar.',
+          aceptar: 'Reiniciar',
+          cancelar: 'Cancelar',
+        })
+        if (seguir) await mientras($('ajReiniciar'), 'Reiniciando…', () => window.nfApp.reiniciarServidor())
+      })
+      $('ajRegistros').addEventListener('click', () => window.nfApp.abrirRegistros())
+      $('ajCambiarConfig').addEventListener('click', () => window.nfApp.abrirConfig())
+      $('ajRestaurar').addEventListener('click', () => mientras($('ajRestaurar'), 'Restaurando…', () => window.nfApp.restaurarSesion()))
+      $('ajApagar').addEventListener('click', () => window.nfApp.apagarYSalir())
+
+      window.nfApp.alCambiarAjustes(mostrarAjustes)
+      window.nfApp.alPedirAjustes(abrirAjustes)
+      // Avisos y preguntas del proceso principal: con el diálogo de la app, no el de Windows.
+      window.nfApp.alPedirDialogo(async (id, opciones) => {
+        window.nfApp.responderDialogoEnVentana(id, await window.nfDialogo.preguntar(opciones))
+      })
+
+      window.nfApp.alCambiarEstado(mostrar)
+      window.nfApp.estadoLinea().then(mostrar)
+    </script>
+  </body>
+</html>

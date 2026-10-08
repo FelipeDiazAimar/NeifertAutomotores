@@ -75,11 +75,11 @@ describe('FotoSlot', () => {
   })
 
   it('el nombre de descarga incluye marca/modelo/patente, no solo el tipo de foto', async () => {
-    global.fetch = vi.fn().mockResolvedValue({ blob: () => Promise.resolve(new Blob(['x'])) })
+    globalThis.fetch = vi.fn().mockResolvedValue({ blob: () => Promise.resolve(new Blob(['x'])) })
     const createObjectURL = vi.fn().mockReturnValue('blob:x')
     const revokeObjectURL = vi.fn()
-    global.URL.createObjectURL = createObjectURL
-    global.URL.revokeObjectURL = revokeObjectURL
+    globalThis.URL.createObjectURL = createObjectURL
+    globalThis.URL.revokeObjectURL = revokeObjectURL
     let nombreDescargado = null
     const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(function () {
       nombreDescargado = this.download

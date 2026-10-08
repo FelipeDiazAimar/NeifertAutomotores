@@ -24,7 +24,7 @@ export default function ActivarNotificaciones() {
     if (isDemo) return activar()
     const uid = session?.user?.id
     if (!uid) return toast.error('Iniciá sesión de nuevo para activar las notificaciones.')
-    let perfil = null
+    let perfil
     try {
       perfil = await obtenerMiPerfil(uid)
     } catch {
