@@ -44,6 +44,9 @@
   <symbol id="i-alert" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></symbol>
   <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></symbol>
   <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/></symbol>
+  <symbol id="i-store" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9z"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"/></symbol>
   <symbol id="i-archive" viewBox="0 0 24 24"><rect x="2" y="3" width="20" height="5" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></symbol>
   <symbol id="i-fijado" viewBox="0 0 24 24"><path d="M12 17v5"/><path d="M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"/></symbol>
   <symbol id="i-down" viewBox="0 0 24 24"><path d="m6 9 6 6 6-6"/></symbol>
@@ -100,7 +103,7 @@
     <!-- Servidor apagado con los chats ocultos: en vez de la bandeja, este aviso. -->
     <div class="pane glass shadow aviso-ocultos" id="avisoOcultos" role="status" hidden>
       <span class="aviso-ocultos-icono"><svg class="i" aria-hidden="true"><use href="#i-lock"/></svg></span>
-      <h2>Los chats están ocultos</h2>
+      <h2 id="avisoOcultosTitulo">Los chats están ocultos</h2>
       <p id="avisoOcultosTxt">El servidor de WhatsApp está apagado y los chats están ocultos. Se ven solo con la PC servidor encendida.</p>
       <small>Mientras tanto nadie puede ver los mensajes desde el CRM.</small>
     </div>
@@ -183,6 +186,12 @@
 
 <div class="menu-msg" id="menuMsg" role="menu" hidden></div>
 <div class="menu-msg menu-chat" id="menuChat" role="menu" hidden></div>
+<div class="menu-msg" id="menuAdjuntar" role="menu" aria-label="Adjuntar" hidden>
+  <button class="item" role="menuitem" data-act="adj-archivo"><svg class="i"><use href="#i-file"/></svg>Foto, video o documento</button>
+  <button class="item" role="menuitem" data-act="adj-contacto"><svg class="i"><use href="#i-user"/></svg>Contacto</button>
+  <button class="item" role="menuitem" data-act="adj-catalogo"><svg class="i"><use href="#i-store"/></svg>Catálogo</button>
+  <button class="item" role="menuitem" data-act="adj-respuestas"><svg class="i"><use href="#i-bolt"/></svg>Respuestas rápidas</button>
+</div>
 <div class="emoji-panel" id="emojiPanel" role="dialog" aria-label="Elegir emoji" hidden></div>
 <dialog class="dlg fwd-dlg" id="fwdDlg">
   <h2>Reenviar a…</h2>
@@ -191,6 +200,61 @@
   <div class="btn-row">
     <button class="btn ghost" type="button" data-act="fwd-cancelar">Cancelar</button>
     <button class="btn primary" type="button" id="fwdEnviar" data-act="fwd-enviar" disabled>Reenviar</button>
+  </div>
+</dialog>
+<dialog class="dlg fwd-dlg" id="contactoDlg">
+  <h2>Compartir contacto</h2>
+  <input type="search" id="contactoBuscar" placeholder="Buscar un contacto" aria-label="Buscar un contacto">
+  <ul class="fwd-lista" id="contactoLista"></ul>
+  <details class="otro-numero" id="contactoOtro">
+    <summary>Otro número que no está en los chats</summary>
+    <div class="otro-numero-campos">
+      <input id="contactoNombre" placeholder="Nombre" autocomplete="off" aria-label="Nombre del contacto">
+      <input id="contactoTel" inputmode="tel" placeholder="5493564562413" autocomplete="off" aria-label="Teléfono del contacto, con código de país">
+    </div>
+  </details>
+  <p class="err" id="contactoErr" hidden></p>
+  <div class="btn-row">
+    <button class="btn ghost" type="button" data-act="cerrar-contacto">Cancelar</button>
+    <button class="btn primary" type="button" id="contactoEnviar" data-act="contacto-enviar" disabled>Enviar</button>
+  </div>
+</dialog>
+<dialog class="dlg fwd-dlg catalogo-dlg" id="catalogoDlg">
+  <div class="dlg-cabeza">
+    <h2>Catálogo</h2>
+    <button class="icon-btn" type="button" data-act="catalogo-actualizar" aria-label="Volver a traer el catálogo" title="Volver a traer"><svg class="i"><use href="#i-refresh"/></svg></button>
+  </div>
+  <button class="catalogo-todo" type="button" data-act="catalogo-todo"><svg class="i"><use href="#i-store"/></svg><span><b>Mandar el catálogo completo</b><small>Le llega el enlace con todos los productos</small></span></button>
+  <input type="search" id="catalogoBuscar" placeholder="Buscar un producto" aria-label="Buscar un producto">
+  <ul class="fwd-lista" id="catalogoLista"></ul>
+  <div class="btn-row">
+    <button class="btn ghost" type="button" data-act="cerrar-catalogo">Cerrar</button>
+  </div>
+</dialog>
+<dialog class="dlg fwd-dlg respuestas-dlg" id="respuestasDlg">
+  <div class="dlg-cabeza">
+    <h2>Respuestas rápidas</h2>
+    <button class="icon-btn" type="button" data-act="respuestas-traer" aria-label="Traer las del celular" title="Traer las del celular"><svg class="i"><use href="#i-refresh"/></svg></button>
+  </div>
+  <p class="hint">Las mismas del celular: lo que cambies acá también cambia allá. En el chat, escribí <b>/</b> para usarlas.</p>
+  <input type="search" id="respuestasBuscar" placeholder="Buscar" aria-label="Buscar una respuesta rápida">
+  <ul class="fwd-lista" id="respuestasLista"></ul>
+  <form class="respuesta-form" id="respuestaForm" hidden>
+    <label for="respuestaAtajo">Atajo
+      <span class="atajo-campo"><span>/</span><input id="respuestaAtajo" maxlength="25" placeholder="saludo" autocomplete="off" required></span>
+    </label>
+    <label for="respuestaTexto">Mensaje
+      <textarea id="respuestaTexto" rows="4" maxlength="4000" placeholder="¡Hola! Gracias por escribirnos…" required></textarea>
+    </label>
+    <p class="err" id="respuestaErr" hidden></p>
+    <div class="btn-row">
+      <button class="btn ghost" type="button" data-act="respuesta-cancelar">Cancelar</button>
+      <button class="btn primary" type="submit" id="respuestaGuardar">Guardar</button>
+    </div>
+  </form>
+  <div class="btn-row" id="respuestasPie">
+    <button class="btn ghost" type="button" data-act="cerrar-respuestas">Cerrar</button>
+    <button class="btn primary" type="button" data-act="respuesta-nueva"><svg class="i"><use href="#i-plus"/></svg>Nueva</button>
   </div>
 </dialog>
 <div class="lightbox" id="lightbox" hidden>

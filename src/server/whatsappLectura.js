@@ -13,7 +13,7 @@
  * Variables: WA_DATABASE_URL o WA_SUPABASE_URL (la base del WhatsApp), WA_R2_BUCKET / WA_R2_ENDPOINT /
  * WA_R2_ACCESS_KEY_ID / WA_R2_SECRET_ACCESS_KEY (los archivos), VITE_SUPABASE_URL /
  * VITE_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY (los usuarios del CRM). Opcionales:
- * WA_LINEA (qué línea mostrar; si no, la que tuvo actividad más reciente),
+ * WA_LINEA (qué línea mostrar si ningún servidor anotó todavía este CRM, ver lineaActual),
  * WHATSAPP_ROLES / WHATSAPP_ROLES_LINEA / WHATSAPP_ROLES_LECTURA (los mismos del servidor).
  */
 import crypto from 'node:crypto'
@@ -101,15 +101,34 @@ function r2(env) {
   return s3
 }
 
-let lineaCache = { ts: 0, linea: null }
-/** La línea a mostrar: WA_LINEA o la que tuvo actividad más reciente. */
-async function lineaActual(env) {
-  if (env.WA_LINEA) return String(env.WA_LINEA).replace(/\D/g, '')
-  if (lineaCache.linea && Date.now() - lineaCache.ts < 60_000) return lineaCache.linea
-  const { rows } = await base(env).query('select linea from wa.chats group by linea order by max(ultimo_ts) desc nulls last limit 1')
-  if (!rows[0]) throw fallo(404, 'Todavía no hay chats guardados del WhatsApp.')
-  lineaCache = { ts: Date.now(), linea: rows[0].linea }
-  return rows[0].linea
+/*
+ * Qué línea mostrar. Cada servidor (el de prueba, el de la concesionaria) anota al arrancar
+ * en wa.estado (clave 'crm') el dominio de su CRM (su CRM_URL): este CRM muestra la línea
+ * del servidor que lo anotó, nunca la de otro. Si ninguno lo anotó todavía, WA_LINEA; si
+ * tampoco está, no se muestra ninguna (el panel avisa que falta encender el servidor).
+ */
+const SIN_LINEA = 'Este CRM todavía no tiene una línea de WhatsApp asignada: se asigna sola cuando se enciende su servidor.'
+// "www.ejemplo.com:443" → "ejemplo.com". Igual que hostDeCrm del servidor.
+export const hostNormalizado = (host) => String(host || '').split(',')[0].trim().toLowerCase().replace(/^www\./, '').replace(/:(80|443)$/, '')
+const hostDelPedido = (req) => hostNormalizado(req?.headers?.['x-forwarded-host'] || req?.headers?.host)
+
+const lineasCache = new Map() // host → { ts, linea }
+async function lineaActual(env, req) {
+  const host = hostDelPedido(req)
+  const guardada = lineasCache.get(host)
+  if (guardada && Date.now() - guardada.ts < 60_000) return guardada.linea
+  let linea = null
+  if (host) {
+    const { rows } = await base(env).query(
+      "select linea from wa.estado where clave = 'crm' and valor->'hosts' ? $1 order by actualizado_en desc limit 1",
+      [host],
+    )
+    linea = rows[0]?.linea || null
+  }
+  linea ||= env.WA_LINEA ? String(env.WA_LINEA).replace(/\D/g, '') : null
+  if (!linea) throw fallo(409, SIN_LINEA, { sinLinea: true })
+  lineasCache.set(host, { ts: Date.now(), linea })
+  return linea
 }
 
 /* ---------------- Ajuste: ¿se puede usar la vista sin conexión? ---------------- */
@@ -157,7 +176,7 @@ async function cambiarAjusteLectura(env, req) {
   const usuario = await usuarioDelCrm(env, token)
   const rolesLinea = lista(env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
   if (!rolesLinea.includes(usuario.rol)) throw fallo(403, 'Solo un administrador puede cambiar la vista sin conexión.')
-  const linea = await lineaActual(env)
+  const linea = await lineaActual(env, req)
   const actual = await ajusteLectura(env, linea)
   const body = req.body || {}
   const nuevo = { ...actual, por: usuario.nombre, ts: Date.now() }
@@ -429,7 +448,7 @@ async function atender(env, req, res, ruta) {
     // Junto con si la vista sin conexión está abierta y cuándo se pidió borrar lo guardado.
     const [estado, lectura] = await Promise.all([
       servidorAnda(env),
-      lineaActual(env).then((l) => ajusteLectura(env, l)).catch(() => null),
+      lineaActual(env, req).then((l) => ajusteLectura(env, l)).catch(() => null),
     ])
     return { ...estado, lectura: lectura && { habilitada: lectura.habilitada, borradoEn: lectura.borradoEn, motivo: lectura.motivo } }
   }
@@ -456,8 +475,19 @@ async function atender(env, req, res, ruta) {
   if (partes[0] === 'viendo') return []
   if (metodo !== 'GET') throw fallo(423, SOLO_LECTURA)
 
-  const linea = await lineaActual(env)
   const [seccion, jid, sub, id, extra] = partes
+  let linea
+  try {
+    linea = await lineaActual(env, req)
+  } catch (err) {
+    if (!err.extra?.sinLinea) throw err
+    // Sin línea asignada: el panel abre igual, sin chats y con el aviso.
+    if (seccion === 'estado') {
+      return { conexion: 'nube', qr: null, puedeVincular: false, numeroLinea: null, yo: null, config: { descargarMedia: false, confirmarLectura: false, crm: false }, lecturaBorradoEn: 0, chatsOcultos: true, motivoOcultos: 'sinLinea' }
+    }
+    if (seccion === 'agentes' || seccion === 'log' || (seccion === 'chats' && !jid)) return []
+    throw err
+  }
   const lectura = await ajusteLectura(env, linea, { rapido: seccion === 'chats' && (sub === 'media' || sub === 'foto') })
   // Chats ocultos: el panel se sigue viendo (Conexión con el estado de la línea), pero no
   // se entrega ningún chat, mensaje, archivo ni foto.

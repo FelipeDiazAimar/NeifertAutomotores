@@ -28,6 +28,7 @@ import makeWASocket, {
   isLidUser,
   isPnUser,
   jidNormalizedUser,
+  MEDIA_PATH_MAP,
   normalizeMessageContent,
   toNumber,
   useMultiFileAuthState,
@@ -131,6 +132,8 @@ const logger = pino({
         })
       }
       if (typeof valor?.unarchiveChatsSetting?.unarchiveChats === 'boolean') ajusteDesarchivar = valor.unarchiveChatsSetting.unarchiveChats
+      // Las respuestas rápidas del celular tampoco llegan como evento: solo por acá.
+      if (valor?.quickReplyAction && accion?.index?.[0] === 'quick_reply') anotarRespuestaRapida(accion.index[1], valor.quickReplyAction)
       if (nivel >= (NIVELES[BAILEYS_LOG] ?? Infinity)) metodo.apply(this, args)
     },
   },
@@ -207,7 +210,7 @@ async function rechazarLinea(s, telefono, motivo) {
       s.end(undefined)
     } catch {}
     borrarSesion()
-    setMeta({ chatsSincronizados: null })
+    setMeta({ chatsSincronizados: null, respuestasCargadas: null })
   } finally {
     // Pase lo que pase al limpiar, siempre se arma un QR nuevo: si no, quedaba "cargando".
     yo = null
@@ -484,8 +487,13 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     setTimeout(() => {
       if (s !== sock || conexion !== 'conectado') return
       const completa = !meta().chatsSincronizados || meta().reglaArchivados !== REGLA_ARCHIVADOS
-      if (completa) sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
-      else ponerAlDiaChats().catch((err) => log('aviso', 'No se pudieron traer los cambios de los chats', err.message))
+      const chats = completa
+        ? sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
+        : ponerAlDiaChats().catch((err) => log('aviso', 'No se pudieron traer los cambios de los chats', err.message))
+      // Las respuestas rápidas del celular se traen completas una vez por sesión vinculada.
+      if (!meta().respuestasCargadas) {
+        chats.then(() => cargarRespuestasRapidas()).catch((err) => log('aviso', 'No se pudieron traer las respuestas rápidas', err.message))
+      }
     }, 8000)
     // Los grupos se traen enseguida: son chats como cualquier otro y tienen que estar en
     // la bandeja desde el arranque, sin esperar a que alguien escriba.
@@ -518,7 +526,7 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       }
       desvinculandoDesdePanel = false
       borrarSesion()
-      setMeta({ chatsSincronizados: null })
+      setMeta({ chatsSincronizados: null, respuestasCargadas: null })
       yo = null
       setConexion('conectando')
       programar(1000)
@@ -711,6 +719,38 @@ function textoDe(c) {
 
 const medio = (c, extra = {}) => ({ mime: c.mimetype || '', tamano: toNumber(c.fileLength) || null, ...extra, estado: 'pendiente' })
 
+/*
+ * Contactos compartidos (vCard). Se guarda lo que hace falta para mostrarlos y escribirles:
+ * el nombre y los teléfonos (con el número de WhatsApp, waid, cuando viene).
+ */
+const desescaparVcard = (v) => String(v || '').replace(/\\([,;\\])/g, '$1').replace(/\\n/gi, ' ').trim()
+export function contactoDeVcard(c) {
+  const vcard = String(c?.vcard || '').replace(/\r?\n[ \t]/g, '')
+  let nombre = c?.displayName || ''
+  const telefonos = []
+  for (const linea of vcard.split(/\r?\n/)) {
+    const i = linea.indexOf(':')
+    if (i < 0) continue
+    const cabeza = linea.slice(0, i)
+    const valor = linea.slice(i + 1)
+    const prop = cabeza.split(';')[0].replace(/^item\d+\./i, '').toUpperCase()
+    if (prop === 'FN' && !nombre) nombre = desescaparVcard(valor)
+    if (prop === 'TEL') {
+      const waid = /waid=(\d+)/i.exec(cabeza)?.[1] || null
+      const numero = valor.trim()
+      if (numero) telefonos.push({ numero, waid })
+    }
+  }
+  return { nombre: nombre || 'Contacto', telefonos }
+}
+
+const escaparVcard = (v) => String(v).replace(/([,;\\])/g, '\\$1').replace(/\r?\n/g, ' ')
+/** vCard como la que arma el celular: con waid, el contacto se abre en WhatsApp con un toque. */
+export function vcardDe({ nombre, telefono }) {
+  const digitos = String(telefono || '').replace(/\D/g, '')
+  return ['BEGIN:VCARD', 'VERSION:3.0', `FN:${escaparVcard(nombre)}`, `N:;${escaparVcard(nombre)};;;`, `TEL;type=CELL;type=VOICE;waid=${digitos}:+${digitos}`, 'END:VCARD'].join('\n')
+}
+
 function interpretar(content) {
   const tipoWa = getContentType(content)
   const c = content?.[tipoWa]
@@ -727,7 +767,22 @@ function interpretar(content) {
     case 'liveLocationMessage':
       r = { tipo: 'ubicacion', texto: c.name || c.address || '', ubicacion: { lat: c.degreesLatitude, lng: c.degreesLongitude } }
       break
-    case 'contactMessage': r = { tipo: 'contacto', texto: c.displayName || 'Contacto' }; break
+    case 'contactMessage': r = { tipo: 'contacto', texto: c.displayName || 'Contacto', contactos: [contactoDeVcard(c)] }; break
+    case 'contactsArrayMessage': {
+      const contactos = (c.contacts || []).map(contactoDeVcard)
+      r = { tipo: 'contacto', texto: c.displayName || contactos.map((x) => x.nombre).join(', ') || 'Contactos', contactos }
+      break
+    }
+    case 'productMessage': {
+      const p = c.product || {}
+      const precio = toNumber(p.priceAmount1000)
+      r = {
+        tipo: 'producto',
+        texto: p.title || 'Producto',
+        producto: { id: p.productId || null, nombre: p.title || 'Producto', descripcion: p.description || '', precio: precio ? precio / 1000 : null, moneda: p.currencyCode || null },
+      }
+      break
+    }
     case 'pollCreationMessage':
     case 'pollCreationMessageV2':
     case 'pollCreationMessageV3':
@@ -1322,7 +1377,7 @@ export async function sincronizarGrupos() {
   // Archivado, fijado y silenciado viven en el app-state, que se baja aparte. Si entraron
   // grupos nuevos, sus marcas nunca se guardaron: hay que volver a pedirlas.
   if (nuevos) {
-    setMeta({ chatsSincronizados: null })
+    setMeta({ chatsSincronizados: null, respuestasCargadas: null })
     sincronizarChats().catch((err) => log('aviso', 'No se pudieron traer las marcas de los grupos', err.message))
   }
   return { grupos: lista.length, nuevos }
@@ -1468,6 +1523,8 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
 }
 
 const COLECCIONES_CHATS = ['regular_high', 'regular_low', 'critical_unblock_low']
+// Las respuestas rápidas (y las etiquetas) van en 'regular': se ponen al día con los chats.
+const COLECCIONES_AL_DIA = [...COLECCIONES_CHATS, 'regular']
 // Sube cuando cambia cómo se interpretan los archivados: obliga a una sincronización
 // completa al conectar, para corregir lo que quedó guardado con la regla anterior.
 const REGLA_ARCHIVADOS = 2
@@ -1483,7 +1540,7 @@ async function ponerAlDiaChats() {
   sincronizando = true
   const antes = cambiosDeArchivo
   try {
-    await conTimeout(sock.resyncAppState(COLECCIONES_CHATS, false), 120000, 'WhatsApp tardó demasiado en responder')
+    await conTimeout(sock.resyncAppState(COLECCIONES_AL_DIA, false), 120000, 'WhatsApp tardó demasiado en responder')
     await new Promise((r) => setTimeout(r, 1500))
     reevaluarArchivados()
     const n = cambiosDeArchivo - antes
@@ -2173,6 +2230,24 @@ function asegurarConectado() {
   if (!sock || conexion !== 'conectado') throw new Error('WhatsApp no está conectado. Vinculá la línea en la pestaña Conexión.')
 }
 
+// Baileys sube las notas de voz por la ruta de los audios comunes (/mms/audio): el mensaje
+// dice "nota de voz" pero el archivo queda guardado como audio. El celular que graba lo sube
+// por /mms/ptt, y el iPhone, al recibir la nuestra, mostraba "Este audio ya no está
+// disponible". Se suben por la ruta de nota de voz; si WhatsApp no la acepta, por la de antes.
+MEDIA_PATH_MAP.ptt ??= '/mms/ptt'
+let pttSinRutaPropia = false
+async function subirNotaDeVoz(archivo, datos) {
+  if (!pttSinRutaPropia) {
+    try {
+      return await sock.waUploadToServer(archivo, { ...datos, mediaType: 'ptt' })
+    } catch (err) {
+      pttSinRutaPropia = true
+      log('aviso', 'La nota de voz no se pudo subir como nota de voz', `Se sube como audio. ${err.message}`)
+    }
+  }
+  return sock.waUploadToServer(archivo, datos)
+}
+
 /** Manda un mensaje. `firmante` ({ id, nombre }): quién lo escribió, si no es el usuario del pedido. */
 async function enviar(chatId, contenido, buffer, quoted, firmante) {
   asegurarConectado()
@@ -2188,7 +2263,13 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
   if (idsDelPanel.size > 1000) idsDelPanel.delete(idsDelPanel.values().next().value)
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
-    const enviado = await sock.sendMessage(chatId, contenido, { messageId, quoted })
+    const opciones = { messageId, quoted }
+    if (contenido?.audio && contenido.ptt) opciones.upload = subirNotaDeVoz
+    const enviado = await sock.sendMessage(chatId, contenido, opciones)
+    if (opciones.upload) {
+      const ruta = enviado?.message?.audioMessage?.directPath || ''
+      log('info', 'Nota de voz subida', /\/t62\.7117-/.test(ruta) ? 'como nota de voz' : `como audio común (${ruta.split('/')[2] || 'sin ruta'})`)
+    }
     if (enviado?.message) {
       enviados.set(enviado.key.id, enviado.message)
       if (enviados.size > 500) enviados.delete(enviados.keys().next().value)
@@ -2259,6 +2340,10 @@ function contenidoDe(p, buffer) {
     if (p.menciones?.length) contenido.mentions = p.menciones
     return contenido
   }
+  if (p.tipo === 'contacto') {
+    const contactos = p.contactos.map((c) => ({ displayName: c.nombre, vcard: vcardDe(c) }))
+    return { contacts: { displayName: contactos.length === 1 ? contactos[0].displayName : `${contactos.length} contactos`, contacts: contactos } }
+  }
   if (p.tipo === 'nota_voz') {
     const contenido = { audio: buffer, mimetype: 'audio/ogg; codecs=opus', ptt: true }
     if (p.segundos > 0) contenido.seconds = Math.round(p.segundos)
@@ -2275,7 +2360,7 @@ function contenidoDe(p, buffer) {
 
 /** Manda ya. Devuelve el id del mensaje real. */
 function enviarPedido(chatId, p, buffer, firmante) {
-  const conArchivo = p.tipo !== 'texto'
+  const conArchivo = p.tipo !== 'texto' && p.tipo !== 'contacto'
   return enviar(chatId, contenidoDe(p, buffer), conArchivo ? buffer : undefined, mensajeCitado(chatId, p.citadoId), firmante)
 }
 
@@ -2295,8 +2380,9 @@ async function encolarSalida(chatId, p, buffer) {
     id,
     deMi: true,
     ts: ahora(),
-    tipo: p.tipo === 'texto' ? 'texto' : p.tipo === 'nota_voz' ? 'nota_voz' : tipoDeArchivo(p.mime),
-    texto: p.tipo === 'texto' ? p.texto : p.caption || '',
+    tipo: ['texto', 'nota_voz', 'contacto'].includes(p.tipo) ? p.tipo : tipoDeArchivo(p.mime),
+    texto: p.tipo === 'texto' ? p.texto : p.tipo === 'contacto' ? p.contactos.map((c) => c.nombre).join(', ') : p.caption || '',
+    ...(p.tipo === 'contacto' ? { contactos: p.contactos.map((c) => ({ nombre: c.nombre, telefonos: [{ numero: `+${c.telefono}`, waid: c.telefono }] })) } : {}),
     origen: 'vivo',
     estado: 'en_cola',
     salida: {
@@ -2308,6 +2394,7 @@ async function encolarSalida(chatId, p, buffer) {
       caption: p.caption || null,
       segundos: p.segundos || 0,
       ondas: p.ondas || null,
+      contactos: p.contactos || null,
       intentos: 0,
       error: null,
     },
@@ -2367,7 +2454,7 @@ export async function procesarSalida() {
         const buffer = m.media?.archivo ? await leerArchivo(claveMedia(chatId, m.media.archivo)) : undefined
         if (m.media?.archivo && !buffer) throw new Error('No se encontró el archivo guardado del mensaje')
         actualizarMensaje(chatId, m.id, { estado: 'enviando' })
-        const pedido = { tipo: s.tipo, texto: m.texto, citadoId: s.citadoId, menciones: s.menciones, mime: s.mime, nombre: s.nombre, caption: s.caption, segundos: s.segundos, ondas: s.ondas }
+        const pedido = { tipo: s.tipo, texto: m.texto, citadoId: s.citadoId, menciones: s.menciones, mime: s.mime, nombre: s.nombre, caption: s.caption, segundos: s.segundos, ondas: s.ondas, contactos: s.contactos }
         await enviarPedido(chatId, pedido, buffer, m.enviadoPor || null)
         // Salió: el borrador se reemplaza por el mensaje real (que ya guardó el envío).
         quitarMensaje(chatId, m.id)
@@ -2423,6 +2510,188 @@ export function enviarTexto(chatId, texto, citadoId, menciones) {
   const limpio = String(texto || '').trim()
   if (!limpio) throw new Error('El mensaje está vacío')
   return enviarOEncolar(chatId, { tipo: 'texto', texto: limpio, citadoId, menciones: mencionesDe(chatId, limpio, menciones) })
+}
+
+/* ---------------- Catálogo de WhatsApp Business ---------------- */
+
+// El precio llega en milésimas (como priceAmount1000 de los mensajes de producto).
+const vistaProducto = (p) => ({
+  id: p.id,
+  nombre: p.name || 'Producto',
+  descripcion: p.description || '',
+  precio: p.price ? p.price / 1000 : null,
+  moneda: p.currency || null,
+  imagen: p.imageUrls?.requested || p.imageUrls?.original || null,
+  url: p.url || null,
+  retailerId: p.retailerId || null,
+})
+
+let catalogoGuardado = { ts: 0, productos: null }
+/** Los productos visibles del catálogo de la línea (el mismo del celular). Se recuerdan 10 minutos. */
+export async function catalogo({ fresco = false } = {}) {
+  asegurarConectado()
+  if (!fresco && catalogoGuardado.productos && Date.now() - catalogoGuardado.ts < 10 * 60_000) return catalogoGuardado.productos
+  if (typeof sock.getCatalog !== 'function') throw new Error('Esta versión de Baileys no permite leer el catálogo')
+  const productos = []
+  let cursor
+  for (let pagina = 0; pagina < 20; pagina++) {
+    const r = await conTimeout(sock.getCatalog({ limit: 100, cursor }), 30000, 'WhatsApp tardó demasiado en mandar el catálogo')
+    productos.push(...(r.products || []))
+    if (!r.nextPageCursor || !r.products?.length) break
+    cursor = r.nextPageCursor
+  }
+  catalogoGuardado = { ts: Date.now(), productos: productos.filter((p) => !p.isHidden).map(vistaProducto) }
+  return catalogoGuardado.productos
+}
+
+const numeroPropio = () => String(yo?.telefono || numeroLinea() || '').replace(/\D/g, '')
+/** Enlace al catálogo completo: WhatsApp lo muestra como la tarjeta del catálogo. */
+export function enviarCatalogo(chatId, texto) {
+  const numero = numeroPropio()
+  if (!numero) throw new Error('Falta el número de la línea')
+  const enlace = `https://wa.me/c/${numero}`
+  return enviarOEncolar(chatId, { tipo: 'texto', texto: texto ? `${String(texto).trim()}\n${enlace}` : enlace })
+}
+
+/**
+ * Manda un producto del catálogo como lo hace el celular (con foto, nombre y precio). Si
+ * WhatsApp no lo acepta, va el enlace del producto, que igual se ve como tarjeta.
+ */
+export async function enviarProducto(chatId, productoId) {
+  asegurarConectado()
+  const p = (await catalogo()).find((x) => x.id === String(productoId))
+  if (!p) throw Object.assign(new Error('Ese producto ya no está en el catálogo'), { status: 404 })
+  const enlace = `https://wa.me/p/${p.id}/${numeroPropio()}`
+  try {
+    if (!p.imagen) throw new Error('El producto no tiene foto')
+    const r = await fetch(p.imagen, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) throw new Error(`No se pudo bajar la foto del producto (${r.status})`)
+    const foto = Buffer.from(await r.arrayBuffer())
+    const contenido = {
+      product: {
+        productImage: foto,
+        productId: p.id,
+        title: p.nombre,
+        description: p.descripcion,
+        currencyCode: p.moneda || undefined,
+        priceAmount1000: p.precio != null ? Math.round(p.precio * 1000) : undefined,
+        retailerId: p.retailerId || undefined,
+        url: p.url || undefined,
+        productImageCount: 1,
+      },
+      businessOwnerJid: yo?.id,
+    }
+    return { id: await enviar(chatId, contenido, undefined, null) }
+  } catch (err) {
+    if (esCorte(err)) throw err
+    log('aviso', 'El producto salió como enlace', `${p.nombre} · ${err.message}`)
+    return enviarOEncolar(chatId, { tipo: 'texto', texto: `${p.nombre}\n${enlace}` })
+  }
+}
+
+/* ---------------- Respuestas rápidas ---------------- */
+
+/*
+ * Las mismas del celular (WhatsApp Business): se escriben con "/" en el cuadro de texto.
+ * Viajan entre el celular y los dispositivos vinculados por la sincronización de WhatsApp,
+ * así que crearlas, cambiarlas o borrarlas acá también cambia en el celular, y al revés.
+ * Cada una se identifica con la hora (en segundos) en que se creó.
+ */
+const respuestasDe = () => meta().respuestasRapidas || {}
+
+function anotarRespuestaRapida(id, accion) {
+  try {
+    if (!id) return
+    const todas = { ...respuestasDe() }
+    if (accion.deleted) delete todas[id]
+    else todas[id] = { atajo: String(accion.shortcut || '').replace(/^\//, ''), texto: accion.message || '' }
+    setMeta({ respuestasRapidas: todas })
+    emitir('respuestas', listarRespuestasRapidas())
+  } catch (err) {
+    console.error(`No se pudo anotar una respuesta rápida: ${err.message}`)
+  }
+}
+
+export const listarRespuestasRapidas = () =>
+  Object.entries(respuestasDe())
+    .map(([id, r]) => ({ id, atajo: r.atajo, texto: r.texto }))
+    .sort((a, b) => a.atajo.localeCompare(b.atajo, 'es'))
+
+/** Trae todas las del celular: pide de cero la colección donde viajan ('regular'). */
+export async function cargarRespuestasRapidas() {
+  asegurarConectado()
+  const keys = sock.authState?.keys || authActual?.keys
+  if (!keys || typeof sock.resyncAppState !== 'function') throw new Error('Esta versión de Baileys no permite traer las respuestas rápidas')
+  const antes = respuestasDe()
+  setMeta({ respuestasRapidas: {} })
+  try {
+    await keys.set({ 'app-state-sync-version': { regular: null } })
+    await conTimeout(sock.resyncAppState(['regular'], false), 120000, 'WhatsApp tardó demasiado en responder')
+    await new Promise((r) => setTimeout(r, 1000))
+  } catch (err) {
+    // Si falló, quedan las que se conocían.
+    if (!Object.keys(respuestasDe()).length) setMeta({ respuestasRapidas: antes })
+    throw err
+  }
+  setMeta({ respuestasCargadas: Date.now() })
+  const lista = listarRespuestasRapidas()
+  emitir('respuestas', lista)
+  log('info', 'Respuestas rápidas del celular', `${lista.length} ${lista.length === 1 ? 'respuesta' : 'respuestas'}`)
+  return lista
+}
+
+function limpiarRespuesta({ atajo, texto }) {
+  const a = String(atajo || '').trim().replace(/^\/+/, '').replace(/\s+/g, '')
+  const t = String(texto || '').trim()
+  if (!a) throw Object.assign(new Error('Falta el atajo (lo que se escribe después de "/")'), { status: 400 })
+  if (a.length > 25) throw Object.assign(new Error('El atajo puede tener hasta 25 caracteres'), { status: 400 })
+  if (!t) throw Object.assign(new Error('Falta el mensaje'), { status: 400 })
+  if (t.length > 4000) throw Object.assign(new Error('El mensaje es demasiado largo'), { status: 400 })
+  return { atajo: a, texto: t }
+}
+
+/** Crea (sin `id`) o cambia una respuesta rápida. También queda en el celular. */
+export async function guardarRespuestaRapida({ id, atajo, texto }) {
+  asegurarConectado()
+  const r = limpiarRespuesta({ atajo, texto })
+  const todas = respuestasDe()
+  if (id && !todas[id]) throw Object.assign(new Error('Esa respuesta rápida ya no existe'), { status: 404 })
+  const repetida = Object.entries(todas).find(([k, v]) => k !== id && v.atajo.toLowerCase() === r.atajo.toLowerCase())
+  if (repetida) throw Object.assign(new Error(`Ya hay una respuesta con el atajo /${r.atajo}`), { status: 409 })
+  let clave = id
+  if (!clave) {
+    let seg = Math.floor(Date.now() / 1000)
+    while (todas[String(seg)]) seg++
+    clave = String(seg)
+  }
+  await sock.addOrEditQuickReply({ shortcut: r.atajo, message: r.texto, timestamp: clave })
+  anotarRespuestaRapida(clave, { shortcut: r.atajo, message: r.texto })
+  return { id: clave, ...r }
+}
+
+export async function borrarRespuestaRapida(id) {
+  asegurarConectado()
+  if (!respuestasDe()[id]) throw Object.assign(new Error('Esa respuesta rápida ya no existe'), { status: 404 })
+  await sock.removeQuickReply(String(id))
+  anotarRespuestaRapida(String(id), { deleted: true })
+  return { ok: true }
+}
+
+/**
+ * Comparte uno o más contactos (como "Contacto" en el clip del celular). `contactos`:
+ * [{ nombre, telefono }], el teléfono con código de país.
+ */
+export function enviarContactos(chatId, contactos, citadoId) {
+  const lista = (Array.isArray(contactos) ? contactos : [])
+    .map((c) => ({ nombre: String(c?.nombre || '').trim().slice(0, 100), telefono: String(c?.telefono || '').replace(/\D/g, '') }))
+    .filter((c) => c.telefono)
+  if (!lista.length) throw Object.assign(new Error('Elegí al menos un contacto con teléfono'), { status: 400 })
+  if (lista.length > 20) throw Object.assign(new Error('Se pueden mandar hasta 20 contactos juntos'), { status: 400 })
+  for (const c of lista) {
+    if (c.telefono.length < 8 || c.telefono.length > 15) throw Object.assign(new Error(`El teléfono de ${c.nombre || 'un contacto'} no es válido (con código de país, por ejemplo 549…)`), { status: 400 })
+    c.nombre ||= `+${c.telefono}`
+  }
+  return enviarOEncolar(chatId, { tipo: 'contacto', contactos: lista, citadoId })
 }
 
 /**

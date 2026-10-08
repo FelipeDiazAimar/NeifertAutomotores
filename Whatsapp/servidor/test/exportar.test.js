@@ -1,6 +1,6 @@
 import zlib from 'node:zlib'
 import { describe, expect, it } from 'vitest'
-import { crearZip, nombreArchivo, textoDeChat } from '../src/exportar.js'
+import { carpetaDeChat, crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from '../src/exportar.js'
 
 const ts = (iso) => new Date(iso).getTime() / 1000
 
@@ -17,7 +17,8 @@ function leerZip(buf) {
     const local = buf.readUInt32LE(p + 42)
     const nombre = buf.subarray(p + 46, p + 46 + largoNombre).toString('utf8')
     const inicio = local + 30 + buf.readUInt16LE(local + 26)
-    const datos = zlib.inflateRawSync(buf.subarray(inicio, inicio + comprimido))
+    const crudo = buf.subarray(inicio, inicio + comprimido)
+    const datos = buf.readUInt16LE(p + 10) === 8 ? zlib.inflateRawSync(crudo) : crudo
     expect(zlib.crc32(datos)).toBe(buf.readUInt32LE(p + 16))
     archivos[nombre] = datos.toString('utf8')
     p += 46 + largoNombre
@@ -61,5 +62,47 @@ describe('exportar chats', () => {
     ])
     const archivos = leerZip(zip)
     expect(archivos).toEqual({ 'José.txt': 'hola ñandú', 'José (2).txt': 'otro José', 'Ventas.txt': 'x'.repeat(5000) })
+  })
+
+  it('con los archivos: una carpeta por número con el chat y sus archivos, nombrados en el texto', async () => {
+    const trozos = []
+    const destino = { destroyed: false, write: (b) => trozos.push(Buffer.from(b)) && true, end: () => {}, once: () => {} }
+    const chats = [
+      { id: '5493564111111@s.whatsapp.net', nombre: 'Juan Pérez', telefono: '+5493564111111', esGrupo: false },
+      { id: '1203@g.us', nombre: 'Ventas', esGrupo: true },
+    ]
+    const mensajes = {
+      [chats[0].id]: [
+        { id: 'a', ts: ts('2026-10-06T14:05:00'), deMi: false, tipo: 'nota_voz', media: { estado: 'ok', archivo: 'a.ogg' } },
+        { id: 'b', ts: ts('2026-10-06T14:06:00'), deMi: true, tipo: 'documento', texto: '', media: { estado: 'ok', archivo: 'b.pdf', nombre: 'Presupuesto.pdf' } },
+        { id: 'c', ts: ts('2026-10-06T14:07:00'), deMi: false, tipo: 'imagen', media: { estado: 'pendiente' } },
+        { id: 'd', ts: ts('2026-10-06T14:08:00'), deMi: false, tipo: 'sticker', media: { estado: 'ok', archivo: 'd.webp' } },
+      ],
+      [chats[1].id]: [{ id: 'e', ts: ts('2026-10-06T10:00:00'), deMi: false, tipo: 'texto', texto: 'hola', autorNombre: 'Nico' }],
+    }
+    const guardados = { 'a.ogg': Buffer.from('OggS audio'), 'b.pdf': Buffer.from('%PDF') }
+    const zip = zipEnVivo(destino)
+    const r = await exportarConArchivos(zip, chats, {
+      mensajesDe: (id) => mensajes[id],
+      leerMedia: async (_id, m) => guardados[m.media.archivo] || null,
+    })
+    await zip.terminar()
+    const archivos = leerZip(Buffer.concat(trozos))
+    expect(r).toEqual({ archivos: 2, faltan: 1 })
+    expect(Object.keys(archivos).sort()).toEqual([
+      '5493564111111 - Juan Pérez/2026-10-06 14.05.00 Nota de voz.ogg',
+      '5493564111111 - Juan Pérez/2026-10-06 14.06.00 Presupuesto.pdf',
+      '5493564111111 - Juan Pérez/Chat de WhatsApp.txt',
+      'Grupo - Ventas/Chat de WhatsApp.txt',
+    ])
+    expect(archivos['5493564111111 - Juan Pérez/2026-10-06 14.05.00 Nota de voz.ogg']).toBe('OggS audio')
+    const texto = archivos['5493564111111 - Juan Pérez/Chat de WhatsApp.txt']
+    expect(texto).toContain('14:05 - Juan Pérez: <Nota de voz: 2026-10-06 14.05.00 Nota de voz.ogg (archivo adjunto)>')
+    expect(texto).toContain('14:07 - Juan Pérez: <Foto>')
+  })
+
+  it('la carpeta no termina en punto ni repite el número como nombre', () => {
+    expect(carpetaDeChat({ nombre: 'Juan Jr.', telefono: '+54 9 11', esGrupo: false })).toBe('54911 - Juan Jr')
+    expect(carpetaDeChat({ nombre: '+54 9 11', telefono: '+54 9 11', esGrupo: false })).toBe('54911')
   })
 })

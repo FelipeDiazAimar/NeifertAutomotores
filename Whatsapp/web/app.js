@@ -109,6 +109,25 @@ async function api(ruta, { method = 'GET', json, body, headers } = {}) {
 }
 
 /** Baja un archivo de la API (que exige la cabecera) con el nombre que le pone el servidor. */
+/**
+ * Descarga directa (el navegador la va guardando mientras llega): para los .zip con
+ * archivos, que pueden pesar varios GB y no entran en la memoria de la página.
+ */
+function bajarDirecto(ruta) {
+  const a = Object.assign(document.createElement('a'), { href: rutaApi(ruta), download: '' })
+  document.body.append(a)
+  a.click()
+  a.remove()
+}
+
+/** ¿Con los archivos o solo el texto? null si se canceló. */
+async function elegirExportacion(titulo) {
+  const r = await confirmar('Con los archivos sale un .zip con una carpeta por chat (el número y el nombre) con el texto y las fotos, audios, videos, stickers y documentos que estén descargados. Puede pesar bastante.', {
+    titulo, aceptar: 'Con los archivos', alternativa: 'Solo texto', icono: 'download',
+  })
+  return r === true ? 'archivos' : r === 'alternativa' ? 'texto' : null
+}
+
 async function bajarArchivo(ruta, porDefecto) {
   const res = await fetch(ruta, { headers: CABECERA })
   if (!res.ok) {
@@ -139,13 +158,15 @@ function toast(texto, ms = 3200) {
  * true si se tocó `aceptar`. Esc o tocar afuera es cancelar. Con `cancelar: null` es un
  * aviso de un solo botón. `icono`: un ícono grande arriba (por ejemplo 'lock').
  */
-function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancelar', icono = '' } = {}) {
+/** Devuelve true (aceptar), false (cancelar) o 'alternativa' (el tercer botón, si lo hay). */
+function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancelar', alternativa = '', icono = '' } = {}) {
   return new Promise((resolve) => {
     const dlg = document.createElement('dialog')
     dlg.className = 'dlg confirmar-dlg'
     dlg.innerHTML = `${icono ? `<div class="confirmar-icono">${ic(icono)}</div>` : ''}${titulo ? `<h2>${esc(titulo)}</h2>` : ''}<p class="confirmar-texto">${esc(texto)}</p>
       <div class="btn-row">
         ${cancelar ? `<button type="button" class="btn ghost" data-r="no">${esc(cancelar)}</button>` : ''}
+        ${alternativa ? `<button type="button" class="btn ghost" data-r="alt">${esc(alternativa)}</button>` : ''}
         <button type="button" class="btn primary" data-r="si" autofocus>${esc(aceptar)}</button>
       </div>`
     let respuesta = false
@@ -155,7 +176,7 @@ function confirmar(texto, { titulo = '', aceptar = 'Aceptar', cancelar = 'Cancel
       const c = dlg.getBoundingClientRect()
       const afuera = e.target === dlg && (e.clientX < c.left || e.clientX > c.right || e.clientY < c.top || e.clientY > c.bottom)
       if (r || afuera) {
-        respuesta = r === 'si'
+        respuesta = r === 'si' ? true : r === 'alt' ? 'alternativa' : false
         dlg.close()
       }
     })
@@ -222,7 +243,7 @@ const FILTROS = [
 const PREVIA = {
   imagen: ['image', 'Foto'], video: ['video', 'Video'], gif: ['video', 'GIF'], nota_voz: ['mic', 'Nota de voz'],
   audio: ['mic', 'Audio'], documento: ['file', 'Documento'], sticker: ['image', 'Sticker'],
-  ubicacion: ['pin', 'Ubicación'], contacto: ['user', 'Contacto'], una_vez: ['clock', 'Para ver una vez'],
+  ubicacion: ['pin', 'Ubicación'], contacto: ['user', 'Contacto'], producto: ['store', 'Producto'], una_vez: ['clock', 'Para ver una vez'],
 }
 
 function iniciales(c) {
@@ -1129,7 +1150,8 @@ function msgHtml(m, cola) {
     if (m.tipo === 'ubicacion' && m.ubicacion) {
       cuerpo += `<a class="map-link" href="https://www.google.com/maps?q=${m.ubicacion.lat},${m.ubicacion.lng}" target="_blank" rel="noopener">${ic('pin')}Ver ubicación en el mapa</a>`
     }
-    if (m.tipo === 'contacto') texto = `<div class="txt">${ic('user')} Contacto: ${esc(m.texto || '')}</div>`
+    if (m.tipo === 'contacto') texto = contactosHtml(m)
+    else if (m.tipo === 'producto') texto = productoHtml(m)
     // Foto, video o audio "para ver una vez": no se guarda, queda solo el aviso.
     else if (m.tipo === 'una_vez') texto = `<div class="txt">${ic('clock')} <i>${esc(m.texto || 'Para ver una vez')}</i></div>`
     else if (m.texto) {
@@ -1196,6 +1218,28 @@ function msgHtml(m, cola) {
     m.tipo === 'desconocido' && 'desconocido',
   ].filter(Boolean).join(' ')
   return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${salida}${meta}${reacts}</div>`
+}
+
+/** Contactos compartidos: nombre, teléfono y "Escribirle" (abre el chat con ese número). */
+function contactosHtml(m) {
+  const lista = m.contactos?.length ? m.contactos : [{ nombre: m.texto || 'Contacto', telefonos: [] }]
+  return `<div class="contactos-msg">${lista
+    .map((c) => {
+      const tel = c.telefonos?.[0]
+      const numero = tel?.waid || String(tel?.numero || '').replace(/\D/g, '')
+      return `<div class="contacto-card">
+        <span class="contacto-avatar">${ic('user')}</span>
+        <span class="contacto-datos"><b>${esc(c.nombre)}</b>${tel ? `<span class="tnum">${esc(tel.numero)}</span>` : ''}</span>
+        ${numero && !NUBE ? `<button class="contacto-escribir" data-escribirle="${esc(numero)}">Escribirle</button>` : ''}
+      </div>`
+    })
+    .join('')}</div>`
+}
+
+function productoHtml(m) {
+  const p = m.producto || {}
+  const precio = p.precio != null ? precioDe(p) : ''
+  return `<div class="producto-msg">${ic('store')}<span><b>${esc(p.nombre || m.texto || 'Producto')}</b>${precio ? `<span class="tnum">${esc(precio)}</span>` : ''}${p.descripcion ? `<small>${esc(p.descripcion)}</small>` : ''}</span></div>`
 }
 
 /** Nombre de quien reaccionó: 'yo' es la línea; 'contacto', el del chat; si no, un integrante. */
@@ -2303,7 +2347,15 @@ async function accionChat(id, accion, valor) {
     return
   }
   if (accion === 'exportar') {
-    // Como "Exportar chat" del celular: un .txt con todos los mensajes guardados.
+    // Como "Exportar chat" del celular: un .txt con todos los mensajes guardados, o un
+    // .zip con el texto y los archivos.
+    const como = await elegirExportacion('Exportar chat')
+    if (!como) return
+    if (como === 'archivos') {
+      bajarDirecto(`/api/chats/${enc(id)}/exportar?archivos=1`)
+      toast('Descargando el chat con sus archivos…', 6000)
+      return
+    }
     toast('Preparando el chat…', 30000)
     try {
       await bajarArchivo(`/api/chats/${enc(id)}/exportar`, 'chat.txt')
@@ -2483,10 +2535,11 @@ function renderComposer() {
   }
   el.innerHTML = `
     <button class="icon-btn" id="emojiBtn" data-act="emojis" aria-label="Emojis" title="Emojis" aria-haspopup="dialog" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('smile')}</button>
-    <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar foto, video o documento" title="Adjuntar" ${off ? 'disabled' : ''}>${ic('clip')}</button>
+    <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar" title="Adjuntar" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('clip')}</button>
     <div class="field"><textarea id="msgInput" rows="1" placeholder="${sinConexion ? 'Sin conexión: lo que mandes sale cuando vuelva' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
     <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>
-    <div class="mencion-panel" id="mencionPanel" role="listbox" aria-label="Mencionar a un integrante" hidden></div>`
+    <div class="mencion-panel" id="mencionPanel" role="listbox" aria-label="Mencionar a un integrante" hidden></div>
+    <div class="mencion-panel rapidas-panel" id="rapidasPanel" role="listbox" aria-label="Respuestas rápidas" hidden></div>`
   const ta = $('#msgInput')
   ta.value = borradores.get(state.activo) || ''
   autoAlto(ta)
@@ -2495,6 +2548,294 @@ function renderComposer() {
 
 function actualizarComposer() {
   if (state.activo && !state.grabacion && state.composerOff !== !conectado()) renderComposer()
+}
+
+/* ---------------- Clip: archivo, contacto, catálogo, respuestas rápidas ---------------- */
+
+function abrirAdjuntar(boton) {
+  const menu = $('#menuAdjuntar')
+  if (!menu.hidden) return cerrarAdjuntar()
+  cerrarMenu()
+  menu.hidden = false
+  ubicarMenu(menu, boton.getBoundingClientRect(), false)
+  boton.setAttribute('aria-expanded', 'true')
+}
+
+function cerrarAdjuntar() {
+  const menu = $('#menuAdjuntar')
+  if (menu && !menu.hidden) menu.hidden = true
+  $('[data-act="adjuntar"]')?.setAttribute('aria-expanded', 'false')
+}
+
+/* Contactos: se eligen de los chats (uno o varios) o se escribe otro número. */
+const contactosElegidos = new Map() // jid → { nombre, telefono }
+
+function abrirContactos() {
+  contactosElegidos.clear()
+  $('#contactoBuscar').value = ''
+  $('#contactoNombre').value = ''
+  $('#contactoTel').value = ''
+  $('#contactoOtro').open = false
+  $('#contactoErr').hidden = true
+  $('#contactoDlg').showModal()
+  renderContactos()
+}
+
+function renderContactos() {
+  const q = $('#contactoBuscar').value.trim().toLowerCase()
+  const chats = [...state.chats.values()]
+    .filter((c) => !c.esGrupo && c.telefono)
+    .filter((c) => !q || `${c.nombre} ${c.telefono}`.toLowerCase().includes(q))
+    .sort(ordenChats)
+    .slice(0, 80)
+  $('#contactoLista').innerHTML = chats.length
+    ? chats
+        .map((c) => {
+          const r = rotuloChat(c)
+          const on = contactosElegidos.has(c.id)
+          return `<li><button class="fwd-fila ${on ? 'on' : ''}" data-contacto-fila="${esc(c.id)}">
+            ${avatarHtml(c)}
+            <span><b>${esc(r.titulo)}</b><span class="tnum">${esc(c.telefono)}</span></span>
+            <span class="fwd-check">${on ? ic('check') : ''}</span>
+          </button></li>`
+        })
+        .join('')
+    : '<li class="empty">Ningún contacto coincide. Podés escribir el número abajo.</li>'
+  syncContactoEnviar()
+}
+
+function syncContactoEnviar() {
+  const n = contactosElegidos.size + ($('#contactoTel').value.replace(/\D/g, '') ? 1 : 0)
+  $('#contactoEnviar').disabled = !n
+  $('#contactoEnviar').textContent = n > 1 ? `Enviar ${n} contactos` : 'Enviar'
+}
+
+function alternarContacto(id) {
+  const c = state.chats.get(id)
+  if (!c) return
+  if (contactosElegidos.has(id)) contactosElegidos.delete(id)
+  else contactosElegidos.set(id, { nombre: rotuloChat(c).titulo, telefono: c.telefono })
+  renderContactos()
+}
+
+async function enviarContactosElegidos() {
+  const contactos = [...contactosElegidos.values()]
+  const tel = $('#contactoTel').value.replace(/\D/g, '')
+  if (tel) contactos.push({ nombre: $('#contactoNombre').value.trim(), telefono: tel })
+  if (!contactos.length || !state.activo) return
+  const errEl = $('#contactoErr')
+  errEl.hidden = true
+  $('#contactoEnviar').disabled = true
+  try {
+    const r = await api(`/api/chats/${enc(state.activo)}/contacto`, { method: 'POST', json: { contactos, citadoId: state.respondiendo } })
+    $('#contactoDlg').close()
+    state.respondiendo = null
+    renderRespuesta()
+    if (r?.enCola) toast('Sin conexión: el contacto quedó en la bandeja de salida y se manda solo cuando vuelva.', 5000)
+  } catch (err) {
+    errEl.textContent = err.message
+    errEl.hidden = false
+    syncContactoEnviar()
+  }
+}
+
+/** "Escribirle" desde un contacto recibido: abre (o crea) el chat con ese número. */
+async function escribirleA(telefono) {
+  try {
+    const { id } = await api('/api/chats', { method: 'POST', json: { telefono } })
+    setView('inbox')
+    abrirChat(id)
+  } catch (err) {
+    toast(err.message)
+  }
+}
+
+/* Catálogo de WhatsApp Business: el completo (enlace) o un producto. */
+let productos = null
+
+const precioDe = (p) => {
+  if (p.precio == null) return ''
+  try {
+    return new Intl.NumberFormat('es-AR', { style: 'currency', currency: p.moneda || 'ARS', maximumFractionDigits: 0 }).format(p.precio)
+  } catch {
+    return `${p.moneda || '$'} ${fmtNum(p.precio)}`
+  }
+}
+
+async function abrirCatalogo(fresco = false) {
+  $('#catalogoBuscar').value = ''
+  if (!$('#catalogoDlg').open) $('#catalogoDlg').showModal()
+  if (productos && !fresco) return renderCatalogo()
+  $('#catalogoLista').innerHTML = '<li class="empty">Trayendo el catálogo…</li>'
+  try {
+    productos = await api(`/api/catalogo${fresco ? '?fresco=1' : ''}`)
+    renderCatalogo()
+  } catch (err) {
+    productos = null
+    $('#catalogoLista').innerHTML = `<li class="empty">${esc(err.message)}</li>`
+  }
+}
+
+function renderCatalogo() {
+  const q = $('#catalogoBuscar').value.trim().toLowerCase()
+  const lista = (productos || []).filter((p) => !q || `${p.nombre} ${p.descripcion} ${p.retailerId || ''}`.toLowerCase().includes(q))
+  $('#catalogoLista').innerHTML = lista.length
+    ? lista
+        .map((p) => `<li><button class="fwd-fila producto-fila" data-producto="${esc(p.id)}" title="Mandar este producto">
+            ${p.imagen ? `<img src="${esc(p.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="producto-sin-foto">${ic('store')}</span>`}
+            <span><b>${esc(p.nombre)}</b><span class="tnum">${esc(precioDe(p) || p.descripcion.slice(0, 60))}</span></span>
+            <span class="fwd-check">${ic('send')}</span>
+          </button></li>`)
+        .join('')
+    : `<li class="empty">${productos?.length ? 'Ningún producto coincide.' : 'El catálogo de la línea está vacío.'}</li>`
+}
+
+async function mandarDelCatalogo(boton, ruta, json) {
+  if (!state.activo) return
+  boton.disabled = true
+  try {
+    const r = await api(`/api/chats/${enc(state.activo)}/${ruta}`, { method: 'POST', json })
+    $('#catalogoDlg').close()
+    if (r?.enCola) toast('Sin conexión: quedó en la bandeja de salida y se manda solo cuando vuelva.', 5000)
+  } catch (err) {
+    toast(err.message)
+  } finally {
+    boton.disabled = false
+  }
+}
+
+/* Respuestas rápidas: las del celular. Se usan con "/" en el cuadro de texto. */
+let respuestas = null
+
+async function cargarRespuestas() {
+  if (respuestas) return respuestas
+  try {
+    respuestas = await api('/api/respuestas')
+  } catch {
+    respuestas = []
+  }
+  return respuestas
+}
+
+async function abrirRespuestas() {
+  $('#respuestasBuscar').value = ''
+  mostrarFormRespuesta(null)
+  $('#respuestasDlg').showModal()
+  await cargarRespuestas()
+  renderRespuestas()
+}
+
+function renderRespuestas() {
+  const q = $('#respuestasBuscar').value.trim().toLowerCase()
+  const lista = (respuestas || []).filter((r) => !q || `${r.atajo} ${r.texto}`.toLowerCase().includes(q))
+  $('#respuestasLista').innerHTML = lista.length
+    ? lista
+        .map((r) => `<li class="respuesta-fila">
+            <button class="respuesta-usar" data-rapida="${esc(r.id)}" title="Usar en el chat"><b>/${esc(r.atajo)}</b><span>${esc(r.texto)}</span></button>
+            <button class="icon-btn" data-rapida-editar="${esc(r.id)}" aria-label="Editar /${esc(r.atajo)}" title="Editar">${ic('edit')}</button>
+            <button class="icon-btn peligro" data-rapida-borrar="${esc(r.id)}" aria-label="Borrar /${esc(r.atajo)}" title="Borrar">${ic('x')}</button>
+          </li>`)
+        .join('')
+    : `<li class="empty">${respuestas?.length ? 'Ninguna coincide.' : 'Todavía no hay respuestas rápidas. Creá una con "Nueva" o traé las del celular.'}</li>`
+}
+
+function mostrarFormRespuesta(r) {
+  const form = $('#respuestaForm')
+  const abierto = r !== null
+  form.hidden = !abierto
+  $('#respuestasPie').hidden = abierto
+  $('#respuestasLista').hidden = abierto
+  $('#respuestasBuscar').hidden = abierto
+  $('#respuestaErr').hidden = true
+  form.dataset.id = r?.id || ''
+  $('#respuestaAtajo').value = r?.atajo || ''
+  $('#respuestaTexto').value = r?.texto || ''
+  if (abierto) $('#respuestaAtajo').focus()
+}
+
+async function guardarRespuesta() {
+  const form = $('#respuestaForm')
+  const errEl = $('#respuestaErr')
+  errEl.hidden = true
+  $('#respuestaGuardar').disabled = true
+  try {
+    await api('/api/respuestas', { method: 'POST', json: { id: form.dataset.id || undefined, atajo: $('#respuestaAtajo').value, texto: $('#respuestaTexto').value } })
+    respuestas = null
+    await cargarRespuestas()
+    mostrarFormRespuesta(null)
+    renderRespuestas()
+  } catch (err) {
+    errEl.textContent = err.message
+    errEl.hidden = false
+  } finally {
+    $('#respuestaGuardar').disabled = false
+  }
+}
+
+async function borrarRespuesta(id) {
+  const r = respuestas?.find((x) => x.id === id)
+  if (!r) return
+  if (!(await confirmar('También se borra del celular.', { titulo: `¿Borrar la respuesta /${r.atajo}?`, aceptar: 'Borrar' }))) return
+  try {
+    await api(`/api/respuestas/${enc(id)}`, { method: 'DELETE' })
+    respuestas = respuestas.filter((x) => x.id !== id)
+    renderRespuestas()
+  } catch (err) {
+    toast(err.message)
+  }
+}
+
+async function traerRespuestas(boton) {
+  boton.disabled = true
+  try {
+    respuestas = await api('/api/respuestas/traer', { method: 'POST' })
+    renderRespuestas()
+    toast(`Listo: ${fmtNum(respuestas.length)} ${respuestas.length === 1 ? 'respuesta' : 'respuestas'} del celular.`)
+  } catch (err) {
+    toast(err.message)
+  } finally {
+    boton.disabled = false
+  }
+}
+
+/** Pone el texto de la respuesta en el cuadro (cambia el "/atajo" que se estaba escribiendo). */
+function usarRespuesta(id) {
+  const r = respuestas?.find((x) => x.id === id)
+  const ta = $('#msgInput')
+  if (!r || !ta) return
+  const antes = ta.value.slice(0, ta.selectionStart).replace(/(^|\s)\/[^\s/]*$/, '$1')
+  const despues = ta.value.slice(ta.selectionStart)
+  ta.value = antes + r.texto + despues
+  ta.selectionStart = ta.selectionEnd = (antes + r.texto).length
+  $('#rapidasPanel').hidden = true
+  if ($('#respuestasDlg').open) $('#respuestasDlg').close()
+  autoAlto(ta)
+  guardarBorrador(state.activo, ta.value)
+  syncSendBtn()
+  ta.focus()
+}
+
+/** Con "/algo" justo antes del cursor, muestra las respuestas rápidas que coinciden. */
+async function revisarRapidas() {
+  const ta = $('#msgInput')
+  const panel = $('#rapidasPanel')
+  if (!ta || !panel) return
+  const m = /(^|\s)\/([^\s/]{0,25})$/.exec(ta.value.slice(0, ta.selectionStart))
+  if (!m) {
+    panel.hidden = true
+    return
+  }
+  const lista = await cargarRespuestas()
+  const q = m[2].toLowerCase()
+  const opciones = lista.filter((r) => r.atajo.toLowerCase().startsWith(q) || (q && r.texto.toLowerCase().includes(q))).slice(0, 8)
+  if (!opciones.length) {
+    panel.hidden = true
+    return
+  }
+  panel.innerHTML = opciones
+    .map((r) => `<button type="button" role="option" data-rapida="${esc(r.id)}">${ic('bolt')}<span><b>/${esc(r.atajo)}</b> ${esc(r.texto)}</span></button>`)
+    .join('')
+  panel.hidden = false
 }
 
 /* ---------------- Menciones (@) en grupos ---------------- */
@@ -2738,7 +3079,8 @@ function renderPill() {
     return
   }
   let mensaje
-  if (conexion === 'nube' && state.conn.chatsOcultos) mensaje = '<b>Chats ocultos.</b> La PC servidor del WhatsApp está apagada y los chats no se pueden ver hasta que vuelva.'
+  if (conexion === 'nube' && state.conn.motivoOcultos === 'sinLinea') mensaje = '<b>Sin línea asignada.</b> Este CRM todavía no tiene un WhatsApp: se asigna solo la primera vez que se enciende su servidor.'
+  else if (conexion === 'nube' && state.conn.chatsOcultos) mensaje = '<b>Chats ocultos.</b> La PC servidor del WhatsApp está apagada y los chats no se pueden ver hasta que vuelva.'
   else if (conexion === 'nube' && state.conn.errorNube) mensaje = `<b>No se pudieron leer los chats guardados.</b> ${esc(state.conn.errorNube)} Probá de nuevo en un rato o avisale a quien administra el sistema.`
   else if (conexion === 'nube') mensaje = '<b>Modo lectura.</b> La PC servidor del WhatsApp está apagada: ves los chats y mensajes guardados y podés bajar los archivos que ya estaban descargados. Para escribir tiene que estar encendida; se conecta sola cuando vuelva.'
   else if (conexion === 'servicio') mensaje = '<b>El servidor de WhatsApp no responde.</b> La PC servidor está apagada o la app cerrada. Los chats vuelven solos cuando se reconecte.'
@@ -2794,6 +3136,8 @@ function renderConexion() {
           <p class="timer">El código se renueva solo cada unos segundos.${numeroLinea ? ' Con otro número no se vincula.' : ''}</p>
         </div>
       </div>`
+  } else if (conexion === 'nube' && state.conn.motivoOcultos === 'sinLinea') {
+    cuerpo = `<div class="conn-ok">${ic('clock')}<div>Este CRM todavía no tiene una línea de WhatsApp asignada. Se asigna sola cuando se enciende por primera vez su servidor (la app con este CRM configurado).</div></div>`
   } else if (conexion === 'nube') {
     // Leyendo de la base con la PC servidor apagada: la línea sigue vinculada.
     cuerpo = `<div class="conn-ok">${ic('clock')}<div>La PC servidor está apagada o la app cerrada. La línea sigue vinculada: cuando el servidor vuelva se conecta solo y se puede volver a escribir. ${state.conn.chatsOcultos ? 'Mientras tanto los chats están ocultos.' : 'Mientras tanto se ven los chats guardados.'}</div></div>`
@@ -2854,9 +3198,13 @@ function onEstado(nuevo) {
   document.documentElement.classList.toggle('chats-ocultos', !!nuevo.chatsOcultos)
   $('#avisoOcultos').hidden = !nuevo.chatsOcultos
   if (nuevo.chatsOcultos) {
-    $('#avisoOcultosTxt').textContent = nuevo.motivoOcultos === 'apagado'
-      ? 'El servidor de WhatsApp está apagado y al apagarlo se ocultaron los chats. Se vuelven a ver cuando la PC servidor esté encendida.'
-      : 'El servidor de WhatsApp está apagado y un administrador ocultó los chats. Se ven solo con la PC servidor encendida.'
+    const sinLinea = nuevo.motivoOcultos === 'sinLinea'
+    $('#avisoOcultosTitulo').textContent = sinLinea ? 'Este CRM no tiene una línea asignada' : 'Los chats están ocultos'
+    $('#avisoOcultosTxt').textContent = sinLinea
+      ? 'Todavía no se encendió el servidor de WhatsApp de este CRM. Cuando arranque por primera vez queda asignada su línea y se ven sus chats; los de otras líneas no se muestran acá.'
+      : nuevo.motivoOcultos === 'apagado'
+        ? 'El servidor de WhatsApp está apagado y al apagarlo se ocultaron los chats. Se vuelven a ver cuando la PC servidor esté encendida.'
+        : 'El servidor de WhatsApp está apagado y un administrador ocultó los chats. Se ven solo con la PC servidor encendida.'
   }
   document.documentElement.classList.toggle('sin-servidor', caido)
   // En modo lectura (nube) no se "perdió" nada: se entró así a propósito.
@@ -3050,6 +3398,11 @@ function conectarEventos() {
     }, 4000)
   })
   es.addEventListener('estado', (e) => onEstado(JSON.parse(e.data)))
+  // Respuestas rápidas cambiadas (acá, en otra pestaña o en el celular).
+  es.addEventListener('respuestas', (e) => {
+    respuestas = JSON.parse(e.data)
+    if ($('#respuestasDlg').open && $('#respuestaForm').hidden) renderRespuestas()
+  })
   es.addEventListener('chat', (e) => {
     const c = JSON.parse(e.data)
     state.chats.set(c.id, c)
@@ -3127,14 +3480,21 @@ document.addEventListener('click', async (e) => {
   const enMenu = e.target.closest('#menuMsg, #menuChat, [data-opciones]')
   if (!enMenu) cerrarMenu()
   if (!e.target.closest('#emojiPanel, #emojiBtn')) cerrarEmojis()
+  if (!e.target.closest('#menuAdjuntar, [data-act="adjuntar"]')) cerrarAdjuntar()
   const emo = e.target.closest('[data-emoji]')
   if (emo) return ponerEmoji(emo.dataset.emoji)
-  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion]')
+  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion],[data-contacto-fila],[data-producto],[data-rapida],[data-rapida-editar],[data-rapida-borrar],[data-escribirle]')
   if (!t) {
     if (e.target.id === 'lightbox') $('#lightbox').hidden = true
     return
   }
   if (t.dataset.mencion) return ponerMencion(t.dataset.mencion, t.dataset.nombre)
+  if (t.dataset.contactoFila) return alternarContacto(t.dataset.contactoFila)
+  if (t.dataset.producto) return mandarDelCatalogo(t, 'producto', { id: t.dataset.producto })
+  if (t.dataset.rapida) return usarRespuesta(t.dataset.rapida)
+  if (t.dataset.rapidaEditar) return mostrarFormRespuesta(respuestas?.find((r) => r.id === t.dataset.rapidaEditar) || null)
+  if (t.dataset.rapidaBorrar) return borrarRespuesta(t.dataset.rapidaBorrar)
+  if (t.dataset.escribirle) return escribirleA(t.dataset.escribirle)
   if (t.dataset.salidaAct) {
     // Bandeja de salida: reintentar un mensaje que falló, o descartarlo.
     const chat = state.activo
@@ -3436,7 +3796,20 @@ document.addEventListener('click', async (e) => {
     case 'salir-sesion':
       await salirDeSesion()
       break
-    case 'adjuntar': $('#fileInput').click(); break
+    case 'adjuntar': abrirAdjuntar(t); break
+    case 'adj-archivo': cerrarAdjuntar(); $('#fileInput').click(); break
+    case 'adj-contacto': cerrarAdjuntar(); abrirContactos(); break
+    case 'adj-catalogo': cerrarAdjuntar(); abrirCatalogo(); break
+    case 'adj-respuestas': cerrarAdjuntar(); abrirRespuestas(); break
+    case 'cerrar-contacto': $('#contactoDlg').close(); break
+    case 'contacto-enviar': enviarContactosElegidos(); break
+    case 'cerrar-catalogo': $('#catalogoDlg').close(); break
+    case 'catalogo-actualizar': abrirCatalogo(true); break
+    case 'catalogo-todo': mandarDelCatalogo(t, 'catalogo', {}); break
+    case 'cerrar-respuestas': $('#respuestasDlg').close(); break
+    case 'respuesta-nueva': mostrarFormRespuesta({}); break
+    case 'respuesta-cancelar': mostrarFormRespuesta(null); renderRespuestas(); break
+    case 'respuestas-traer': traerRespuestas(t); break
     case 'grabar': empezarGrabacion(); break
     case 'enviar': enviarTexto(); break
     case 'rec-cancelar': terminarGrabacion(false); break
@@ -3450,7 +3823,14 @@ document.addEventListener('click', async (e) => {
       }
       break
     case 'actualizar': actualizarTodo(); break
-    case 'exportar-todo':
+    case 'exportar-todo': {
+      const como = await elegirExportacion('Exportar todos los chats')
+      if (!como) break
+      if (como === 'archivos') {
+        bajarDirecto('/api/exportar?archivos=1')
+        toast('Descargando los chats con sus archivos. Con muchas fotos y videos tarda: el navegador muestra el avance.', 9000)
+        break
+      }
       t.disabled = true
       toast('Preparando todos los chats… puede tardar un poco.', 120000)
       try {
@@ -3462,6 +3842,7 @@ document.addEventListener('click', async (e) => {
         t.disabled = false
       }
       break
+    }
     case 'log-filtro':
       state.logFiltro = t.dataset.valor
       renderLog()
@@ -3480,6 +3861,10 @@ document.addEventListener('submit', async (e) => {
     if (crmForm === 'vincular') return
     const datos = Object.fromEntries(new FormData(e.target))
     return enviarCrm(crmForm, datos, e.target.querySelector('.btn.primary'))
+  }
+  if (e.target.id === 'respuestaForm') {
+    e.preventDefault()
+    return guardarRespuesta()
   }
   if (e.target.id === 'formNuevo') {
     e.preventDefault()
@@ -3504,12 +3889,17 @@ document.addEventListener('submit', async (e) => {
 document.addEventListener('input', (e) => {
   if (e.target.id === 'search') alBuscar(e.target.value)
   if (e.target.id === 'fwdBuscar') renderReenviar(e.target.value)
+  if (e.target.id === 'contactoBuscar') renderContactos()
+  if (e.target.id === 'contactoTel') syncContactoEnviar()
+  if (e.target.id === 'catalogoBuscar') renderCatalogo()
+  if (e.target.id === 'respuestasBuscar') renderRespuestas()
   if (e.target.id === 'crmBuscar') buscarClienteCrm(e.target.value)
   if (e.target.id === 'msgInput') {
     autoAlto(e.target)
     syncSendBtn()
     guardarBorrador(state.activo, e.target.value)
     revisarMencion()
+    revisarRapidas()
   }
 })
 
@@ -3522,6 +3912,14 @@ document.addEventListener('keydown', (e) => {
       return ponerMencion(primero.dataset.mencion, primero.dataset.nombre)
     }
   }
+  // Con las respuestas rápidas a la vista, Enter usa la primera.
+  if (e.key === 'Enter' && e.target.id === 'msgInput' && !$('#rapidasPanel')?.hidden) {
+    const primero = $('#rapidasPanel [data-rapida]')
+    if (primero) {
+      e.preventDefault()
+      return usarRespuesta(primero.dataset.rapida)
+    }
+  }
   // Enter envía; Shift+Enter hace un salto de línea, como en WhatsApp Web.
   if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'msgInput' && !e.isComposing) {
     e.preventDefault()
@@ -3530,6 +3928,8 @@ document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (!$('#lightbox').hidden) $('#lightbox').hidden = true
     else if (!$('#emojiPanel').hidden) cerrarEmojis()
+    else if (!$('#menuAdjuntar').hidden) cerrarAdjuntar()
+    else if ($('#rapidasPanel') && !$('#rapidasPanel').hidden) $('#rapidasPanel').hidden = true
     else if (!$('#infoPane').hidden) cerrarInfo()
     else if (seleccion.activa) salirSeleccion()
     else if (!$('#menuMsg').hidden || !$('#menuChat').hidden) cerrarMenu()

@@ -15,7 +15,7 @@
  * líneas (la de prueba y la de la concesionaria) comparten la base sin mezclarse.
  */
 import pg from 'pg'
-import { CLAVE_LINEA, WA_DATABASE_URL } from './config.js'
+import { CLAVE_LINEA, CRM_URL, LINEA as NUMERO, WA_DATABASE_URL } from './config.js'
 import { log } from './eventos.js'
 import * as diario from './diario.js'
 
@@ -65,6 +65,41 @@ export async function reabrirLecturaAlEncender() {
     return true
   }
   return false
+}
+
+/*
+ * Qué línea muestra cada CRM en la vista sin conexión. Hay más de un servidor (el de prueba y
+ * el de la concesionaria), cada uno con su número y su CRM, y todos guardan en la misma base:
+ * al arrancar, cada servidor anota en la fila 'crm' de su línea el CRM con el que trabaja
+ * (CRM_URL). La vista sin conexión busca ahí el CRM desde el que se abre y muestra esa línea,
+ * nunca la de otro servidor. La línea se fija al arrancar (cambiar el número reinicia el
+ * servidor), así que esto cubre también el cambio de número: el CRM pasa a la línea nueva.
+ */
+// "https://www.ejemplo.com/" → "ejemplo.com" (con puerto si tiene). Igual que en el CRM.
+export const hostDeCrm = (url) => {
+  try {
+    return new URL(url).host.toLowerCase().replace(/^www\./, '')
+  } catch {
+    return ''
+  }
+}
+
+/** Anota "este CRM → esta línea" y se lo saca a cualquier otra línea que lo tuviera. */
+export async function registrarCrm() {
+  const host = hostDeCrm(CRM_URL)
+  if (!host || !NUMERO) return null
+  const db = base()
+  await db.query(
+    `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'crm', $2::jsonb, now())
+     on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,
+    [LINEA, JSON.stringify({ hosts: [host], crmUrl: CRM_URL, ts: Date.now() })],
+  )
+  const { rowCount } = await db.query(
+    `update wa.estado set valor = jsonb_set(valor, '{hosts}', (valor->'hosts') - $2::text), actualizado_en = now()
+     where clave = 'crm' and linea <> $1 and valor->'hosts' ? $2`,
+    [LINEA, host],
+  )
+  return { host, antes: rowCount }
 }
 
 /* ---------------- Conversión memoria ↔ filas ---------------- */

@@ -22,13 +22,13 @@ import {
 import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
-import { buscarMensaje, buscarMensajes, cerrarAlmacen, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
+import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
-import { DONDE, servir } from './src/archivos.js'
-import { crearZip, nombreArchivo, textoDeChat } from './src/exportar.js'
-import { cerrarLecturaAlApagar, reabrirLecturaAlEncender } from './src/nube.js'
+import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
+import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
+import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm } from './src/nube.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
 // podría escribir con el número de la concesionaria. En ese caso no se arranca.
@@ -213,14 +213,44 @@ app.get('/api/chats/:id/mensajes/:msgId', ruta((req) => {
 }))
 // Exportar: un chat como .txt (cualquiera que lo puede ver) o todos en un .zip (solo administradores).
 // El contenido no va a la auditoría: solo queda quién exportó y cuándo.
-app.get('/api/chats/:id/exportar', accion('exportar_chat', (req, res) => {
+/*
+ * Exportar con los archivos (?archivos=1): un .zip con una carpeta por chat (número y
+ * nombre) con el texto y las fotos, audios, videos, stickers y documentos descargados. Sale
+ * de a un archivo por vez mientras se arma, así que la descarga empieza enseguida.
+ */
+const leerMedia = (jid, m) => leerGuardado(claveMedia(jid, m.media.archivo))
+async function exportarZip(req, res, chats, nombre) {
+  res.attachment(nombre).type('application/zip')
+  res.setHeader('Cache-Control', 'no-store')
+  const zip = zipEnVivo(res)
+  try {
+    const r = await exportarConArchivos(zip, chats, { mensajesDe: listarMensajes, leerMedia })
+    await zip.terminar()
+    return { chats: chats.length, ...r }
+  } catch (err) {
+    // La descarga ya empezó: no se puede avisar con un error, se corta.
+    res.destroy(err)
+    throw err
+  }
+}
+const hoyIso = () => new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
+
+app.get('/api/chats/:id/exportar', accion('exportar_chat', async (req, res) => {
   const jid = chatId(req)
   const chat = listarChats().find((c) => c.id === jid)
   if (!chat) throw Object.assign(new Error('El chat no está guardado'), { status: 404 })
+  if (req.query.archivos === '1') {
+    await exportarZip(req, res, [chat], nombreArchivo(`Chat de WhatsApp con ${chat.nombre} ${hoyIso()}`, 'zip'))
+    return
+  }
   res.attachment(nombreArchivo(`Chat de WhatsApp con ${chat.nombre}`, 'txt')).type('text/plain; charset=utf-8').send(textoDeChat(chat, listarMensajes(jid)))
 }))
-app.get('/api/exportar', exigirLinea, accion('exportar_chats', (req, res) => {
+app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
   const chats = listarChats()
+  if (req.query.archivos === '1') {
+    await exportarZip(req, res, chats, `Chats de WhatsApp Neifert con archivos ${hoyIso()}.zip`)
+    return
+  }
   const zip = crearZip(chats.map((c) => ({ nombre: nombreArchivo(c.nombre, 'txt'), datos: textoDeChat(c, listarMensajes(c.id)) })))
   const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
   res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
@@ -238,6 +268,15 @@ app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
 }))
 // Los envíos devuelven { id, enCola }: sin conexión el mensaje queda en la bandeja de salida.
 app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', (req) => wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId, req.body?.menciones), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, largo: String(req.body?.texto || '').length })))
+app.post('/api/chats/:id/contacto', exigirEscritura, accion('enviar_contacto', (req) => wa.enviarContactos(chatId(req), req.body?.contactos, req.body?.citadoId), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, contactos: (req.body?.contactos || []).length })))
+app.post('/api/chats/:id/producto', exigirEscritura, accion('enviar_producto', (req) => wa.enviarProducto(chatId(req), req.body?.id), (req, r) => ({ mensaje: r.id, producto: req.body?.id })))
+app.post('/api/chats/:id/catalogo', exigirEscritura, accion('enviar_catalogo', (req) => wa.enviarCatalogo(chatId(req), req.body?.texto), (req, r) => ({ mensaje: r.id })))
+// Catálogo de WhatsApp Business y respuestas rápidas: los mismos del celular.
+app.get('/api/catalogo', ruta((req) => wa.catalogo({ fresco: req.query.fresco === '1' })))
+app.get('/api/respuestas', ruta(() => wa.listarRespuestasRapidas()))
+app.post('/api/respuestas/traer', exigirEscritura, accion('traer_respuestas', () => wa.cargarRespuestasRapidas()))
+app.post('/api/respuestas', exigirEscritura, accion('guardar_respuesta', (req) => wa.guardarRespuestaRapida(req.body || {}), (req, r) => ({ atajo: r.atajo, nueva: !req.body?.id })))
+app.delete('/api/respuestas/:rid', exigirEscritura, accion('borrar_respuesta', (req) => wa.borrarRespuestaRapida(req.params.rid), (req) => ({ id: req.params.rid })))
 app.post('/api/chats/:id/salida/:msgId/reintentar', exigirEscritura, accion('reintentar_envio', (req) => wa.reintentarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 app.post('/api/chats/:id/salida/:msgId/descartar', exigirEscritura, accion('descartar_envio', (req) => wa.descartarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 // Integrantes de un grupo, para el "@" del cuadro de texto.
@@ -322,6 +361,10 @@ const servidor = app.listen(PUERTO, HOST, () => {
     reabrirLecturaAlEncender()
       .then((si) => si && log('info', 'Vista sin conexión del CRM abierta de nuevo', 'Se había cerrado al apagar el servidor'))
       .catch((err) => log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
+    // Este CRM (CRM_URL) muestra esta línea cuando el servidor está apagado.
+    registrarCrm()
+      .then((r) => r && log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`))
+      .catch((err) => log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
   }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()
