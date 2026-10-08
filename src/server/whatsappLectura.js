@@ -125,8 +125,14 @@ async function lineaActual(env) {
  */
 const LECTURA_POR_DEFECTO = { habilitada: true, borradoEn: 0, motivo: null }
 let ajusteCache = { ts: 0, linea: null, valor: null }
-async function ajusteLectura(env, linea, { fresco = false } = {}) {
-  if (!fresco && ajusteCache.linea === linea && Date.now() - ajusteCache.ts < 10_000) return ajusteCache.valor
+/**
+ * Se lee fresco de la base en cada pedido: cada copia de la función recordaba el ajuste
+ * unos segundos y, justo después de volver a mostrar los chats, alguna seguía creyendo que
+ * estaban ocultos y devolvía la lista vacía. Solo las fotos y los archivos (cientos de
+ * pedidos al abrir la bandeja) usan lo recordado (`rapido`), unos segundos.
+ */
+async function ajusteLectura(env, linea, { rapido = false } = {}) {
+  if (rapido && ajusteCache.linea === linea && Date.now() - ajusteCache.ts < 5_000) return ajusteCache.valor
   const { rows } = await base(env).query("select valor from wa.estado where linea = $1 and clave = 'lectura'", [linea])
   const valor = { ...LECTURA_POR_DEFECTO, ...(rows[0]?.valor || {}) }
   ajusteCache = { ts: Date.now(), linea, valor }
@@ -143,7 +149,7 @@ async function guardarAjusteLectura(env, linea, valor) {
 }
 
 /**
- * POST ajustes { habilitada?, borrar? } con el token del CRM (Authorization: Bearer). Solo
+ * POST ajustes { habilitada } con el token del CRM (Authorization: Bearer). Solo
  * los que manejan la línea (admin y dueño, como en el servidor).
  */
 async function cambiarAjusteLectura(env, req) {
@@ -152,14 +158,13 @@ async function cambiarAjusteLectura(env, req) {
   const rolesLinea = lista(env.WHATSAPP_ROLES_LINEA ?? 'admin,dueno')
   if (!rolesLinea.includes(usuario.rol)) throw fallo(403, 'Solo un administrador puede cambiar la vista sin conexión.')
   const linea = await lineaActual(env)
-  const actual = await ajusteLectura(env, linea, { fresco: true })
+  const actual = await ajusteLectura(env, linea)
   const body = req.body || {}
   const nuevo = { ...actual, por: usuario.nombre, ts: Date.now() }
   if (typeof body.habilitada === 'boolean') {
     nuevo.habilitada = body.habilitada
     nuevo.motivo = body.habilitada ? null : 'admin'
   }
-  if (body.borrar) nuevo.borradoEn = Date.now()
   await guardarAjusteLectura(env, linea, nuevo)
   return { lectura: nuevo }
 }
@@ -452,8 +457,8 @@ async function atender(env, req, res, ruta) {
   if (metodo !== 'GET') throw fallo(423, SOLO_LECTURA)
 
   const linea = await lineaActual(env)
-  const lectura = await ajusteLectura(env, linea)
   const [seccion, jid, sub, id, extra] = partes
+  const lectura = await ajusteLectura(env, linea, { rapido: seccion === 'chats' && (sub === 'media' || sub === 'foto') })
   // Chats ocultos: el panel se sigue viendo (Conexión con el estado de la línea), pero no
   // se entrega ningún chat, mensaje, archivo ni foto.
   if (!lectura.habilitada) {

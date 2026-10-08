@@ -78,7 +78,7 @@ describe('WhatsappPage', () => {
     expect(screen.queryByText(/verificando la línea/i)).toBeNull()
   })
 
-  it('con los chats ocultos abre el mismo panel (Conexión igual) y borra lo guardado en el navegador', async () => {
+  it('con los chats ocultos abre el mismo panel (Conexión igual) sin borrar nada', async () => {
     const borrar = vi.fn()
     vi.stubGlobal('indexedDB', { deleteDatabase: borrar })
     vi.stubGlobal('fetch', vi.fn(async (url) =>
@@ -89,7 +89,9 @@ describe('WhatsappPage', () => {
     montar()
     // El panel de siempre (el aviso de chats ocultos lo muestra él, en Bandeja).
     const lectura = await screen.findByTitle('WhatsApp de la concesionaria (solo lectura)')
-    expect(borrar).toHaveBeenCalledWith('nf-wa-lectura')
+    // Ocultar no borra lo guardado en el navegador; el panel no lo muestra (?ocultos=1).
+    expect(borrar).not.toHaveBeenCalled()
+    expect(lectura).toHaveAttribute('src', '/wa-lectura/index.html?ocultos=1')
     const panel = lectura.contentWindow
     const postMessage = vi.spyOn(panel, 'postMessage')
     const delPanel = (data) =>
@@ -134,11 +136,14 @@ describe('WhatsappPage', () => {
     montar()
     await userEvent.click(await screen.findByRole('button', { name: /chats sin servidor: visibles/i }))
     await userEvent.click(screen.getByRole('switch', { name: /mostrar los chats/i }))
-    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/ajustes', expect.objectContaining({ method: 'POST', body: JSON.stringify({ habilitada: false, borrar: true }) }))
+    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/ajustes', expect.objectContaining({ method: 'POST', body: JSON.stringify({ habilitada: false }) }))
     expect(await screen.findByRole('button', { name: /chats sin servidor: ocultos/i })).toBeInTheDocument()
     expect(screen.getByRole('switch', { name: /mostrar los chats/i })).toHaveAttribute('aria-checked', 'false')
     // No hay botón aparte para borrar.
     expect(screen.queryByText(/borrar los chats guardados/i)).toBeNull()
+    // Tocar afuera (también sobre el panel) cierra el cuadro.
+    await userEvent.pointer({ keys: '[MouseLeft]', target: document.querySelector('.fixed.inset-0') })
+    expect(screen.queryByRole('dialog', { name: /chats con el servidor apagado/i })).toBeNull()
   })
 
   it('un vendedor no ve el control', async () => {

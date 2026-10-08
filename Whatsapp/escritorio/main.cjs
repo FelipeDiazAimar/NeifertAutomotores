@@ -819,7 +819,7 @@ async function confirmarSalida() {
     tipo: 'aviso',
     titulo: 'Apagar el servidor',
     mensaje:
-      'Si apagás el servidor, nadie va a poder escribir por WhatsApp desde el CRM hasta que se vuelva a abrir la app. Los mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.\n\nMientras tanto, el CRM muestra los chats guardados en solo lectura. Si la PC va a quedar apagada varios días (un fin de semana, por ejemplo), podés ocultarlos: nadie los ve hasta que el servidor vuelva, y se borran de las PC donde estaban guardados.',
+      'Si apagás el servidor, nadie va a poder escribir por WhatsApp desde el CRM hasta que se vuelva a abrir la app. Los mensajes que lleguen mientras tanto los entrega WhatsApp cuando vuelva a conectar.\n\nMientras tanto, el CRM muestra los chats guardados en solo lectura. Si la PC va a quedar apagada varios días (un fin de semana, por ejemplo), podés ocultarlos: nadie los ve hasta que el servidor vuelva (no se borra nada).',
     aceptar: 'Apagar',
     cancelar: 'Cancelar',
     alternativa: 'Apagar y ocultar los chats hasta que vuelva',

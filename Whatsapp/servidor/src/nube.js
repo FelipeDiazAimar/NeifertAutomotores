@@ -48,10 +48,10 @@ const guardarLectura = (valor) =>
     [LINEA, JSON.stringify(valor)],
   )
 
-/** Al apagar el servidor con "cerrar la vista sin conexión": nadie ve los chats y se borran de las PC. */
+/** Al apagar el servidor con "ocultar los chats": nadie los ve hasta que vuelva (no se borra nada). */
 export async function cerrarLecturaAlApagar() {
   const actual = await leerLectura()
-  await guardarLectura({ ...actual, habilitada: false, motivo: 'apagado', borradoEn: Date.now(), por: 'Servidor (al apagar)', ts: Date.now() })
+  await guardarLectura({ ...actual, habilitada: false, motivo: 'apagado', por: 'Servidor (al apagar)', ts: Date.now() })
 }
 
 /**

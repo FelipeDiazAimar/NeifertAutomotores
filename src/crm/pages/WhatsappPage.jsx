@@ -4,7 +4,6 @@ import { Eye, EyeOff, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
-import { aplicarAjusteLectura } from '@/crm/lib/whatsappLectura'
 import { useUiStore } from '@/store/useUiStore'
 
 // Dirección del servidor de WhatsApp.
@@ -81,27 +80,21 @@ function VerificandoLinea() {
 
 /**
  * Para administradores (admin y dueño): mostrar u ocultar los chats con la PC servidor
- * apagada (la vista sin conexión, que los lee de la base). Al ocultarlos, nadie los ve sin
- * el servidor y cada navegador borra lo que tenía guardado.
+ * apagada (la vista sin conexión, que los lee de la base). Ocultar no borra nada: al volver
+ * a mostrarlos aparecen como estaban.
  */
 function ControlLectura({ lectura, onCambio }) {
   const { rol } = useCrmPerfil()
   const [abierto, setAbierto] = useState(false)
   const [ocupado, setOcupado] = useState(false)
   const [error, setError] = useState('')
-  const cajaRef = useRef(null)
 
-  // Se cierra al tocar afuera o con Esc.
+  // Se cierra con Esc (y al tocar afuera: ver la capa de abajo).
   useEffect(() => {
     if (!abierto) return undefined
-    const afuera = (e) => !cajaRef.current?.contains(e.target) && setAbierto(false)
     const esc = (e) => e.key === 'Escape' && setAbierto(false)
-    document.addEventListener('pointerdown', afuera)
     document.addEventListener('keydown', esc)
-    return () => {
-      document.removeEventListener('pointerdown', afuera)
-      document.removeEventListener('keydown', esc)
-    }
+    return () => document.removeEventListener('keydown', esc)
   }, [abierto])
 
   if (!lectura || !['admin', 'dueno'].includes(rol)) return null
@@ -115,8 +108,8 @@ function ControlLectura({ lectura, onCambio }) {
       const r = await fetch('/wa-lectura/api/ajustes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        // Ocultar también borra lo guardado en cada navegador.
-        body: JSON.stringify(visibles ? { habilitada: false, borrar: true } : { habilitada: true }),
+        // Solo oculta o muestra: no se borra nada.
+        body: JSON.stringify({ habilitada: !visibles }),
       })
       const datos = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(datos.error || `Error ${r.status}`)
@@ -129,7 +122,7 @@ function ControlLectura({ lectura, onCambio }) {
   }
 
   return (
-    <div className="relative" ref={cajaRef}>
+    <div className="relative">
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
@@ -142,6 +135,11 @@ function ControlLectura({ lectura, onCambio }) {
         Chats sin servidor: {visibles ? 'visibles' : 'ocultos'}
       </button>
 
+      {abierto && (
+        // Capa invisible detrás del cuadro: tocar en cualquier lado lo cierra, también sobre el
+        // panel del WhatsApp (que es otra página y no le avisa a esta de sus clics).
+        <div className="fixed inset-0 z-40" aria-hidden="true" onPointerDown={() => setAbierto(false)} />
+      )}
       {abierto && (
         <div
           role="dialog"
@@ -177,7 +175,7 @@ function ControlLectura({ lectura, onCambio }) {
 
           <p className="mt-3 text-xs leading-snug text-ink-3">
             {visibles
-              ? 'Ocultalos si la PC va a quedar apagada varios días: nadie los ve sin el servidor y se borran de las PC donde estaban guardados.'
+              ? 'Ocultalos si la PC va a quedar apagada varios días: nadie los ve hasta que el servidor vuelva o los vuelvas a mostrar. No se borra nada.'
               : lectura.motivo === 'apagado'
                 ? 'Se ocultaron al apagar el servidor: vuelven a verse solos cuando se encienda.'
                 : 'Ocultos: nadie los ve hasta que el servidor esté encendido o los vuelvas a mostrar.'}
@@ -212,12 +210,9 @@ export default function WhatsappPage() {
   const [error, setError] = useState('')
   const [estado, setEstado] = useState(null) // lo que avisa el panel: conexión, teléfono, vista…
   const [lectura, setLectura] = useState(null) // ajuste de la vista sin conexión
-  // Cada respuesta trae el ajuste: si la vista sin conexión está cerrada, o un administrador
-  // pidió borrar lo guardado, este navegador lo borra.
+  // Cada respuesta trae el ajuste (chats visibles u ocultos). Ocultar no borra nada.
   const tomarAjuste = useCallback((l) => {
-    if (!l) return
-    setLectura(l)
-    aplicarAjusteLectura(l)
+    if (l) setLectura(l)
   }, [])
 
   // Cada intento (al entrar, con "Reintentar" o solo cada 15 s) pregunta si el servidor llega.
@@ -434,7 +429,8 @@ export default function WhatsappPage() {
             // Si se ocultan o se vuelven a mostrar los chats, el panel se recarga con el ajuste nuevo.
             key={lecturaCerrada ? 'chats-ocultos' : 'chats-visibles'}
             ref={iframeRef}
-            src={LECTURA_URL}
+            // Con los chats ocultos el panel no muestra ni un instante lo guardado.
+            src={lecturaCerrada ? `${LECTURA_URL}?ocultos=1` : LECTURA_URL}
             title="WhatsApp de la concesionaria (solo lectura)"
             allow="clipboard-write"
             className="h-full w-full border-0 bg-transparent"

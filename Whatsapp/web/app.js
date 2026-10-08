@@ -569,7 +569,9 @@ async function precargarNube() {
  * instante; después se trae la lista actual (un solo pedido) y arranca la precarga.
  */
 async function arrancarNube() {
-  const guardada = await cacheNube.leer('lista', lineaNube())
+  // Con los chats ocultos (el CRM lo avisa al abrir) no se muestra ni un instante lo guardado.
+  const ocultos = new URLSearchParams(location.search).has('ocultos')
+  const guardada = ocultos ? null : await cacheNube.leer('lista', lineaNube())
   if (guardada?.chats?.length && !state.chats.size) {
     state.chats = new Map(guardada.chats.map((c) => [c.id, c]))
     onEstado(guardada.estado)
@@ -577,13 +579,13 @@ async function arrancarNube() {
     terminarArranque()
   }
   await sincronizar()
-  // Chats ocultos: nada queda en el navegador (la lista ya viene vacía de la base).
+  // Chats ocultos: no se muestran ni se precargan (lo guardado queda para cuando vuelvan).
   if (state.conn.chatsOcultos) {
     state.chats = new Map()
     renderList()
-    await cacheNube.borrarTodo()
     return
   }
+  // Nunca se guarda una lista vacía encima de una que tenía chats.
   if (state.chats.size && state.conn.yo?.telefono) {
     guardarLocal('nf-wa-lectura-linea', lineaNube())
     cacheNube.guardar('lista', lineaNube(), { chats: [...state.chats.values()], estado: state.conn, ts: Date.now() })
