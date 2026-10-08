@@ -1,4 +1,6 @@
 import crypto from 'node:crypto'
+import fs from 'node:fs'
+import path from 'node:path'
 import express from 'express'
 import {
   CONSERVAR_EDICIONES,
@@ -53,6 +55,25 @@ app.use((req, res, next) => {
 })
 // El panel siempre se pide de nuevo: tras una actualización del servidor nadie queda con
 // el app.js viejo guardado en el navegador.
+// El panel lleva su versión en los enlaces a app.js y a los .css (app.js?v=…). Cloudflare
+// hace que el navegador guarde esos archivos hasta 4 horas: sin esto, después de una
+// actualización un navegador quedaba con el HTML nuevo y el código viejo (y se veía distinto
+// según la PC). Con la versión en el enlace, cuando el código cambia se baja el nuevo.
+const versionPanel = (() => {
+  const h = crypto.createHash('sha1')
+  for (const f of ['app.js', 'app.css', 'base.css', 'whatsapp.css']) {
+    try {
+      h.update(fs.readFileSync(path.join(WEB_DIR, f)))
+    } catch {
+      // Si falta alguno, la versión sale igual con los demás.
+    }
+  }
+  return h.digest('hex').slice(0, 12)
+})()
+const htmlPanel = fs
+  .readFileSync(path.join(WEB_DIR, 'index.html'), 'utf8')
+  .replace(/(src|href)="((?:app|base|whatsapp)\.(?:js|css))"/g, `$1="$2?v=${versionPanel}"`)
+app.get(['/', '/index.html'], (req, res) => res.set('Cache-Control', 'no-cache').type('html').send(htmlPanel))
 app.use(express.static(WEB_DIR, { setHeaders: (res) => res.setHeader('Cache-Control', 'no-cache') }))
 app.use('/api', exigirCabecera)
 
