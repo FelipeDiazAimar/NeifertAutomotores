@@ -57,12 +57,37 @@ function leerCookies(req) {
 
 /* ---------------- Conexiones (se reusan entre pedidos) ---------------- */
 
+/**
+ * Conexión para funciones serverless. Con el pooler de Supabase se usa SIEMPRE el modo
+ * transacción (puerto 6543): en modo sesión (5432) cada conexión abierta ocupa uno de los
+ * pocos lugares del pool (15) aunque esté quieta, y Vercel congela las copias de la función
+ * con sus conexiones abiertas. Al abrir la bandeja se piden muchas fotos a la vez, cada
+ * copia abría las suyas y el servidor de la PC se quedaba sin lugar para arrancar
+ * ("max clients reached in session mode"). En modo transacción las quietas no ocupan nada.
+ */
+export function urlParaFunciones(url) {
+  try {
+    const u = new URL(url)
+    if (u.hostname.endsWith('.pooler.supabase.com') && (u.port === '' || u.port === '5432')) u.port = '6543'
+    return u.toString()
+  } catch {
+    return url
+  }
+}
+
 let pool = null
 function base(env) {
   // Mismos nombres que acepta el servidor (Whatsapp/servidor/src/config.js).
   const url = env.WA_DATABASE_URL || env.WA_SUPABASE_URL
   if (!url) throw fallo(501, 'Falta WA_DATABASE_URL: no se puede leer el WhatsApp sin el servidor.')
-  pool ??= new pg.Pool({ connectionString: url, ssl: { rejectUnauthorized: false }, max: 3, idleTimeoutMillis: 10_000 })
+  // Una conexión por copia de la función, que se suelta enseguida si queda sin uso.
+  pool ??= new pg.Pool({
+    connectionString: urlParaFunciones(url),
+    ssl: { rejectUnauthorized: false },
+    max: 1,
+    idleTimeoutMillis: 2_000,
+    allowExitOnIdle: true,
+  })
   return pool
 }
 
@@ -150,14 +175,22 @@ async function iniciarSesion(env, req, res) {
 
 /* ---------------- Lecturas ---------------- */
 
-/** El estado guardado de la línea (marcas, fotos, carpetas de archivos). */
+/**
+ * El estado guardado de la línea (marcas, fotos, carpetas de archivos). Se guarda un minuto:
+ * cada foto de perfil y cada archivo lo necesitan, y al abrir la bandeja se piden cientos.
+ */
+const estados = new Map() // linea → { ts, estado }
 async function estadoGuardado(env, linea) {
+  const guardado = estados.get(linea)
+  if (guardado && Date.now() - guardado.ts < 60_000) return guardado.estado
   const { rows } = await base(env).query(
     "select clave, valor from wa.estado where linea = $1 and clave in ('marcas', 'fotos', 'carpetas')",
     [linea],
   )
   const valor = Object.fromEntries(rows.map((r) => [r.clave, r.valor]))
-  return { marcas: valor.marcas || {}, fotos: valor.fotos || {}, carpetas: valor.carpetas || {} }
+  const estado = { marcas: valor.marcas || {}, fotos: valor.fotos || {}, carpetas: valor.carpetas || {} }
+  estados.set(linea, { ts: Date.now(), estado })
+  return estado
 }
 
 /** Lo mismo que listarChats() del servidor (almacen.js → vistaChat). */
