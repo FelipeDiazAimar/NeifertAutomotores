@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { RefreshCw } from 'lucide-react'
+import { Eye, EyeOff, Lock, RefreshCw } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
@@ -80,88 +80,109 @@ function VerificandoLinea() {
 }
 
 /**
- * Para administradores (admin y dueño): abrir o cerrar la vista sin conexión (los chats
- * leídos de la base con la PC servidor apagada) y borrar los chats que esa vista dejó
- * guardados en los navegadores. Cada navegador los borra la próxima vez que entra.
+ * Para administradores (admin y dueño): mostrar u ocultar los chats con la PC servidor
+ * apagada (la vista sin conexión, que los lee de la base). Al ocultarlos, nadie los ve sin
+ * el servidor y cada navegador borra lo que tenía guardado.
  */
 function ControlLectura({ lectura, onCambio }) {
   const { rol } = useCrmPerfil()
   const [abierto, setAbierto] = useState(false)
   const [ocupado, setOcupado] = useState(false)
-  const [aviso, setAviso] = useState('')
-  if (!lectura || !['admin', 'dueno'].includes(rol)) return null
+  const [error, setError] = useState('')
+  const cajaRef = useRef(null)
 
-  async function cambiar(cuerpo, listo) {
+  // Se cierra al tocar afuera o con Esc.
+  useEffect(() => {
+    if (!abierto) return undefined
+    const afuera = (e) => !cajaRef.current?.contains(e.target) && setAbierto(false)
+    const esc = (e) => e.key === 'Escape' && setAbierto(false)
+    document.addEventListener('pointerdown', afuera)
+    document.addEventListener('keydown', esc)
+    return () => {
+      document.removeEventListener('pointerdown', afuera)
+      document.removeEventListener('keydown', esc)
+    }
+  }, [abierto])
+
+  if (!lectura || !['admin', 'dueno'].includes(rol)) return null
+  const visibles = lectura.habilitada !== false
+
+  async function cambiar() {
     setOcupado(true)
-    setAviso('')
+    setError('')
     try {
       const token = await tokenActual()
       const r = await fetch('/wa-lectura/api/ajustes', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify(cuerpo),
+        // Ocultar también borra lo guardado en cada navegador.
+        body: JSON.stringify(visibles ? { habilitada: false, borrar: true } : { habilitada: true }),
       })
       const datos = await r.json().catch(() => ({}))
       if (!r.ok) throw new Error(datos.error || `Error ${r.status}`)
       onCambio(datos.lectura)
-      setAviso(listo)
     } catch (err) {
-      setAviso(`No se pudo: ${err.message}`)
+      setError(`No se pudo cambiar: ${err.message}`)
     } finally {
       setOcupado(false)
     }
   }
 
-  const habilitada = lectura.habilitada !== false
   return (
-    <div className="relative">
+    <div className="relative" ref={cajaRef}>
       <button
         type="button"
         onClick={() => setAbierto((v) => !v)}
         aria-expanded={abierto}
-        className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-2 hover:text-ink"
-        title="Ver los chats con la PC servidor apagada"
+        aria-haspopup="dialog"
+        className="glass flex items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold text-ink-2 transition-colors hover:text-ink"
+        title="Qué se ve con la PC servidor apagada"
       >
-        <span className={cn('h-2 w-2 rounded-full', habilitada ? 'bg-whatsapp' : 'bg-neifert')} aria-hidden="true" />
-        Vista sin conexión: {habilitada ? 'abierta' : 'cerrada'}
+        {visibles ? <Eye size={14} /> : <EyeOff size={14} className="text-neifert" />}
+        Chats sin servidor: {visibles ? 'visibles' : 'ocultos'}
       </button>
+
       {abierto && (
-        <div className="glass absolute left-0 top-full z-30 mt-2 w-80 rounded-2xl p-4 text-sm shadow-xl" role="dialog" aria-label="Vista sin conexión">
-          <p className="font-semibold text-ink">Vista sin conexión</p>
-          <p className="mt-1 text-xs text-ink-2">
-            Con la PC servidor apagada, el CRM muestra los chats guardados (solo lectura) y los deja guardados en el navegador
-            para que carguen rápido.
+        <div
+          role="dialog"
+          aria-label="Chats con el servidor apagado"
+          className="absolute left-0 top-full z-50 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-surface-solid p-4 shadow-2xl"
+        >
+          <p className="font-display text-base font-bold text-ink">Chats con el servidor apagado</p>
+          <p className="mt-1 text-[13px] leading-snug text-ink-2">
+            Cuando la PC servidor está apagada, el CRM puede mostrar los chats guardados en solo lectura.
           </p>
-          <div className="mt-3 flex flex-col gap-2">
+
+          <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-line px-3.5 py-3">
+            <span className="text-sm font-semibold text-ink">Mostrar los chats</span>
             <button
               type="button"
+              role="switch"
+              aria-checked={visibles}
               disabled={ocupado}
-              onClick={() =>
-                cambiar(
-                  habilitada ? { habilitada: false, borrar: true } : { habilitada: true },
-                  habilitada ? 'Cerrada: nadie ve los chats sin el servidor y se borran de las PC.' : 'Abierta.',
-                )
-              }
+              onClick={cambiar}
               className={cn(
-                'rounded-xl px-3 py-2 text-sm font-semibold disabled:opacity-50',
-                habilitada ? 'bg-neifert text-white hover:brightness-110' : 'bg-whatsapp text-white hover:brightness-110',
+                'relative h-6 w-11 shrink-0 rounded-full transition-colors disabled:opacity-50',
+                visibles ? 'bg-whatsapp' : 'bg-ink-3/40',
               )}
             >
-              {habilitada ? 'Cerrar la vista sin conexión' : 'Abrir la vista sin conexión'}
+              <span
+                className={cn(
+                  'absolute left-0 top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform',
+                  visibles ? 'translate-x-[1.375rem]' : 'translate-x-0.5',
+                )}
+              />
             </button>
-            <button
-              type="button"
-              disabled={ocupado}
-              onClick={() => cambiar({ borrar: true }, 'Listo: cada PC borra sus chats guardados la próxima vez que entra.')}
-              className="rounded-xl border border-ink-3/30 px-3 py-2 text-sm font-semibold text-ink hover:border-neifert hover:text-neifert disabled:opacity-50"
-            >
-              Borrar los chats guardados en todas las PC
-            </button>
-          </div>
-          {aviso && <p className="mt-2 text-xs text-ink-2">{aviso}</p>}
-          {!habilitada && lectura.motivo === 'apagado' && (
-            <p className="mt-2 text-xs text-ink-3">Se cerró al apagar el servidor: se abre sola cuando vuelva a encenderse.</p>
-          )}
+          </label>
+
+          <p className="mt-3 text-xs leading-snug text-ink-3">
+            {visibles
+              ? 'Ocultalos si la PC va a quedar apagada varios días: nadie los ve sin el servidor y se borran de las PC donde estaban guardados.'
+              : lectura.motivo === 'apagado'
+                ? 'Se ocultaron al apagar el servidor: vuelven a verse solos cuando se encienda.'
+                : 'Ocultos: nadie los ve hasta que el servidor esté encendido o los vuelvas a mostrar.'}
+          </p>
+          {error && <p className="mt-2 text-xs font-semibold text-neifert">{error}</p>}
         </div>
       )}
     </div>
@@ -220,6 +241,17 @@ export default function WhatsappPage() {
       vigente = false
     }
   }, [intento, tomarAjuste])
+
+  // El panel ya abierto avisa que perdió la conexión con el servidor ("Servidor sin
+  // conexión"): se vuelve a preguntar. Si la PC se apagó, se saca el panel (que tiene los
+  // chats en memoria) y se muestra lo que corresponde: la solo lectura, o el aviso si la
+  // vista sin conexión está cerrada. Así los chats no quedan a la vista con la vista oculta.
+  const sinConexion = servidor === 'panel' && estado?.conexion === 'servicio'
+  useEffect(() => {
+    if (!sinConexion) return undefined
+    const t = setTimeout(probar, 0)
+    return () => clearTimeout(t)
+  }, [sinConexion, probar])
 
   // Caído: se muestra el WhatsApp en solo lectura y se sigue probando en segundo plano (sin
   // cerrar lo que se está leyendo). Cuando la PC servidor vuelve, se pasa al panel normal.
@@ -317,6 +349,18 @@ export default function WhatsappPage() {
         </h1>
         <ControlLectura lectura={lectura} onCambio={tomarAjuste} />
 
+        {lecturaCerrada && (
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <span
+              className="glass flex items-center gap-2 rounded-full px-3.5 py-2 text-sm font-semibold text-ink"
+              title="La PC servidor está apagada y los chats están ocultos"
+            >
+              <span className="h-2 w-2 rounded-full bg-neifert" aria-hidden="true" />
+              Servidor apagado · chats ocultos
+            </span>
+          </div>
+        )}
+
         {enPanel && enLectura && (
           <div className="ml-auto flex flex-wrap items-center gap-2">
             <span
@@ -396,14 +440,19 @@ export default function WhatsappPage() {
       <div className="relative min-h-0 flex-1">
         {lecturaCerrada ? (
           // PC servidor apagada y vista sin conexión cerrada: no se muestra ningún chat.
-          <div className="glass grid h-full place-items-center rounded-2xl p-6">
-            <div className="max-w-md text-center">
-              <p className="font-display text-lg font-bold text-ink">El servidor de WhatsApp está apagado</p>
+          <div className="glass grid h-full place-items-center rounded-2xl p-6" role="status">
+            <div className="flex max-w-md flex-col items-center text-center">
+              <span className="grid h-14 w-14 place-items-center rounded-2xl bg-neifert/10 text-neifert" aria-hidden="true">
+                <Lock size={26} />
+              </span>
+              <p className="mt-4 font-display text-lg font-bold text-ink">Los chats están ocultos</p>
               <p className="mt-2 text-sm text-ink-2">
+                El servidor de WhatsApp está apagado y{' '}
                 {lectura?.motivo === 'apagado'
-                  ? 'Al apagarlo se cerró la vista sin conexión: los chats se ven cuando la PC servidor vuelva a estar encendida.'
-                  : 'Un administrador cerró la vista sin conexión: los chats se ven solo con la PC servidor encendida.'}
+                  ? 'al apagarlo se ocultaron los chats. Se vuelven a ver cuando la PC servidor esté encendida.'
+                  : 'un administrador ocultó los chats. Se ven solo con la PC servidor encendida.'}
               </p>
+              <p className="mt-2 text-xs text-ink-3">Mientras tanto nadie puede ver los mensajes desde el CRM.</p>
               <button
                 type="button"
                 onClick={probar}

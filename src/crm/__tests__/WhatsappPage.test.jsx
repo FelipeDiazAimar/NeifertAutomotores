@@ -6,6 +6,9 @@ import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('@/crm/services/usuarios.service', () => ({ tokenActual: async () => 'token' }))
 vi.mock('@/store/useUiStore', () => ({ useUiStore: (sel) => sel({ theme: 'light' }) }))
+// Rol del usuario logueado: se cambia en cada test que lo necesita.
+let rolActual = 'vendedor'
+vi.mock('@/crm/hooks/useCrmPerfil', () => ({ useCrmPerfil: () => ({ rol: rolActual }) }))
 vi.stubEnv('VITE_WHATSAPP_PANEL_URL', 'http://localhost:3100')
 const { default: WhatsappPage } = await import('../pages/WhatsappPage.jsx')
 
@@ -27,6 +30,7 @@ const servidorQue = (...respuestas) => {
 }
 
 afterEach(() => {
+  rolActual = 'vendedor'
   vi.unstubAllGlobals()
   vi.useRealTimers()
 })
@@ -82,9 +86,57 @@ describe('WhatsappPage', () => {
         : {},
     ))
     montar()
-    expect(await screen.findByText(/al apagarlo se cerró la vista sin conexión/i)).toBeInTheDocument()
+    expect(await screen.findByText('Los chats están ocultos')).toBeInTheDocument()
+    expect(screen.getByText(/al apagarlo se ocultaron los chats/i)).toBeInTheDocument()
     expect(screen.queryByTitle('WhatsApp de la concesionaria (solo lectura)')).toBeNull()
     expect(borrar).toHaveBeenCalledWith('nf-wa-lectura')
+  })
+
+  it('si el panel abierto pierde el servidor y los chats están ocultos, saca el panel y avisa', async () => {
+    vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
+    const fetch = vi.fn(async (url) =>
+      String(url).startsWith('/wa-lectura/api/servidor')
+        ? { json: async () => (fetch.mock.calls.length <= 1 ? { responde: true, lectura: { habilitada: true } } : { responde: false, lectura: { habilitada: false, motivo: 'admin' } }) }
+        : {},
+    )
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+    await delPanel({ tipo: 'nf-wa:listo' })
+    // El panel avisa "Servidor sin conexión": el CRM vuelve a preguntar y la PC está apagada.
+    await delPanel({ tipo: 'nf-wa:estado', conexion: 'servicio', clase: 'off', texto: 'Servidor sin conexión', vista: 'inbox', hayLinea: true })
+    expect(await screen.findByText('Los chats están ocultos')).toBeInTheDocument()
+    expect(screen.queryByTitle('WhatsApp de la concesionaria')).toBeNull()
+    expect(screen.getByText(/servidor apagado · chats ocultos/i)).toBeInTheDocument()
+  })
+
+  it('un administrador oculta los chats sin servidor con el interruptor', async () => {
+    rolActual = 'admin'
+    vi.stubGlobal('indexedDB', { deleteDatabase: vi.fn() })
+    const fetch = vi.fn(async (url, opciones) => {
+      if (String(url).startsWith('/wa-lectura/api/servidor')) return { json: async () => ({ responde: true, lectura: { habilitada: true, borradoEn: 0 } }) }
+      if (url === '/wa-lectura/api/ajustes') return { ok: true, json: async () => ({ lectura: { habilitada: false, motivo: 'admin', borradoEn: Date.now() }, cuerpo: JSON.parse(opciones.body) }) }
+      return {}
+    })
+    vi.stubGlobal('fetch', fetch)
+    montar()
+    await userEvent.click(await screen.findByRole('button', { name: /chats sin servidor: visibles/i }))
+    await userEvent.click(screen.getByRole('switch', { name: /mostrar los chats/i }))
+    expect(fetch).toHaveBeenCalledWith('/wa-lectura/api/ajustes', expect.objectContaining({ method: 'POST', body: JSON.stringify({ habilitada: false, borrar: true }) }))
+    expect(await screen.findByRole('button', { name: /chats sin servidor: ocultos/i })).toBeInTheDocument()
+    expect(screen.getByRole('switch', { name: /mostrar los chats/i })).toHaveAttribute('aria-checked', 'false')
+    // No hay botón aparte para borrar.
+    expect(screen.queryByText(/borrar los chats guardados/i)).toBeNull()
+  })
+
+  it('un vendedor no ve el control', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (url) => (String(url).startsWith('/wa-lectura/api/servidor') ? { json: async () => ({ responde: true, lectura: { habilitada: true } }) } : {})))
+    montar()
+    await screen.findByTitle('WhatsApp de la concesionaria')
+    expect(screen.queryByRole('button', { name: /chats sin servidor/i })).toBeNull()
   })
 
   it('"Reintentar" vuelve a probar y, si la PC servidor ya responde, carga el panel normal', async () => {
