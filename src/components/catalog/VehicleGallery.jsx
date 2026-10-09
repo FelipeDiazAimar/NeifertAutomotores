@@ -17,6 +17,7 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false, i
   // reales de cada foto para saber su relación antes de mostrarla.
   const [wide, setWide] = useState({})
   const timer = useRef(null)
+  const touchRef = useRef(null)
   const picsKey = pics.join('|')
 
   useEffect(() => {
@@ -50,6 +51,17 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false, i
     setIdx((n + pics.length) % pics.length)
   }
 
+  const onTouchStart = (e) => {
+    touchRef.current = e.touches[0].clientX
+  }
+  const onTouchEnd = (e) => {
+    const start = touchRef.current
+    touchRef.current = null
+    if (start == null || pics.length < 2) return
+    const delta = e.changedTouches[0].clientX - start
+    if (Math.abs(delta) > 50) go(idx + (delta > 0 ? -1 : 1))
+  }
+
   if (pics.length === 0) {
     return (
       <div className="grid aspect-square w-full place-items-center rounded-[24px] bg-gradient-to-br from-[#2a2a30] to-[#0b0b0f]">
@@ -62,8 +74,10 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false, i
 
   return (
     <div
-      className="group relative w-full overflow-hidden rounded-[24px] shadow-glass transition-[aspect-ratio] duration-700 ease-out"
+      className="group relative w-full touch-pan-y overflow-hidden rounded-[24px] shadow-glass transition-[aspect-ratio] duration-700 ease-out"
       style={{ aspectRatio: activeWide ? '4 / 3' : '1 / 1' }}
+      onTouchStart={onTouchStart}
+      onTouchEnd={onTouchEnd}
     >
       <AnimatePresence initial={false} mode="popLayout">
         <motion.img
@@ -89,7 +103,7 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false, i
       {(isNew || isZeroKm) && (
         <span className="absolute right-4 top-4 z-10 flex flex-col items-end gap-1.5">
           {isZeroKm && (
-            <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+            <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">
               0 km
             </span>
           )}
@@ -106,14 +120,14 @@ export default function VehicleGallery({ images = [], alt = '', isNew = false, i
           <button
             onClick={() => go(idx - 1)}
             aria-label="Anterior"
-            className="absolute left-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white opacity-0 backdrop-blur-md transition-opacity hover:bg-black/50 group-hover:opacity-100"
+            className="absolute left-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white opacity-0 backdrop-blur-md transition-opacity hover:bg-black/50 group-hover:opacity-100 max-md:opacity-100"
           >
             <ChevronLeft size={20} />
           </button>
           <button
             onClick={() => go(idx + 1)}
             aria-label="Siguiente"
-            className="absolute right-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white opacity-0 backdrop-blur-md transition-opacity hover:bg-black/50 group-hover:opacity-100"
+            className="absolute right-3 top-1/2 z-10 grid h-10 w-10 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/30 text-white opacity-0 backdrop-blur-md transition-opacity hover:bg-black/50 group-hover:opacity-100 max-md:opacity-100"
           >
             <ChevronRight size={20} />
           </button>

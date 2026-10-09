@@ -1,8 +1,7 @@
 import { useId, useState } from 'react'
-import { Loader2, ImagePlus, Trash2, Download } from 'lucide-react'
-import Modal from '@/components/common/Modal'
+import { Loader2, ImagePlus, Trash2 } from 'lucide-react'
+import FotoViewerModal from '@/crm/components/FotoViewerModal'
 import { useGestoriaFotos, useGestoriaFotosMutations } from '@/crm/hooks/useGestoriaFotos'
-import { descargarImagen } from '@/crm/lib/descargarImagen'
 import { cn } from '@/lib/cn'
 
 function slugify(s) {
@@ -127,30 +126,12 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
         <p className="text-xs text-ink-3">Cargando fotos…</p>
       )}
 
-      <Modal open={Boolean(viendo)} onClose={() => setViendo(null)} title={label} size="lg">
-        {viendo && (
-          <div className="space-y-4">
-            {rotas.has(viendo.id) ? (
-              <p className="py-10 text-center text-sm text-ink-3">
-                No se pudo cargar la imagen. Probá subirla de nuevo.
-              </p>
-            ) : (
-              <>
-                <img src={viendo.url} alt={label} className="max-h-[70vh] w-full rounded-2xl object-contain" />
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => descargarImagen(viendo.url, nombreArchivo(viendo, fotos.indexOf(viendo)))}
-                    className="glass inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-semibold text-ink transition-colors hover:border-ink/30"
-                  >
-                    <Download size={16} /> Descargar
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </Modal>
+      <FotoViewerModal
+        open={Boolean(viendo)}
+        onClose={() => setViendo(null)}
+        url={viendo?.url}
+        nombre={viendo ? nombreArchivo(viendo, fotos.indexOf(viendo)) : label}
+      />
     </div>
   )
 }

@@ -1,12 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import {
   formatearMilesDoc,
+  formatearPrecioDoc,
   contactoDuenio,
   filaStock,
   ordenarStock,
   fechaEmision,
   nombreArchivoStock,
   generarStockDocx,
+  HEADER_SIZE,
+  BODY_SIZE,
 } from '../lib/stockDocx'
 
 describe('stockDocx (planilla de stock)', () => {
@@ -18,6 +21,18 @@ describe('stockDocx (planilla de stock)', () => {
     expect(formatearMilesDoc(undefined)).toBe('')
   })
 
+  it('formatea precios ÷1000 estilo papel (ARS completos o USD directos)', () => {
+    expect(formatearPrecioDoc(21000000)).toBe('21.000')
+    expect(formatearPrecioDoc(20500000)).toBe('20.500')
+    expect(formatearPrecioDoc(14100)).toBe('14,1')
+    expect(formatearPrecioDoc(10000)).toBe('10')
+    expect(formatearPrecioDoc(null)).toBe('')
+  })
+
+  it('tamaños de celda a 11pt (22 medios puntos)', () => {
+    expect(HEADER_SIZE).toBe(22)
+    expect(BODY_SIZE).toBe(22)
+  })
   it('contacto dueño apila nombre y contacto', () => {
     expect(
       contactoDuenio({ duenio_nombre: 'MASSERA', duenio_apellido: '568660', duenio_contacto: '66-2059' })
@@ -25,17 +40,18 @@ describe('stockDocx (planilla de stock)', () => {
     expect(contactoDuenio({})).toEqual([])
   })
 
-  it('filaStock mapea las 8 columnas del papel y saltea bajas', () => {
+  it('filaStock mapea las 8 columnas del papel y saltea bajas y 0km', () => {
     const f = filaStock({
       marca: 'CHEV', modelo: 'CRUZE', version: 'LT 1.4T MT 5P', anio: 2022, km: 160000,
       duenio_nombre: 'SEBA', duenio_apellido: 'NICOLAS', duenio_contacto: '4918',
-      precio_canje: 21000, precio_contado: 20500, estado: 'disponible',
+      precio_canje: 21000000, precio_contado: 20500000, estado: 'disponible',
     })
     expect(f).toEqual([
       'CHEV', 'CRUZE', 'LT 1.4T MT 5P', '2022', '160.000',
       ['SEBA NICOLAS', '4918'], '21.000', '20.500',
     ])
     expect(filaStock({ estado: 'baja', marca: 'X' })).toBeNull()
+    expect(filaStock({ estado: 'disponible', marca: 'X', es_0km: true })).toBeNull()
   })
 
   it('ordena por marca y luego modelo (A-Z, sin importar acentos)', () => {

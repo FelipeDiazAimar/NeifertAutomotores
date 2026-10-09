@@ -7,7 +7,7 @@ import Modal from '@/components/common/Modal'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
+import { lineaSpecs, precioFmt, estadoVariant, estadoLabel, esNuevoVigente } from '@/crm/lib/formatVehiculo'
 import { cn } from '@/lib/cn'
 import { useVehiculoMutations } from '@/crm/hooks/useVehiculos'
 import VehiculoForm from './VehiculoForm'
@@ -87,7 +87,7 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onEliminar
 
             <div className="flex flex-wrap gap-2">
               {v.es_0km && <Badge variant="neutral">0 km</Badge>}
-              {v.es_nuevo && <Badge variant="amber">Nuevo</Badge>}
+              {esNuevoVigente(v) && <Badge variant="amber">Nuevo</Badge>}
               {v.itv === 'si' && <Badge variant="green">ITV al día</Badge>}
               {v.consignacion && <Badge variant="amber">Consignación</Badge>}
               {v.tiene_iva && <Badge variant="neutral">IVA</Badge>}

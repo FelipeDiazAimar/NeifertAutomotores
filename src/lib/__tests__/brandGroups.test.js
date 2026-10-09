@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { brandKeyOf, groupVehiclesByBrand, paginarPorMarcas } from '../brandGroups'
+import { brandKeyOf, groupVehiclesByBrand, paginarPorMarcas, shouldGroupByBrand, AGRUPA_SOLO } from '../brandGroups'
 
 describe('brandGroups', () => {
   it('brandKeyOf normaliza vacías a "Sin marca"', () => {
@@ -42,5 +42,25 @@ describe('brandGroups', () => {
       ['Ford'],
       ['Honda'],
     ])
+  })
+
+  it('AGRUPA_SOLO es brand-asc', () => {
+    expect(AGRUPA_SOLO).toBe('brand-asc')
+  })
+
+  it('shouldGroupByBrand solo agrupa con brand-asc', () => {
+    expect(shouldGroupByBrand('brand-asc')).toBe(true)
+    expect(shouldGroupByBrand('model-asc')).toBe(false)
+    expect(shouldGroupByBrand('price-desc')).toBe(false)
+    expect(shouldGroupByBrand('price-asc')).toBe(false)
+    expect(shouldGroupByBrand('year-desc')).toBe(false)
+    expect(shouldGroupByBrand('km-asc')).toBe(false)
+  })
+
+  it('shouldGroupByBrand es falso con valores ausentes o desconocidos', () => {
+    expect(shouldGroupByBrand(undefined)).toBe(false)
+    expect(shouldGroupByBrand(null)).toBe(false)
+    expect(shouldGroupByBrand('')).toBe(false)
+    expect(shouldGroupByBrand('otro')).toBe(false)
   })
 })

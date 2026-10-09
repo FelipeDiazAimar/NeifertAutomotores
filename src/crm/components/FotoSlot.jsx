@@ -1,8 +1,7 @@
 import { useId, useState } from 'react'
-import { Loader2, ImagePlus, Trash2, Download } from 'lucide-react'
+import { Loader2, ImagePlus, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
-import Modal from '@/components/common/Modal'
-import { descargarImagen } from '@/crm/lib/descargarImagen'
+import FotoViewerModal from '@/crm/components/FotoViewerModal'
 import * as fotos from '@/crm/services/fotos.service'
 import { deleteMedia } from '@/services/media.service'
 import { cn } from '@/lib/cn'
@@ -149,30 +148,7 @@ export default function FotoSlot({ label, url, carpeta, onChange, hideLabel = fa
         onChange={onArchivo}
       />
 
-      <Modal open={viendo} onClose={() => setViendo(false)} title={label} size="lg">
-        {url && (
-          <div className="space-y-4">
-            {rota ? (
-              <p className="py-10 text-center text-sm text-ink-3">
-                No se pudo cargar la imagen. Probá subirla de nuevo.
-              </p>
-            ) : (
-              <>
-                <img src={url} alt={label} className="max-h-[70vh] w-full rounded-2xl object-contain" />
-                <div className="flex justify-end">
-                  <button
-                    type="button"
-                    onClick={() => descargarImagen(url, nombreArchivo)}
-                    className="glass inline-flex h-10 items-center gap-2 rounded-2xl px-4 text-sm font-semibold text-ink transition-colors hover:border-ink/30"
-                  >
-                    <Download size={16} /> Descargar
-                  </button>
-                </div>
-              </>
-            )}
-          </div>
-        )}
-      </Modal>
+      <FotoViewerModal open={viendo} onClose={() => setViendo(false)} url={url} nombre={nombreArchivo || label} />
     </div>
   )
 }

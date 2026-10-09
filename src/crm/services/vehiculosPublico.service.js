@@ -7,7 +7,7 @@ const db = () => supabase.schema('crm')
 /** Solo columnas públicas: nunca las privadas de crm.vehiculos (dueño, ITV,
  *  patente, nota, consignación, carpetas, IVA). */
 const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, precio_contado,
-  km, combustible, transmision, categoria, es_nuevo, es_0km, descripcion, estado,
+  km, combustible, transmision, categoria, es_nuevo, es_nuevo_en, es_0km, descripcion, estado,
   creado_en, vehiculo_fotos ( url, es_portada, orden )`
 
 // year-desc/km-asc ordenan en el server. price-asc/price-desc y los
@@ -69,6 +69,7 @@ function mapear(v, usdRate = null) {
     transmission: v.transmision,
     category: v.categoria,
     is_new: v.es_nuevo,
+    es_nuevo_en: v.es_nuevo_en ?? null,
     is_zero_km: v.es_0km ?? false,
     status: v.estado,
     description: v.descripcion,
