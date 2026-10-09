@@ -41,6 +41,24 @@ const CONOCIDOS = [
   { re: /failed to connect to the edge|connection.*(reset|timed out)|Retrying connection/i, origen: 'Túnel', que: 'El túnel no se pudo conectar con Cloudflare (internet o firewall).', hacer: 'Se reintenta solo. Revisá la conexión de la PC.' },
 ]
 
+/*
+ * Lo que no es un problema y solo tapa lo demás:
+ * - libsignal (el cifrado de WhatsApp) escribe en la consola, con las claves adentro, cada
+ *   sesión que cierra o renueva: es normal.
+ * - El túnel avisa con ERR cuando una pestaña del CRM se cierra o se recarga (se corta su
+ *   conexión en vivo), y cuando no encuentra un servidor DNS propio (usa otro y sigue).
+ */
+const RUIDO_CONSOLA = /^(\s|[{}\]]|Closing (open )?session|Removing old closed session|Session already (closed|open)|Decrypted message with closed session|Migrating session)/
+const RUIDO_TUNEL = /canceled by remote|forcibly closed by the remote host|context canceled|DNS local resolver|^error="/
+
+/** Mismo error del túnel con otro número de conexión, IP o puerto: se cuentan juntos. */
+const sinVariables = (texto) =>
+  texto
+    .replace(/\s(connIndex|event|ingressRule)=\d+/g, '')
+    .replace(/\sip=\S+/g, '')
+    .replace(/127\.0\.0\.1:\d+->/g, '')
+    .replace(/\?pestana=\w+/g, '')
+
 /** De dónde viene un registro que no está en la lista de conocidos. */
 function origenDe(texto) {
   if (/supabase|base de|almac[eé]n|mensajes guardados/i.test(texto)) return 'Supabase'
@@ -99,12 +117,14 @@ function deApp(archivoApp) {
     if (cuerpo.startsWith('servidor: ')) {
       const resto = cuerpo.slice(10)
       if (/^\[\d{2}:\d{2}:\d{2}\]/.test(resto)) continue // ya está en los registros del servidor
+      if (RUIDO_CONSOLA.test(resto)) continue
       items.push({ ts, nivel: /error|warn|fall/i.test(resto) ? 'error' : 'aviso', texto: resto, detalle: '', fuente: 'consola', origen: 'Servidor' })
     } else if (cuerpo.startsWith('túnel: ')) {
       const resto = cuerpo.slice(7)
       const nivel = /\bERR\b/.test(resto) ? 'error' : /\bWRN\b/.test(resto) ? 'aviso' : /Registered tunnel connection/.test(resto) ? 'ok' : null
       if (!nivel) continue
-      const limpio = resto.replace(/^\S+Z\s+(INF|WRN|ERR)\s+/, '')
+      const limpio = sinVariables(resto.replace(/^\S+Z\s+(INF|WRN|ERR)\s+/, ''))
+      if (nivel !== 'ok' && RUIDO_TUNEL.test(limpio)) continue
       items.push({ ts, nivel, texto: nivel === 'ok' ? 'Túnel conectado a Cloudflare' : limpio, detalle: nivel === 'ok' ? limpio : '', fuente: 'tunel', origen: 'Túnel' })
     } else {
       const nivel = /no se pudo|se cerr[oó]|falt|falla|error/i.test(cuerpo) ? 'aviso' : 'info'

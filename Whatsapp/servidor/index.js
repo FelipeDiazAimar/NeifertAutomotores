@@ -41,6 +41,15 @@ if (!SOLO_ESTA_PC && !LOGIN_CONFIGURADO) {
   process.exit(1)
 }
 
+// libsignal (el cifrado que usa Baileys) escribe en la consola cada sesión que cierra o
+// renueva, con las claves adentro. Es normal, no sirve para nada en los registros y no
+// conviene que las claves queden en un archivo.
+const RUIDO_SIGNAL = /^(Closing (open )?session|Removing old closed session|Session already (closed|open)|Decrypted message with closed session|Migrating session)/
+for (const metodo of ['log', 'info', 'warn']) {
+  const original = console[metodo].bind(console)
+  console[metodo] = (...args) => (typeof args[0] === 'string' && RUIDO_SIGNAL.test(args[0]) ? undefined : original(...args))
+}
+
 const INICIO = Date.now()
 const app = express()
 app.disable('x-powered-by')
@@ -360,11 +369,12 @@ const servidor = app.listen(PUERTO, HOST, () => {
   if (almacen.modo === 'supabase') {
     reabrirLecturaAlEncender()
       .then((si) => si && log('info', 'Vista sin conexión del CRM abierta de nuevo', 'Se había cerrado al apagar el servidor'))
-      .catch((err) => log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
+      // Si se está apagando (se cerró la app justo al arrancar), la base ya se cerró: no es un error.
+      .catch((err) => cerrando || log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
     // Este CRM (CRM_URL) muestra esta línea cuando el servidor está apagado.
     registrarCrm()
       .then((r) => r && log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`))
-      .catch((err) => log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
+      .catch((err) => cerrando || log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
   }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()

@@ -392,26 +392,30 @@ function arrancarTunel() {
   if (!fs.existsSync(CLOUDFLARED)) return registrar(`Falta cloudflared en ${CLOUDFLARED}: el CRM no va a llegar a esta PC`)
   registrar('Iniciando Cloudflare Tunnel')
   // El token va por variable de entorno, no en la línea de comandos (ahí lo ve cualquiera).
-  tunel = spawn(CLOUDFLARED, ['tunnel', '--no-autoupdate', 'run'], {
+  const p = spawn(CLOUDFLARED, ['tunnel', '--no-autoupdate', 'run'], {
     env: { ...process.env, TUNNEL_TOKEN: token },
     windowsHide: true,
     stdio: ['ignore', 'pipe', 'pipe'],
   })
-  salidaA('túnel', tunel.stdout)
-  salidaA('túnel', tunel.stderr)
+  tunel = p
+  salidaA('túnel', p.stdout)
+  salidaA('túnel', p.stderr)
   ponerEstadoTunel('conectando')
   // cloudflared escribe todo por stderr: de ahí sale si el CRM ya llega a esta PC.
-  for (const f of [tunel.stdout, tunel.stderr]) {
+  for (const f of [p.stdout, p.stderr]) {
     f?.on('data', (d) => {
       const texto = String(d)
       if (/Registered tunnel connection/i.test(texto)) ponerEstadoTunel('ok')
       else if (/Unauthorized|Invalid tunnel secret/i.test(texto)) ponerEstadoTunel('error', 'Cloudflare rechazó el token del túnel. Copiá de nuevo el token (WA_TUNEL_TOKEN) desde Cloudflare y cambiá la configuración.')
     })
   }
-  tunel.on('exit', (codigo) => {
+  p.on('exit', (codigo) => {
+    // Al reiniciar, el aviso de que se cerró el túnel viejo llega cuando ya arrancó el
+    // nuevo: no tiene que tocarlo (antes lo "perdía" y quedaban dos cloudflared andando).
+    if (tunel !== p) return
     tunel = null
     if (estadoTunel.estado === 'ok') ponerEstadoTunel('conectando')
-    if (saliendo) return
+    if (saliendo || p.apagado) return
     registrar(`El túnel se cerró (código ${codigo}); se reinicia en 10 s`)
     setTimeout(arrancarTunel, 10_000)
   })
@@ -442,6 +446,7 @@ function apagarServidor({ cerrarLectura = false } = {}) {
 }
 
 function apagarTunel() {
+  if (tunel) tunel.apagado = true // lo cerró la app: no se reinicia solo
   try {
     tunel?.kill()
   } catch {}
