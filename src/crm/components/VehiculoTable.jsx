@@ -60,7 +60,7 @@ export async function copiarEnlace(v) {
   }
 }
 
-export default function VehiculoTable({ filas, onCambiarEstado, onCambiarPublicado }) {
+export default function VehiculoTable({ filas, onCambiarEstado, onCambiarPublicado, seleccionados = [], enSeleccion = false, onToggleSeleccion }) {
   const navigate = useNavigate()
 
   return (
@@ -79,11 +79,21 @@ export default function VehiculoTable({ filas, onCambiarEstado, onCambiarPublica
           {filas.map((v) => {
             const per = v.peritajes?.[0]
             const precio = precioFmt(v)
+            const seleccionado = seleccionados.includes(v.id)
             return (
               <tr
                 key={v.id}
-                onClick={() => navigate(`/crm/vehiculos/${v.id}`)}
-                className="cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface"
+                onClick={() => {
+                  if (enSeleccion) {
+                    onToggleSeleccion?.(v)
+                  } else {
+                    navigate(`/crm/vehiculos/${v.id}`)
+                  }
+                }}
+                aria-pressed={enSeleccion ? seleccionado : undefined}
+                data-seleccionado={seleccionado || undefined}
+                style={seleccionado ? { boxShadow: 'inset 3px 0 0 var(--color-neifert)' } : undefined}
+                className={`cursor-pointer border-b border-line transition-colors last:border-0 hover:bg-surface${seleccionado ? ' bg-neifert/5' : ''}`}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">

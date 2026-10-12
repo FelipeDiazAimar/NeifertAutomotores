@@ -1,9 +1,10 @@
 import { useState } from 'react'
-import { Pencil, ChevronDown, Trash2, Sparkles, Globe, BadgeCheck } from 'lucide-react'
+import { Pencil, ChevronDown, Trash2, Sparkles, Globe, BadgeCheck, FileText } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
 import Modal from '@/components/common/Modal'
+import PresupuestoModal from './PresupuestoModal'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
@@ -41,6 +42,7 @@ function Dato({ k, children }) {
 export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onEliminar, puedeEliminar }) {
   const [confirmar, setConfirmar] = useState(false)
   const [editando, setEditando] = useState(false)
+  const [presupuestoAbierto, setPresupuestoAbierto] = useState(false)
   const { actualizar } = useVehiculoMutations()
   const precio = precioFmt(v)
   const inicialForm = Object.fromEntries(CAMPOS_FORM.map((k) => [k, v[k] ?? undefined]))
@@ -94,6 +96,16 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onEliminar
             </div>
 
             <div className="flex flex-col gap-2 border-t border-line pt-3 sm:flex-row sm:flex-wrap sm:justify-end">
+              <button
+                type="button"
+                onClick={() => setPresupuestoAbierto(true)}
+                className={cn(
+                  'glass inline-flex h-10 w-full items-center justify-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors sm:w-auto',
+                  'text-ink hover:border-ink/30',
+                )}
+              >
+                <FileText size={16} /> Presupuesto
+              </button>
               <button
                 type="button"
                 onClick={() => setEditando((e) => !e)}
@@ -209,6 +221,8 @@ export default function FichaVehiculo({ vehiculo: v, onCambiarEstado, onEliminar
           </Button>
         </div>
       </Modal>
+
+      <PresupuestoModal open={presupuestoAbierto} onClose={() => setPresupuestoAbierto(false)} vehiculo={v} />
     </div>
   )
 }
