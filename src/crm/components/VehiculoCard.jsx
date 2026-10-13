@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { Check } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
 import EstadoStrip from './EstadoStrip'
@@ -6,7 +7,20 @@ import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/for
 
 const GESTORIA_LABEL = { sin_iniciar: 'Sin iniciar', en_proceso: 'En proceso', completo: 'Completo' }
 
-export default function VehiculoCard({ vehiculo: v }) {
+/** Tilde rojo bien visible sobre la card seleccionada (se nota en pantallas chicas). */
+export function CheckSeleccion() {
+  return (
+    <span
+      data-testid="check-seleccion"
+      aria-hidden
+      className="absolute left-2 top-2 z-10 grid h-7 w-7 place-items-center rounded-full bg-neifert text-white shadow-glow-red"
+    >
+      <Check size={16} strokeWidth={3} />
+    </span>
+  )
+}
+
+export default function VehiculoCard({ vehiculo: v, seleccionado = false, enSeleccion = false, onToggleSeleccion }) {
   const navigate = useNavigate()
   const per = v.peritajes?.[0]
   const precio = precioFmt(v)
@@ -16,9 +30,23 @@ export default function VehiculoCard({ vehiculo: v }) {
   return (
     <GlassCard
       as="button"
-      onClick={() => navigate(`/crm/vehiculos/${v.id}`)}
-      className="flex w-full gap-3 p-3 text-left"
+      onClick={() => {
+        if (enSeleccion) {
+          onToggleSeleccion?.(v)
+        } else {
+          navigate(`/crm/vehiculos/${v.id}`)
+        }
+      }}
+      aria-pressed={enSeleccion ? seleccionado : undefined}
+      data-seleccionado={seleccionado || undefined}
+      style={
+        seleccionado
+          ? { borderColor: 'var(--color-neifert)', boxShadow: '0 0 0 2px var(--color-neifert)' }
+          : undefined
+      }
+      className={`relative flex w-full gap-3 p-3 text-left${seleccionado ? ' bg-neifert/10' : ''}`}
     >
+      {seleccionado && <CheckSeleccion />}
       <div className="grid h-16 w-20 shrink-0 place-items-center overflow-hidden rounded-2xl bg-neifert/10">
         {portada ? (
           <img src={portada.url} alt="" className="h-full w-full object-cover" />

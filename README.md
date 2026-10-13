@@ -1,6 +1,8 @@
 # Neifert Automotores
 
-Web premium para **Neifert Automotores**, concesionaria ubicada en San Francisco, Córdoba. El proyecto combina una experiencia pública de catálogo y marca con un panel interno para gestionar vehículos, leads, contenido, usuarios y métricas comerciales.
+**Web premium para **Neifert Automotores**, concesionaria de San Francisco, Córdoba: catálogo + marca + panel comercial. ([🇬🇧 English version](README.en.md))**
+
+**[🚀 Demo en vivo](https://neifert-automotores.vercel.app) · [📦 Repo](https://github.com/FelipeDiazAimar/NeifertAutomotores)**
 
 La app funciona en dos modos:
 
@@ -356,3 +358,15 @@ npm run format
 - Probar `/catalogo`, `/cita`, `/login` y `/admin/*`.
 - Ejecutar `npm run lint`.
 - Ejecutar `npm run build`.
+
+## Autor, Contacto Y Licencia
+
+Desarrollo: **Felipe Diaz Aimar** — Full-stack (React 19, Vite 8, Supabase, R2).
+- 💼 LinkedIn: https://www.linkedin.com/in/felipe-aimar/
+- 📧 Email: felipediazaimar@gmail.com
+- 🐙 GitHub: https://github.com/FelipeDiazAimar
+- 🌐 Demo: https://neifert-automotores.vercel.app
+
+Proyecto privado adaptado a portfolio. Todos los derechos reservados.
+
+> **English TL;DR:** Premium site for a car dealership (San Francisco, Córdoba): high-impact public catalog with brand storytelling + WhatsApp contact, and a private dashboard (inventory, leads, editable content, users, metrics). React 19 + Vite 8 + Tailwind v4 (JS, no TS) + Zustand persist (`nf-site-content`) + TanStack Query + Framer Motion/Lenis + Router 7 lazy + Vitest. Demo mode without Supabase (localStorage + mocks); production with Supabase Auth/DB/Storage/Realtime, R2 uploads (presigned → Supabase → dataURL fallback), Instagram sync proxies, Web Push alerts. Run: `npm install && npm run dev` (`:5173`); quality gate `npm run lint && npm run build`. Full English docs in [README.en.md](README.en.md).

@@ -4,6 +4,7 @@ import { ChevronDown, Share2, Link2, Eye, EyeOff } from 'lucide-react'
 import Badge from '@/components/common/Badge'
 import GlassCard from '@/components/common/GlassCard'
 import VehiculoStats from './VehiculoStats'
+import { CheckSeleccion } from './VehiculoCard'
 import { copiarEnlace } from './VehiculoTable'
 import { lineaSpecs, precioFmt, estadoVariant, estadoLabel } from '@/crm/lib/formatVehiculo'
 import { shareOrCopy } from '@/lib/share'
@@ -33,7 +34,7 @@ function IconBtn({ icon: Icon, label, onClick }) {
 /** Tarjeta de vehículo para la vista en grilla de /crm/vehiculos (alternativa
  *  a VehiculoTable). Mismas acciones que la columna "Web" de la tabla, para
  *  que ambas vistas ofrezcan exactamente lo mismo. */
-export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambiarPublicado }) {
+export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambiarPublicado, seleccionado = false, enSeleccion = false, onToggleSeleccion }) {
   const navigate = useNavigate()
   const precio = precioFmt(v)
   const portada = v.fotos?.find((f) => f.es_portada) ?? v.fotos?.[0]
@@ -41,9 +42,23 @@ export default function VehiculoGridCard({ vehiculo: v, onCambiarEstado, onCambi
 
   return (
     <GlassCard
-      onClick={() => navigate(`/crm/vehiculos/${v.id}`)}
-      className="cursor-pointer overflow-hidden transition-colors hover:border-ink/20"
+      onClick={() => {
+        if (enSeleccion) {
+          onToggleSeleccion?.(v)
+        } else {
+          navigate(`/crm/vehiculos/${v.id}`)
+        }
+      }}
+      aria-pressed={enSeleccion ? seleccionado : undefined}
+      data-seleccionado={seleccionado || undefined}
+      style={
+        seleccionado
+          ? { borderColor: 'var(--color-neifert)', boxShadow: '0 0 0 2px var(--color-neifert)' }
+          : undefined
+      }
+      className={`relative cursor-pointer overflow-hidden transition-colors hover:border-ink/20${seleccionado ? ' bg-neifert/10' : ''}`}
     >
+      {seleccionado && <CheckSeleccion />}
       <div className="flex gap-3 p-3">
         <div className="grid h-20 w-28 shrink-0 place-items-center overflow-hidden rounded-xl bg-neifert/5">
           {portada && !rota ? (
