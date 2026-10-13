@@ -137,6 +137,9 @@ app.get('/api/salud', (req, res) => {
     conexion,
     desdeSeg: Math.round((Date.now() - desde) / 1000),
     activoSeg: Math.round((Date.now() - INICIO) / 1000),
+    // Con qué línea corre: el CRM que tiene configurado este servidor (VITE_WHATSAPP_PANEL_URL)
+    // la anota para su vista sin conexión. Es el número de la concesionaria, no un secreto.
+    linea: numeroLinea() || null,
   })
 })
 // Desde qué sitios puede llegar la sesión del CRM (el panel embebido solo acepta esos).

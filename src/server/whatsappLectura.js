@@ -13,7 +13,6 @@
  * Variables: WA_DATABASE_URL o WA_SUPABASE_URL (la base del WhatsApp), WA_R2_BUCKET / WA_R2_ENDPOINT /
  * WA_R2_ACCESS_KEY_ID / WA_R2_SECRET_ACCESS_KEY (los archivos), VITE_SUPABASE_URL /
  * VITE_SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY (los usuarios del CRM). Opcionales:
- * WA_LINEA (qué línea mostrar si ningún servidor anotó todavía este CRM, ver lineaActual),
  * WHATSAPP_ROLES / WHATSAPP_ROLES_LINEA / WHATSAPP_ROLES_LECTURA (los mismos del servidor).
  */
 import crypto from 'node:crypto'
@@ -102,10 +101,17 @@ function r2(env) {
 }
 
 /*
- * Qué línea mostrar. Cada servidor (el de prueba, el de la concesionaria) anota al arrancar
- * en wa.estado (clave 'crm') el dominio de su CRM (su CRM_URL): este CRM muestra la línea
- * del servidor que lo anotó, nunca la de otro. Si ninguno lo anotó todavía, WA_LINEA; si
- * tampoco está, no se muestra ninguna (el panel avisa que falta encender el servidor).
+ * Qué línea mostrar: la de este CRM, nunca la de otro. El servidor de prueba y el de la
+ * concesionaria guardan en la misma base, así que "la línea con el mensaje más reciente"
+ * podía mostrarle a la concesionaria los chats de la línea de prueba.
+ *
+ * La relación CRM → línea queda en wa.estado (clave 'crm', { hosts: [...] }) y se anota sola
+ * por dos caminos:
+ *   - el servidor, al arrancar, con su CRM_URL (registrarCrm, en Whatsapp/servidor/src/nube.js);
+ *   - este CRM, cada vez que ve encendido a SU servidor (VITE_WHATSAPP_PANEL_URL): /api/salud
+ *     dice con qué línea corre (anotarLineaDelCrm).
+ * Sin ninguna anotación no se muestra ninguna línea: el panel avisa que falta encender el
+ * servidor.
  */
 const SIN_LINEA = 'Este CRM todavía no tiene una línea de WhatsApp asignada: se asigna sola cuando se enciende su servidor.'
 // "www.ejemplo.com:443" → "ejemplo.com". Igual que hostDeCrm del servidor.
@@ -125,10 +131,29 @@ async function lineaActual(env, req) {
     )
     linea = rows[0]?.linea || null
   }
-  linea ||= env.WA_LINEA ? String(env.WA_LINEA).replace(/\D/g, '') : null
   if (!linea) throw fallo(409, SIN_LINEA, { sinLinea: true })
   lineasCache.set(host, { ts: Date.now(), linea })
   return linea
+}
+
+/** Este CRM (host) muestra `linea`. Se escribe solo si cambió (el CRM pregunta seguido). */
+async function anotarLineaDelCrm(env, host, linea) {
+  if (!host || !linea || lineasCache.get(host)?.linea === linea) return
+  const db = base(env)
+  await db.query(
+    `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'crm', jsonb_build_object('hosts', jsonb_build_array($2::text)), now())
+     on conflict (linea, clave) do update
+       set valor = jsonb_set(coalesce(wa.estado.valor, '{}'::jsonb), '{hosts}', (coalesce(wa.estado.valor->'hosts', '[]'::jsonb) - $2::text) || jsonb_build_array($2::text)),
+           actualizado_en = now()`,
+    [linea, host],
+  )
+  // Un CRM muestra una sola línea: se le saca a cualquier otra que lo tuviera.
+  await db.query(
+    `update wa.estado set valor = jsonb_set(valor, '{hosts}', (valor->'hosts') - $2::text), actualizado_en = now()
+     where clave = 'crm' and linea <> $1 and valor->'hosts' ? $2`,
+    [linea, host],
+  )
+  lineasCache.set(host, { ts: Date.now(), linea })
 }
 
 /* ---------------- Ajuste: ¿se puede usar la vista sin conexión? ---------------- */
@@ -426,7 +451,10 @@ async function servidorAnda(env) {
   try {
     const r = await fetch(`${base}/api/salud`, { signal: AbortSignal.timeout(6000), headers: { 'Cache-Control': 'no-cache' } })
     const datos = await r.json().catch(() => null)
-    return { responde: typeof datos?.conexion === 'string', conexion: datos?.conexion || null }
+    const responde = typeof datos?.conexion === 'string'
+    // Los servidores anteriores no dicen la línea: ahí cuenta solo lo que anotó el servidor.
+    const linea = responde ? String(datos.linea || '').replace(/\D/g, '') || null : null
+    return { responde, conexion: datos?.conexion || null, linea }
   } catch {
     return { responde: false }
   }
@@ -446,10 +474,10 @@ async function atender(env, req, res, ruta) {
   // Sin sesión: solo dice si la PC servidor contesta (lo usa el CRM para elegir qué abrir).
   if (partes[0] === 'servidor') {
     // Junto con si la vista sin conexión está abierta y cuándo se pidió borrar lo guardado.
-    const [estado, lectura] = await Promise.all([
-      servidorAnda(env),
-      lineaActual(env, req).then((l) => ajusteLectura(env, l)).catch(() => null),
-    ])
+    const { linea, ...estado } = await servidorAnda(env)
+    // Su servidor está encendido y dice con qué línea corre: queda anotada para cuando se apague.
+    if (linea) await anotarLineaDelCrm(env, hostDelPedido(req), linea).catch((err) => console.error('[whatsapp-lectura] anotar línea', err.message))
+    const lectura = await lineaActual(env, req).then((l) => ajusteLectura(env, l)).catch(() => null)
     return { ...estado, lectura: lectura && { habilitada: lectura.habilitada, borradoEn: lectura.borradoEn, motivo: lectura.motivo } }
   }
   // Cambiar el ajuste: con el token del CRM (no la cookie), solo administradores.

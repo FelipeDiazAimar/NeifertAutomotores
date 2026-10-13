@@ -8,6 +8,19 @@ vi.mock('pg', () => ({
     Pool: class {
       query(sql, params = []) {
         consultas.push({ sql, params })
+        // El CRM anota su línea (insert) y se la saca a las demás (update).
+        if (/^\s*insert into wa\.estado/.test(sql) && /'crm'/.test(sql)) {
+          const [linea, host] = params
+          const fila = filasCrm.find((f) => f.linea === linea)
+          if (fila) fila.hosts = [...fila.hosts.filter((h) => h !== host), host]
+          else filasCrm.push({ linea, hosts: [host], ts: Date.now() })
+          return { rows: [] }
+        }
+        if (/^\s*update wa\.estado/.test(sql)) {
+          const [linea, host] = params
+          for (const f of filasCrm) if (f.linea !== linea) f.hosts = f.hosts.filter((h) => h !== host)
+          return { rows: [] }
+        }
         if (/clave = 'crm'/.test(sql)) {
           const host = params[0]
           const linea = filasCrm.filter((f) => f.hosts.includes(host)).sort((a, b) => b.ts - a.ts)[0]?.linea
@@ -57,12 +70,22 @@ describe('vista sin conexión: cada CRM ve la línea de su servidor', () => {
     expect(consultas.find((c) => /clave = 'lectura'/.test(c.sql)).params).toEqual(['5493406333333'])
   })
 
-  it('sin anotación usa WA_LINEA', async () => {
-    await pedir('servidor', 'sin-anotar.com', { WA_LINEA: '+54 9 3406 444444' })
-    expect(consultas.find((c) => /clave = 'lectura'/.test(c.sql)).params).toEqual(['5493406444444'])
+  it('con su servidor encendido, el CRM anota la línea que dice /api/salud y se la saca a la otra', async () => {
+    filasCrm.push({ linea: '5493406111111', hosts: ['crm-nuevo.com'], ts: 1 })
+    const fetchOriginal = globalThis.fetch
+    globalThis.fetch = async () => ({ json: async () => ({ conexion: 'conectado', linea: '5493564999999' }) })
+    try {
+      const res = await pedir('servidor', 'crm-nuevo.com', { VITE_WHATSAPP_PANEL_URL: 'https://wa.crm-nuevo.com' })
+      expect(res.cuerpo.responde).toBe(true)
+    } finally {
+      globalThis.fetch = fetchOriginal
+    }
+    expect(filasCrm.find((f) => f.linea === '5493564999999').hosts).toEqual(['crm-nuevo.com'])
+    expect(filasCrm.find((f) => f.linea === '5493406111111').hosts).toEqual([])
+    expect(consultas.find((c) => /clave = 'lectura'/.test(c.sql)).params).toEqual(['5493564999999'])
   })
 
-  it('sin anotación ni WA_LINEA no muestra ninguna línea: avisa', async () => {
+  it('sin anotación no muestra ninguna línea (aunque haya otras con mensajes): avisa', async () => {
     filasCrm.push({ linea: '5493406111111', hosts: ['otro.com'], ts: 1 })
     const res = await pedir('servidor', 'nadie.com')
     expect(res.cuerpo.lectura).toBeNull()
