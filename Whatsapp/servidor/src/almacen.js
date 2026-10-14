@@ -602,7 +602,8 @@ export function quitarAnterioresA(corte) {
   return { quitados, chats: chatsVacios.length }
 }
 
-export function agregarMensaje(jid, m) {
+/** `avisar: false`: no se avisa a los navegadores (cargas en tanda, como un respaldo). */
+export function agregarMensaje(jid, m, { avisar = true } = {}) {
   const porId = cargar(jid)
   const previo = porId.get(m.id)
   if (previo) {
@@ -616,7 +617,7 @@ export function agregarMensaje(jid, m) {
 
   const chat = estado.chats[jid] || upsertChat(jid)
   if (m.ts >= (chat.ultimoTs || 0)) upsertChat(jid, { ultimoTs: m.ts, ultimo: resumen(m) })
-  emitir('mensaje', { chatId: jid, mensaje: vistaMensaje(m) })
+  if (avisar) emitir('mensaje', { chatId: jid, mensaje: vistaMensaje(m) })
   return { nuevo: true, mensaje: m }
 }
 

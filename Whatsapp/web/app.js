@@ -128,6 +128,78 @@ async function elegirExportacion(titulo) {
   return r === true ? 'archivos' : r === 'alternativa' ? 'texto' : null
 }
 
+/** Todos los chats: con los archivos (descarga directa) o solo el texto. */
+async function exportarTodo(como, boton = null) {
+  if (como === 'archivos') {
+    bajarDirecto('/api/exportar?archivos=1')
+    toast('Descargando los chats con sus archivos. Con muchas fotos y videos tarda: el navegador muestra el avance.', 9000)
+    return
+  }
+  if (boton) boton.disabled = true
+  toast('Preparando todos los chats… puede tardar un poco.', 120000)
+  try {
+    await bajarArchivo('/api/exportar', 'chats.zip')
+    toast('Chats exportados: una carpeta por chat dentro del .zip.', 5000)
+  } catch (err) {
+    toast(err.message)
+  } finally {
+    if (boton) boton.disabled = false
+  }
+}
+
+/*
+ * Cargar un respaldo (.zip o .rar): la exportación de este sistema o la del celular. Se
+ * sube de a partes (el túnel corta los pedidos grandes) y el servidor lo procesa en
+ * segundo plano: el avance llega por el canal en vivo (evento "importacion").
+ */
+const PARTE_MB = 20
+async function cargarRespaldo(archivo) {
+  if (!archivo || !/\.(zip|rar)$/i.test(archivo.name)) return toast('Elegí un archivo .zip o .rar.', 5000)
+  const mb = (archivo.size / 1024 / 1024).toFixed(1)
+  const seguir = await confirmar(
+    `Se suman al historial los mensajes, fotos, audios y documentos de "${archivo.name}" (${mb} MB) que todavía no estén guardados. No se borra ni se pisa nada, y cargarlo dos veces no duplica.\n\nSirve la exportación de este sistema y la de "Exportar chat" del celular. Un grupo se reconoce por su nombre.`,
+    { titulo: '¿Cargar este respaldo?', aceptar: 'Cargar', icono: 'download' },
+  )
+  if (!seguir) return
+  const id = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('')
+  const parte = Math.max(1, Math.min(PARTE_MB, limiteSubidaMb() - 1)) * 1024 * 1024
+  try {
+    for (let desde = 0, n = 0; desde < archivo.size; desde += parte, n++) {
+      toast(`Subiendo el respaldo… ${Math.min(100, Math.round(((desde + parte) / archivo.size) * 100))}%`, 600000)
+      await api(`/api/importar/parte?id=${id}&n=${n}`, { method: 'POST', body: archivo.slice(desde, desde + parte), headers: { 'Content-Type': 'application/octet-stream' } })
+    }
+    await api('/api/importar/procesar', { method: 'POST', json: { id, nombre: archivo.name } })
+    toast('Respaldo subido. Cargando los mensajes…', 600000)
+  } catch (err) {
+    toast(`No se pudo cargar el respaldo: ${err.message}`, 8000)
+  }
+}
+
+function avanceRespaldo(d) {
+  if (d.estado === 'cargando') {
+    toast(d.total ? `Cargando el respaldo… chat ${d.paso} de ${d.total}${d.chat ? ` (${d.chat})` : ''}` : 'Cargando el respaldo…', 600000)
+    return
+  }
+  if (d.estado === 'error') {
+    toast(`No se pudo cargar el respaldo: ${d.error}`, 9000)
+    return
+  }
+  const r = d.resumen || {}
+  toast('Respaldo cargado.', 2500)
+  sincronizar()
+  const partes = [
+    `${fmtNum(r.mensajes)} mensajes y ${fmtNum(r.archivos)} archivos sumados en ${fmtNum(r.chats)} chats.`,
+    r.yaEstaban ? `${fmtNum(r.yaEstaban)} ya estaban guardados.` : '',
+    r.viejos ? `${fmtNum(r.viejos)} eran más viejos que lo que se guarda y no se cargaron.` : '',
+    r.archivosFaltantes ? `${fmtNum(r.archivosFaltantes)} archivos nombrados en el texto no venían en el respaldo.` : '',
+    r.salteados?.length ? `Chats que no se cargaron:\n${r.salteados.slice(0, 8).map((s) => `• ${s.archivo}: ${s.motivo}`).join('\n')}${r.salteados.length > 8 ? `\n… y ${r.salteados.length - 8} más` : ''}` : '',
+  ].filter(Boolean)
+  // Solo quien lo cargó ve el resumen (los demás, el aviso corto).
+  if (respaldoPropio) confirmar(partes.join('\n\n'), { titulo: 'Respaldo cargado', aceptar: 'Listo', cancelar: null, icono: 'circle-check' })
+  respaldoPropio = false
+}
+let respaldoPropio = false
+
 async function bajarArchivo(ruta, porDefecto) {
   const res = await fetch(ruta, { headers: CABECERA })
   if (!res.ok) {
@@ -1430,6 +1502,14 @@ window.addEventListener('message', async (e) => {
     if (e.data.vista === 'inbox' || e.data.vista === 'connect') setView(e.data.vista)
   } else if (tipo === 'nf-wa:actualizar' && (await delCrm(e))) {
     actualizarTodo()
+  } else if (tipo === 'nf-wa:exportar' && (await delCrm(e))) {
+    exportarTodo(e.data.archivos ? 'archivos' : 'texto')
+  } else if (tipo === 'nf-wa:importar' && (await delCrm(e))) {
+    // El archivo lo elige el CRM (desde adentro del panel el navegador no deja abrir el selector).
+    if (e.data.archivo instanceof Blob) {
+      respaldoPropio = true
+      cargarRespaldo(e.data.archivo)
+    }
   }
 })
 
@@ -3070,6 +3150,8 @@ function renderPill() {
     hayLinea: hayLinea(),
     puedeActualizar: puede.escribir(),
     actualizarHabilitado: puedeActualizar(),
+    // Descargar o cargar el historial: solo los que manejan la línea, con el servidor andando.
+    puedeHistorial: puede.linea() && !NUBE && !['servicio', 'nube'].includes(conexion),
     actualizando,
   })
 
@@ -3399,6 +3481,7 @@ function conectarEventos() {
   })
   es.addEventListener('estado', (e) => onEstado(JSON.parse(e.data)))
   // Respuestas rápidas cambiadas (acá, en otra pestaña o en el celular).
+  es.addEventListener('importacion', (e) => avanceRespaldo(JSON.parse(e.data)))
   es.addEventListener('respuestas', (e) => {
     respuestas = JSON.parse(e.data)
     if ($('#respuestasDlg').open && $('#respuestaForm').hidden) renderRespuestas()
@@ -3825,22 +3908,7 @@ document.addEventListener('click', async (e) => {
     case 'actualizar': actualizarTodo(); break
     case 'exportar-todo': {
       const como = await elegirExportacion('Exportar todos los chats')
-      if (!como) break
-      if (como === 'archivos') {
-        bajarDirecto('/api/exportar?archivos=1')
-        toast('Descargando los chats con sus archivos. Con muchas fotos y videos tarda: el navegador muestra el avance.', 9000)
-        break
-      }
-      t.disabled = true
-      toast('Preparando todos los chats… puede tardar un poco.', 120000)
-      try {
-        await bajarArchivo('/api/exportar', 'chats.zip')
-        toast('Chats exportados: un .txt por chat dentro del .zip.', 5000)
-      } catch (err) {
-        toast(err.message)
-      } finally {
-        t.disabled = false
-      }
+      if (como) await exportarTodo(como, t)
       break
     }
     case 'log-filtro':

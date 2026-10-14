@@ -4,6 +4,7 @@ import path from 'node:path'
 import express from 'express'
 import {
   CONSERVAR_EDICIONES,
+  DATA_DIR,
   CONSERVAR_ELIMINADOS,
   DETRAS_DE_PROXY,
   HOST,
@@ -28,6 +29,7 @@ import * as crm from './src/crm.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
+import { importarRespaldo } from './src/importar.js'
 import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm } from './src/nube.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
@@ -257,6 +259,61 @@ app.get('/api/chats/:id/exportar', accion('exportar_chat', async (req, res) => {
   }
   res.attachment(nombreArchivo(`Chat de WhatsApp con ${chat.nombre}`, 'txt')).type('text/plain; charset=utf-8').send(textoDeChat(chat, listarMensajes(jid)))
 }))
+/*
+ * Cargar un respaldo (.zip o .rar, ver src/importar.js). Se sube de a partes (el túnel no
+ * deja pasar archivos enormes en un solo pedido), se junta en DATA_DIR/importar y se
+ * procesa en segundo plano: el avance y el resultado llegan por el canal en vivo
+ * (evento "importacion"). Uno por vez, y solo los que manejan la línea.
+ */
+const DIR_IMPORTAR = path.join(DATA_DIR, 'importar')
+let importando = null
+// Lo que quedó de una carga cortada a la mitad (se cerró la pestaña, se apagó la PC).
+fs.rmSync(DIR_IMPORTAR, { recursive: true, force: true })
+const subidaDe = (id) => {
+  if (!/^[a-z0-9]{8,40}$/i.test(String(id || ''))) throw Object.assign(new Error('Carga inválida'), { status: 400 })
+  return path.join(DIR_IMPORTAR, `${id}.subida`)
+}
+app.post('/api/importar/parte', exigirLinea, binario, ruta((req) => {
+  if (importando) throw Object.assign(new Error('Ya se está cargando un respaldo. Esperá a que termine.'), { status: 409 })
+  const archivo = subidaDe(req.query.id)
+  if (!Buffer.isBuffer(req.body) || !req.body.length) throw Object.assign(new Error('La parte llegó vacía'), { status: 400 })
+  fs.mkdirSync(DIR_IMPORTAR, { recursive: true })
+  if (Number(req.query.n) === 0) fs.writeFileSync(archivo, req.body)
+  else if (fs.existsSync(archivo)) fs.appendFileSync(archivo, req.body)
+  else throw Object.assign(new Error('Se perdió la carga: volvé a empezar'), { status: 409 })
+  return { bytes: fs.statSync(archivo).size }
+}))
+app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req) => {
+  if (importando) throw Object.assign(new Error('Ya se está cargando un respaldo. Esperá a que termine.'), { status: 409 })
+  const id = String(req.body?.id || '')
+  const archivo = subidaDe(id)
+  if (!fs.existsSync(archivo)) throw Object.assign(new Error('No llegó el archivo: volvé a cargarlo'), { status: 404 })
+  const nombre = String(req.body?.nombre || '').slice(0, 200)
+  const quien = req.usuario?.nombre || null
+  importando = { nombre, desde: Date.now() }
+  const carpetaTmp = path.join(DIR_IMPORTAR, `${id}-descomprimido`)
+  emitir('importacion', { estado: 'cargando', nombre })
+  ;(async () => {
+    try {
+      const r = await importarRespaldo(archivo, {
+        nombreArchivo: nombre,
+        nombrePropio: wa.estadoConexion(null).yo?.nombre || '',
+        carpetaTmp,
+        avance: (a) => emitir('importacion', { estado: 'cargando', nombre, ...a }),
+      })
+      log('ok', 'Respaldo cargado', `${nombre} · ${r.mensajes} mensajes y ${r.archivos} archivos en ${r.chats} chats · ${r.yaEstaban} ya estaban${r.salteados.length ? ` · ${r.salteados.length} chats salteados` : ''}${quien ? ` (${quien})` : ''}`)
+      emitir('importacion', { estado: 'listo', nombre, resumen: r })
+    } catch (err) {
+      log('aviso', 'No se pudo cargar el respaldo', `${nombre} · ${err.message}`)
+      emitir('importacion', { estado: 'error', nombre, error: err.message })
+    } finally {
+      importando = null
+      fs.rmSync(archivo, { force: true })
+      fs.rmSync(carpetaTmp, { recursive: true, force: true })
+    }
+  })()
+  return { ok: true }
+}, (req) => ({ nombre: String(req.body?.nombre || '').slice(0, 200) })))
 app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
   const chats = listarChats()
   if (req.query.archivos === '1') {
