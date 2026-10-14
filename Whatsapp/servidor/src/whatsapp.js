@@ -21,6 +21,7 @@ import makeWASocket, {
   fetchLatestBaileysVersion,
   generateMessageIDV2,
   getContentType,
+  getMediaKeys,
   isJidBroadcast,
   isJidGroup,
   isJidMetaAI,
@@ -389,6 +390,8 @@ async function iniciarConexion() {
     // al bajar el historial): así nadie lo confunde con otro WhatsApp Web. Se toma al
     // vincular; un dispositivo ya vinculado conserva el nombre que tenía.
     browser: [NOMBRE_DISPOSITIVO, 'Chrome', '10.0.22631'],
+    // Audios y videos con la firma por bloques que necesita el iPhone (ver firmarBloques).
+    patchMessageBeforeSending: firmarBloques,
     // Si se marca "en línea", el celular deja de recibir notificaciones.
     markOnlineOnConnect: false,
     // Solo el historial reciente al vincular (lo que trae WhatsApp Web). Pedir el completo
@@ -2231,13 +2234,36 @@ function asegurarConectado() {
 }
 
 // Baileys sube las notas de voz por la ruta de los audios comunes (/mms/audio): el mensaje
-// dice "nota de voz" pero el archivo queda guardado como audio. El celular que graba lo sube
-// por /mms/ptt, y el iPhone, al recibir la nuestra, mostraba "Este audio ya no está
-// disponible". Se suben por la ruta de nota de voz; si WhatsApp no la acepta, por la de antes.
+// dice "nota de voz" pero el archivo queda guardado como audio. El celular las sube por
+// /mms/ptt. Se suben por la ruta de nota de voz; si WhatsApp no la acepta, por la de antes.
 MEDIA_PATH_MAP.ptt ??= '/mms/ptt'
 let pttSinRutaPropia = false
-async function subirNotaDeVoz(archivo, datos) {
-  if (!pttSinRutaPropia) {
+
+/*
+ * Firma por bloques de audios y videos (streamingSidecar). El iPhone reproduce audios y
+ * videos mientras los baja y verifica cada bloque con esta firma: sin ella mostraba "Este
+ * audio ya no está disponible". Baileys no la arma, así que la subida se guarda el archivo
+ * cifrado y, justo antes de mandar, se agrega al mensaje (firmarBloques). Es la misma que
+ * arma el celular: HMAC-SHA256 con la macKey sobre iv + archivo cifrado, de a 64 KB (más 16
+ * de solapamiento), 10 bytes por bloque.
+ */
+const BLOQUE = 64 * 1024
+export function sidecarDe(cifrado, iv, macKey) {
+  const datos = Buffer.concat([iv, cifrado])
+  const firmas = []
+  for (let i = 0; i < datos.length; i += BLOQUE) {
+    firmas.push(crypto.createHmac('sha256', macKey).update(datos.subarray(i, i + BLOQUE + 16)).digest().subarray(0, 10))
+  }
+  return Buffer.concat(firmas)
+}
+
+const cifradosRecientes = new Map() // fileEncSha256 (base64) → archivo cifrado
+async function subirMedia(archivo, datos, { ptt = false } = {}) {
+  if (datos.mediaType === 'audio' || datos.mediaType === 'video') {
+    cifradosRecientes.set(datos.fileEncSha256B64, await fs.promises.readFile(archivo))
+    while (cifradosRecientes.size > 20) cifradosRecientes.delete(cifradosRecientes.keys().next().value)
+  }
+  if (ptt && !pttSinRutaPropia) {
     try {
       return await sock.waUploadToServer(archivo, { ...datos, mediaType: 'ptt' })
     } catch (err) {
@@ -2246,6 +2272,25 @@ async function subirNotaDeVoz(archivo, datos) {
     }
   }
   return sock.waUploadToServer(archivo, datos)
+}
+
+/** Antes de mandar: agrega la firma por bloques a los audios y videos subidos acá. */
+async function firmarBloques(mensaje) {
+  try {
+    const contenido = normalizeMessageContent(mensaje)
+    for (const [tipo, clave] of [['audioMessage', 'audio'], ['videoMessage', 'video'], ['ptvMessage', 'video']]) {
+      const m = contenido?.[tipo]
+      if (!m || m.streamingSidecar?.length || !m.mediaKey || !m.fileEncSha256) continue
+      const cifrado = cifradosRecientes.get(Buffer.from(m.fileEncSha256).toString('base64'))
+      if (!cifrado) continue
+      const { iv, macKey } = await getMediaKeys(m.mediaKey, clave)
+      // Se cambia el mismo mensaje: así también lo llevan los reenvíos que pida WhatsApp.
+      m.streamingSidecar = sidecarDe(cifrado, iv, macKey)
+    }
+  } catch (err) {
+    log('aviso', 'No se pudo firmar un audio o video para el iPhone', err.message)
+  }
+  return mensaje
 }
 
 /** Manda un mensaje. `firmante` ({ id, nombre }): quién lo escribió, si no es el usuario del pedido. */
@@ -2264,11 +2309,13 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
     const opciones = { messageId, quoted }
-    if (contenido?.audio && contenido.ptt) opciones.upload = subirNotaDeVoz
+    if (contenido?.audio || contenido?.video) opciones.upload = (archivo, datos) => subirMedia(archivo, datos, { ptt: !!contenido.ptt })
     const enviado = await sock.sendMessage(chatId, contenido, opciones)
-    if (opciones.upload) {
-      const ruta = enviado?.message?.audioMessage?.directPath || ''
-      log('info', 'Nota de voz subida', /\/t62\.7117-/.test(ruta) ? 'como nota de voz' : `como audio común (${ruta.split('/')[2] || 'sin ruta'})`)
+    if (contenido?.audio && contenido.ptt) {
+      const a = enviado?.message?.audioMessage
+      const ruta = a?.directPath || ''
+      const como = /\/t62\.7117-/.test(ruta) ? 'como nota de voz' : `como audio común (${ruta.split('/')[2] || 'sin ruta'})`
+      log('info', 'Nota de voz subida', `${como} · ${a?.streamingSidecar?.length ? 'con firma para iPhone' : 'SIN firma para iPhone'}`)
     }
     if (enviado?.message) {
       enviados.set(enviado.key.id, enviado.message)
