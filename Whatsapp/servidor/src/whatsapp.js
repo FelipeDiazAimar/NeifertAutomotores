@@ -31,6 +31,7 @@ import makeWASocket, {
   jidNormalizedUser,
   MEDIA_PATH_MAP,
   normalizeMessageContent,
+  proto,
   toNumber,
   useMultiFileAuthState,
 } from 'baileys'
@@ -475,6 +476,12 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
     if (s.user?.lid) registrarLid(jidNormalizedUser(s.user.lid), id)
     setConexion('conectado')
     log('ok', 'WhatsApp conectado', yo.telefono || id)
+    try {
+      const n = revisarEfimerosGuardados()
+      if (n) log('info', 'Mensajes temporales de los chats', `${n} chats con el ajuste tomado de los mensajes guardados`)
+    } catch (err) {
+      log('aviso', 'No se pudo revisar el ajuste de mensajes temporales', err.message)
+    }
     for (const clave of ['desvinculada', '440', '403', 'sesion-danada']) resolver(clave)
     // Recién vinculada: el celular acaba de escanear, así que está activo.
     if (!meta().ultimaSenalCelular) senalDelCelular()
@@ -1015,6 +1022,65 @@ export async function ponerAlDiaArchivos() {
   return n
 }
 
+/* ---------------- Mensajes temporales del chat ---------------- */
+
+/*
+ * El celular manda cada mensaje con el ajuste de "mensajes temporales" del chat (cuándo se
+ * cambió por última vez y si están activados), aunque estén apagados. Si un mensaje llega
+ * sin ese dato a un chat donde alguna vez se cambió, el iPhone lo trata como temporal: una
+ * nota de voz se escuchaba al llegar y después decía "Este audio ya no está disponible".
+ * Se toma el ajuste de cada mensaje que llega (del contacto o del celular de la línea) y
+ * se manda igual en lo que sale del panel.
+ */
+const INICIADOR = proto.DisappearingMode.Initiator
+export function anotarEfimero(chatId, ajuste) {
+  const marca = toNumber(ajuste.marca) || 0
+  if (ajuste.expiracion == null && !marca) return
+  const previo = buscarChat(chatId)?.efimero
+  // Un mensaje viejo (del historial) no pisa un ajuste más nuevo.
+  if (previo && (previo.marca || 0) > marca) return
+  const iniciador = typeof ajuste.iniciador === 'string' ? (INICIADOR[ajuste.iniciador] ?? 0) : (ajuste.iniciador ?? previo?.iniciador ?? 0)
+  const nuevo = { expiracion: Number(ajuste.expiracion ?? previo?.expiracion ?? 0), marca: marca || previo?.marca || 0, iniciador }
+  if (previo && previo.expiracion === nuevo.expiracion && previo.marca === nuevo.marca && previo.iniciador === nuevo.iniciador) return
+  upsertChat(chatId, { efimero: nuevo })
+}
+
+function efimeroDelMensaje(chatId, content) {
+  const ctx = content?.[getContentType(content)]?.contextInfo
+  if (!ctx) return
+  anotarEfimero(chatId, { expiracion: ctx.expiration, marca: ctx.ephemeralSettingTimestamp, iniciador: ctx.disappearingMode?.initiator })
+}
+
+/**
+ * Una vez: el ajuste de cada chat sale de los mensajes ya guardados (los de archivos traen
+ * el mensaje completo). Así no hay que esperar a que llegue uno nuevo a cada chat.
+ */
+const REVISION_EFIMEROS = 1
+export function revisarEfimerosGuardados() {
+  if (meta().revisionEfimeros === REVISION_EFIMEROS) return 0
+  const antes = new Map()
+  recorrerMensajes((chatId, m) => {
+    if (!m.raw || idsDelPanel.has(m.id) || m.enviadoPor) return
+    try {
+      const raw = JSON.parse(m.raw, BufferJSON.reviver)
+      const content = normalizeMessageContent(raw.message)
+      const ctx = content?.[getContentType(content)]?.contextInfo
+      if (!ctx || (ctx.expiration == null && ctx.ephemeralSettingTimestamp == null)) return
+      antes.set(chatId, (antes.get(chatId) || 0) + 1)
+      efimeroDelMensaje(chatId, content)
+    } catch {}
+  })
+  setMeta({ revisionEfimeros: REVISION_EFIMEROS })
+  return antes.size
+}
+
+/** Lo que hay que agregar a un mensaje del panel para que lleve el ajuste del chat. */
+export function contextoEfimero(chatId) {
+  const e = buscarChat(chatId)?.efimero
+  if (!e) return null
+  return { expiration: e.expiracion || 0, ...(e.marca ? { ephemeralSettingTimestamp: e.marca } : {}), disappearingMode: { initiator: e.iniciador || 0 } }
+}
+
 /* ---------------- Eventos de mensajes ---------------- */
 
 async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
@@ -1039,6 +1105,8 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   const deMi = !!key.fromMe
   const grupo = esGrupo(chatId)
   const ts = toNumber(m.messageTimestamp) || ahora()
+  // Los del panel no cuentan: llevan lo que se les puso acá.
+  if (!idsDelPanel.has(key.id)) efimeroDelMensaje(chatId, content)
   // Más viejo que la ventana de días (llega con el historial): no se guarda.
   if (ts < corteVentana()) return
   // En un grupo el pushName es del autor: no puede pasar a ser el nombre del chat.
@@ -1500,6 +1568,10 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
     // leído. Los números positivos son la cuenta de mensajes nuevos, que se lleva acá.
     const cambiaLectura = ch.unreadCount === 0 || ch.unreadCount === -1
     const grupoNuevo = crearGrupos && isJidGroup(ch.id) && !existeChat(ch.id)
+    if ('ephemeralExpiration' in ch || 'ephemeralSettingTimestamp' in ch) {
+      const id = jidNormalizedUser(ch.id)
+      if (existeChat(id)) anotarEfimero(id, { expiracion: ch.ephemeralExpiration ?? 0, marca: ch.ephemeralSettingTimestamp })
+    }
     if (!cambiaArchivo && !cambiaFijado && !cambiaSilencio && !cambiaNombre && !cambiaLectura && !grupoNuevo) continue
     if (ch.pnJid && ch.lidJid) registrarLid(jidNormalizedUser(ch.lidJid), jidNormalizedUser(ch.pnJid))
     if (ignorar(ch.id)) continue
@@ -2308,6 +2380,9 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
   if (idsDelPanel.size > 1000) idsDelPanel.delete(idsDelPanel.values().next().value)
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
+    // Con el ajuste de mensajes temporales del chat, como los manda el celular.
+    const efimero = contextoEfimero(chatId)
+    if (efimero && !contenido.forward && !contenido.delete && !contenido.react) contenido = { ...contenido, contextInfo: { ...(contenido.contextInfo || {}), ...efimero } }
     const opciones = { messageId, quoted }
     if (contenido?.audio || contenido?.video) opciones.upload = (archivo, datos) => subirMedia(archivo, datos, { ptt: !!contenido.ptt })
     const enviado = await sock.sendMessage(chatId, contenido, opciones)
