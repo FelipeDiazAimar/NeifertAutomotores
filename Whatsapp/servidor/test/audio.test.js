@@ -17,7 +17,7 @@ function paginas(ogg) {
 }
 
 describe('nota de voz con el mismo formato que la del celular (el iPhone es exigente)', () => {
-  it('etiqueta "WhatsApp" sin comentarios, paquetes de varios tramos y un archivo que se puede leer', async () => {
+  it('etiqueta "WhatsApp" sin comentarios, modo voz, paquetes de varios tramos y un archivo que se puede leer', async () => {
     const fuente = spawnSync(ffmpegPath, ['-f', 'lavfi', '-i', 'sine=frequency=220:duration=2', '-c:a', 'libopus', '-f', 'webm', 'pipe:1'], { maxBuffer: 1e8 }).stdout
     const ogg = await aNotaDeVoz(fuente)
     const [cabeza, etiqueta, audio] = paginas(ogg)
@@ -26,7 +26,8 @@ describe('nota de voz con el mismo formato que la del celular (el iPhone es exig
     expect(etiqueta.datos.toString('latin1', 0, 8)).toBe('OpusTags')
     expect(etiqueta.datos.subarray(12, 20).toString()).toBe('WhatsApp')
     expect(etiqueta.datos).toHaveLength(24)
-    expect(audio.datos[0] & 3).toBe(3) // paquete de varios tramos de 20 ms, como el del celular
+    expect(audio.datos[0] >> 3).toBeLessThan(12) // modo voz (SILK), como el del celular, no música (CELT)
+    expect(audio.datos[0] & 3).toBeGreaterThan(0) // paquetes de varios tramos (120 ms)
     // ffmpeg verifica el CRC de cada página: si la etiqueta quedó mal armada, falla.
     const r = spawnSync(ffmpegPath, ['-v', 'error', '-i', 'pipe:0', '-f', 'null', '-'], { input: ogg })
     expect(r.status).toBe(0)

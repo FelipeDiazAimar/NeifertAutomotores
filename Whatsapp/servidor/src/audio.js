@@ -74,14 +74,14 @@ export function etiquetaDeWhatsapp(ogg) {
 
 export async function aNotaDeVoz(entrada) {
   try {
-    // Igual que la nota que graba el celular: paquetes de 60 ms (varios tramos de 20 ms en
-    // cada uno), sin los datos que agrega ffmpeg (nombre del programa, encoder=…). El
-    // iPhone es exigente con el archivo: con el formato por defecto de ffmpeg no la
-    // reproducía ("Este audio ya no está disponible") aunque todo lo demás estaba bien.
+    // Igual que la nota que graba el celular: modo voz de Opus (SILK, banda ancha de 8 kHz),
+    // paquetes de 120 ms, unos 16 kbps y sin los datos que agrega ffmpeg. El iPhone es
+    // exigente: con el modo música (CELT) que elegía ffmpeg la reproducía al llegar, pero
+    // después mostraba "Este audio ya no está disponible".
     const ogg = await ffmpeg(
       [
         '-i', 'pipe:0', '-vn', '-map_metadata', '-1', '-ac', '1', '-ar', '48000',
-        '-c:a', 'libopus', '-b:a', '24k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '60',
+        '-c:a', 'libopus', '-b:a', '16k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '120', '-cutoff', '8000',
         '-fflags', '+bitexact', '-flags:a', '+bitexact', '-f', 'ogg', 'pipe:1',
       ],
       entrada,
