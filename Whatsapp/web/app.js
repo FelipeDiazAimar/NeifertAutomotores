@@ -1715,13 +1715,13 @@ function echadoDelChat(persona) {
 }
 
 // Mientras alguien usa el panel, cada minuto se avisa que sigue en el chat; si no avisa
-// (se fue y lo dejó abierto), el servidor lo libera a los 3 minutos. Sin tocar nada en 10
-// minutos se deja de avisar. Al volver, se avisa enseguida.
+// (se fue y lo dejó abierto), el servidor lo libera a los 3 minutos. Sin tocar nada en 5
+// minutos, o fuera de la Bandeja (Conexión), se deja de avisar. Al volver, se avisa enseguida.
 let ultimaActividad = Date.now()
-const QUIETO_MS = 10 * 60_000
+const QUIETO_MS = 5 * 60_000
 async function seguirEnChat() {
   const id = state.activo
-  if (!id || !sesion.login || document.visibilityState !== 'visible' || Date.now() - ultimaActividad > QUIETO_MS) return
+  if (!id || !sesion.login || state.view !== 'inbox' || document.visibilityState !== 'visible' || Date.now() - ultimaActividad > QUIETO_MS) return
   try {
     await api('/api/viendo', { method: 'POST', json: { pestana: PESTANA, chatId: id } })
   } catch (err) {
@@ -1736,6 +1736,15 @@ for (const evento of ['pointerdown', 'keydown', 'wheel', 'touchstart']) {
   }, { passive: true, capture: true })
 }
 document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && seguirEnChat())
+window.addEventListener('pagehide', () => {
+  if (!state.activo || !sesion.login || NUBE) return
+  fetch('/api/viendo', {
+    method: 'POST',
+    keepalive: true,
+    headers: { ...CABECERA, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ pestana: PESTANA, chatId: null }),
+  }).catch(() => {})
+})
 setInterval(seguirEnChat, 60_000)
 
 /** Quién firmó un mensaje: el autor en un grupo, o el empleado que lo mandó. */
@@ -3453,7 +3462,14 @@ setTimeout(terminarArranque, 15000)
 function setView(view) {
   if (view === 'inbox' && !hayLinea()) view = 'connect'
   if (arrancando) view = 'cargando'
+  const antes = state.view
   state.view = view
+  // El candado del chat es de quien lo está mirando: fuera de la Bandeja se suelta.
+  if (state.activo && antes === 'inbox' && view !== 'inbox') avisarViendo(null)
+  if (state.activo && antes !== 'inbox' && view === 'inbox') {
+    const id = state.activo
+    entrarAlChat(id).then((ok) => !ok && state.activo === id && cerrarChat())
+  }
   $('#viewCargando').hidden = view !== 'cargando'
   $('#viewInbox').hidden = view !== 'inbox'
   $('#viewConnect').hidden = view !== 'connect'
