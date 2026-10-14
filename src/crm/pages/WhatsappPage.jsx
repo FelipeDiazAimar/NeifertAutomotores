@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Archive, Download, Eye, EyeOff, FileText, Pencil, RefreshCw, Upload, Zap } from 'lucide-react'
+import { Archive, Download, Eye, EyeOff, FileText, RefreshCw, Upload } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
@@ -161,74 +161,6 @@ function ControlHistorial({ enviar }) {
               <span className="block text-sm font-semibold text-ink">Cargar un respaldo (.zip o .rar)</span>
               <span className="block text-[12.5px] leading-snug text-ink-2">Suma los mensajes y archivos que falten. Sirve el de acá o el "Exportar chat" del celular.</span>
             </span>
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-/**
- * "Respuestas rápidas", junto a Historial: son las mismas para todos (las del WhatsApp
- * Business del celular), así que se manejan acá y no desde cada chat. Se activa o
- * desactiva el botón ⚡ de los chats para todos, y se abre la lista para editarlas. Lo
- * hace el panel (que tiene la sesión del servidor): acá solo se elige.
- */
-function ControlRespuestas({ activadas, enviar }) {
-  const [abierto, setAbierto] = useState(false)
-
-  useEffect(() => {
-    if (!abierto) return undefined
-    const esc = (e) => e.key === 'Escape' && setAbierto(false)
-    document.addEventListener('keydown', esc)
-    return () => document.removeEventListener('keydown', esc)
-  }, [abierto])
-
-  return (
-    <div className="relative">
-      <button
-        type="button"
-        onClick={() => setAbierto((v) => !v)}
-        aria-expanded={abierto}
-        aria-haspopup="dialog"
-        className="glass flex h-9 items-center gap-2 rounded-full px-3.5 text-sm font-semibold text-ink transition-colors hover:text-[#1a9e52] dark:hover:text-whatsapp"
-        title="Respuestas rápidas de todos"
-      >
-        <Zap size={16} className={activadas ? '' : 'opacity-40'} />
-        Respuestas rápidas
-      </button>
-
-      {abierto && <div className="fixed inset-0 z-40" aria-hidden="true" onPointerDown={() => setAbierto(false)} />}
-      {abierto && (
-        <div role="dialog" aria-label="Respuestas rápidas" className="absolute right-0 top-full z-50 mt-2 w-[21rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-surface-solid p-4 shadow-2xl">
-          <p className="font-display text-base font-bold text-ink">Respuestas rápidas</p>
-          <p className="mt-1 text-[13px] leading-snug text-ink-2">
-            Las mismas para todos: las del WhatsApp Business del celular. Lo que cambies acá también cambia allá.
-          </p>
-
-          <label className="mt-4 flex cursor-pointer items-center justify-between gap-4 rounded-xl border border-line px-3.5 py-3">
-            <span className="text-sm font-semibold text-ink">Mostrar el botón en los chats</span>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={activadas}
-              onClick={() => enviar({ tipo: 'nf-wa:respuestas-activar', activar: !activadas })}
-              className={cn('relative h-6 w-11 shrink-0 rounded-full transition-colors', activadas ? 'bg-[#1a9e52]' : 'bg-ink/20')}
-            >
-              <span className={cn('absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform', activadas ? 'translate-x-[22px]' : 'translate-x-0.5')} />
-            </button>
-          </label>
-
-          <button
-            type="button"
-            onClick={() => {
-              setAbierto(false)
-              enviar({ tipo: 'nf-wa:respuestas' })
-            }}
-            className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl border border-line px-3.5 py-2.5 text-sm font-semibold text-ink transition-colors hover:bg-ink/5"
-          >
-            <Pencil size={15} />
-            Administrar respuestas
           </button>
         </div>
       )}
@@ -537,7 +469,6 @@ export default function WhatsappPage() {
               })}
             </div>
 
-            {!enLectura && estado.puedeHistorial && <ControlRespuestas activadas={estado.respuestasRapidas !== false} enviar={enviar} />}
             {!enLectura && estado.puedeHistorial && <ControlHistorial enviar={enviar} />}
 
             <button

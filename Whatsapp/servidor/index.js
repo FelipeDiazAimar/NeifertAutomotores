@@ -344,7 +344,8 @@ app.post('/api/chats/:id/catalogo', exigirEscritura, accion('enviar_catalogo', (
 // Catálogo de WhatsApp Business y respuestas rápidas: los mismos del celular.
 app.get('/api/catalogo', ruta((req) => wa.catalogo({ fresco: req.query.fresco === '1' })))
 app.get('/api/respuestas', ruta(() => wa.listarRespuestasRapidas()))
-// Las respuestas rápidas son las mismas para todos (y las del celular): las cambia un administrador.
+// Las respuestas rápidas son las mismas para todos (y las del celular): las cambia un administrador
+// ("Administrar respuestas", en el botón de respuestas rápidas del chat).
 app.post('/api/respuestas/traer', exigirLinea, accion('traer_respuestas', () => wa.cargarRespuestasRapidas()))
 app.post('/api/respuestas', exigirLinea, accion('guardar_respuesta', (req) => wa.guardarRespuestaRapida(req.body || {}), (req, r) => ({ atajo: r.atajo, nueva: !req.body?.id })))
 app.delete('/api/respuestas/:rid', exigirLinea, accion('borrar_respuesta', (req) => wa.borrarRespuestaRapida(req.params.rid), (req) => ({ id: req.params.rid })))
