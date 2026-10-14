@@ -86,3 +86,11 @@ describe('almacén de mensajes (modo local)', () => {
     expect(a.claveMedia(J, 'F1.jpg')).toBe('media/Juan Pérez Taller (+5493406000005)/F1.jpg')
   })
 })
+
+describe('LID (identificador interno de WhatsApp)', () => {
+  it('del número se obtiene el LID conocido, para mandar como el celular', () => {
+    a.registrarLid('161254547136552@lid', '5493564690844@s.whatsapp.net')
+    expect(a.lidDePn('5493564690844@s.whatsapp.net')).toBe('161254547136552@lid')
+    expect(a.lidDePn('5493564000000@s.whatsapp.net')).toBeNull()
+  })
+})

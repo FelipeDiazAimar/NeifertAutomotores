@@ -70,6 +70,7 @@ import {
   listarMensajes,
   marcarLeido,
   nombreDe,
+  lidDePn,
   pnDeLid,
   registrarLid,
   claveMedia,
@@ -1793,7 +1794,7 @@ export async function reenviarMensajes(origen, ids, destinos) {
         ? JSON.parse(m.raw, BufferJSON.reviver)
         : { key: claveMensaje(origen, m), message: { conversation: m.texto || '' } }
       try {
-        const r = await sock.sendMessage(destino, { forward: wa })
+        const r = await sock.sendMessage(await destinoDe(destino), { forward: wa })
         if (r && !buscarMensaje(destino, r.key.id)) await procesarEntrante(r, 'append')
         if (r) firmarEnviado(destino, r.key.id)
         enviados++
@@ -2293,6 +2294,27 @@ async function firmarBloques(mensaje) {
   return mensaje
 }
 
+/*
+ * A quién se le manda. WhatsApp está pasando los chats a un identificador interno (LID) en
+ * vez del número: con un contacto que ya está en LID, el celular de la línea y el del
+ * contacto se mandan todo a ese id. Los mensajes del panel iban al número, y en el iPhone
+ * (el del contacto y el de la propia línea) las notas de voz quedaban "no disponibles".
+ * Se manda como el celular: al LID si se conoce; si no, al número. En el panel el chat
+ * sigue siendo el del número (los mensajes que vuelven con el LID se guardan ahí).
+ */
+async function destinoDe(chatId) {
+  if (!isPnUser(chatId)) return chatId
+  let lid = lidDePn(chatId)
+  if (!lid) {
+    try {
+      lid = await conTimeout(Promise.resolve(sock?.signalRepository?.lidMapping?.getLIDForPN?.(chatId)), 3000, 'Sin respuesta')
+    } catch {
+      lid = null
+    }
+  }
+  return lid && isLidUser(lid) ? jidNormalizedUser(lid) : chatId
+}
+
 /** Manda un mensaje. `firmante` ({ id, nombre }): quién lo escribió, si no es el usuario del pedido. */
 async function enviar(chatId, contenido, buffer, quoted, firmante) {
   asegurarConectado()
@@ -2308,9 +2330,12 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
   if (idsDelPanel.size > 1000) idsDelPanel.delete(idsDelPanel.values().next().value)
   if (buffer) mediaPropia.set(messageId, buffer)
   try {
+    const destino = await destinoDe(chatId)
+    // La respuesta a un mensaje va al mismo chat: si no, WhatsApp la toma como cita de otro.
+    if (quoted && destino !== chatId && quoted.key?.remoteJid === chatId) quoted = { ...quoted, key: { ...quoted.key, remoteJid: destino } }
     const opciones = { messageId, quoted }
     if (contenido?.audio || contenido?.video) opciones.upload = (archivo, datos) => subirMedia(archivo, datos, { ptt: !!contenido.ptt })
-    const enviado = await sock.sendMessage(chatId, contenido, opciones)
+    const enviado = await sock.sendMessage(destino, contenido, opciones)
     if (contenido?.audio && contenido.ptt) {
       const a = enviado?.message?.audioMessage
       const ruta = a?.directPath || ''

@@ -259,6 +259,12 @@ export function contarMarcas() {
  * teléfono. Cuando se conoce el teléfono de un LID, el chat guardado con el LID
  * se mueve al teléfono para que no queden dos conversaciones de la misma persona.
  */
+/** El LID (identificador interno de WhatsApp) que corresponde a un número, si se conoce. */
+export function lidDePn(pn) {
+  for (const [lid, p] of Object.entries(estado.lids)) if (p === pn) return lid
+  return null
+}
+
 export function registrarLid(lid, pn) {
   if (!lid || !pn || estado.lids[lid] === pn) return
   estado.lids[lid] = pn
