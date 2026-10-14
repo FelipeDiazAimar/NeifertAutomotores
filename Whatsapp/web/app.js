@@ -1502,6 +1502,18 @@ window.addEventListener('message', async (e) => {
     if (e.data.vista === 'inbox' || e.data.vista === 'connect') setView(e.data.vista)
   } else if (tipo === 'nf-wa:actualizar' && (await delCrm(e))) {
     actualizarTodo()
+  } else if (tipo === 'nf-wa:respuestas' && (await delCrm(e))) {
+    if (puede.linea()) abrirRespuestas()
+  } else if (tipo === 'nf-wa:respuestas-activar' && (await delCrm(e))) {
+    if (!puede.linea() || typeof e.data.activar !== 'boolean') return
+    try {
+      state.config = await api('/api/config', { method: 'POST', json: { respuestasRapidas: e.data.activar } })
+      renderPrefs()
+      alCambiarConfig()
+      toast(e.data.activar ? 'Respuestas rápidas activadas en los chats.' : 'Respuestas rápidas desactivadas en los chats.')
+    } catch (err) {
+      toast(err.message)
+    }
   } else if (tipo === 'nf-wa:exportar' && (await delCrm(e))) {
     exportarTodo(e.data.archivos ? 'archivos' : 'texto')
   } else if (tipo === 'nf-wa:importar' && (await delCrm(e))) {
@@ -2616,7 +2628,7 @@ function renderComposer() {
   el.innerHTML = `
     <button class="icon-btn" id="emojiBtn" data-act="emojis" aria-label="Emojis" title="Emojis" aria-haspopup="dialog" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('smile')}</button>
     <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar" title="Adjuntar" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('clip')}</button>
-    <button class="icon-btn" data-act="btn-rapidas" aria-label="Respuestas rápidas" title="Respuestas rápidas" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('bolt')}</button>
+    ${state.config?.respuestasRapidas === false ? '' : `<button class="icon-btn" data-act="btn-rapidas" aria-label="Respuestas rápidas" title="Respuestas rápidas" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('bolt')}</button>`}
     <button class="icon-btn" data-act="btn-catalogo" aria-label="Mandar el catálogo" title="Mandar el catálogo" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('store')}</button>
     <div class="field"><textarea id="msgInput" rows="1" placeholder="${sinConexion ? 'Sin conexión: lo que mandes sale cuando vuelva' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
     <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>
@@ -2926,9 +2938,9 @@ async function abrirMenuRapidas(boton) {
     <div class="menu-lista">${
       lista.length
         ? lista.map((r) => `<button class="item rapida-item" role="menuitem" data-rapida="${esc(r.id)}"><b>/${esc(r.atajo)}</b><span>${esc(r.texto)}</span></button>`).join('')
-        : '<p class="menu-vacio">No hay respuestas rápidas. Se crean en el celular (WhatsApp Business) o con "Administrar".</p>'
+        : '<p class="menu-vacio">No hay respuestas rápidas. Se crean en el celular (WhatsApp Business) o desde "Respuestas rápidas" arriba.</p>'
     }</div>
-    <button class="item menu-pie" role="menuitem" data-act="adj-respuestas">${ic('edit')}Administrar respuestas</button>`
+    ${puede.linea() ? `<button class="item menu-pie" role="menuitem" data-act="adj-respuestas">${ic('edit')}Administrar respuestas</button>` : ''}`
   mostrarMenuChat(menu, boton)
 }
 
@@ -3192,6 +3204,7 @@ function renderPill() {
     actualizarHabilitado: puedeActualizar(),
     // Descargar o cargar el historial: solo los que manejan la línea, con el servidor andando.
     puedeHistorial: puede.linea() && !NUBE && !['servicio', 'nube'].includes(conexion),
+    respuestasRapidas: state.config?.respuestasRapidas !== false,
     actualizando,
   })
 
@@ -3303,6 +3316,12 @@ function renderLog() {
     </div>`)
   }
   $('#logList').innerHTML = filas.join('')
+}
+
+/** Lo que depende de una preferencia compartida: el botón de respuestas rápidas y el encabezado del CRM. */
+function alCambiarConfig() {
+  if (state.activo && !state.grabacion) renderComposer()
+  renderPill()
 }
 
 function renderPrefs() {
@@ -3573,6 +3592,7 @@ function conectarEventos() {
   es.addEventListener('config', (e) => {
     state.config = JSON.parse(e.data)
     renderPrefs()
+    alCambiarConfig()
   })
 }
 
@@ -3733,6 +3753,7 @@ document.addEventListener('click', async (e) => {
     try {
       state.config = await api('/api/config', { method: 'POST', json: { [k]: !state.config[k] } })
       renderPrefs()
+      alCambiarConfig()
     } catch (err) {
       toast(err.message)
     }

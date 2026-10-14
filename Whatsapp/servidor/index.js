@@ -344,9 +344,10 @@ app.post('/api/chats/:id/catalogo', exigirEscritura, accion('enviar_catalogo', (
 // Catálogo de WhatsApp Business y respuestas rápidas: los mismos del celular.
 app.get('/api/catalogo', ruta((req) => wa.catalogo({ fresco: req.query.fresco === '1' })))
 app.get('/api/respuestas', ruta(() => wa.listarRespuestasRapidas()))
-app.post('/api/respuestas/traer', exigirEscritura, accion('traer_respuestas', () => wa.cargarRespuestasRapidas()))
-app.post('/api/respuestas', exigirEscritura, accion('guardar_respuesta', (req) => wa.guardarRespuestaRapida(req.body || {}), (req, r) => ({ atajo: r.atajo, nueva: !req.body?.id })))
-app.delete('/api/respuestas/:rid', exigirEscritura, accion('borrar_respuesta', (req) => wa.borrarRespuestaRapida(req.params.rid), (req) => ({ id: req.params.rid })))
+// Las respuestas rápidas son las mismas para todos (y las del celular): las cambia un administrador.
+app.post('/api/respuestas/traer', exigirLinea, accion('traer_respuestas', () => wa.cargarRespuestasRapidas()))
+app.post('/api/respuestas', exigirLinea, accion('guardar_respuesta', (req) => wa.guardarRespuestaRapida(req.body || {}), (req, r) => ({ atajo: r.atajo, nueva: !req.body?.id })))
+app.delete('/api/respuestas/:rid', exigirLinea, accion('borrar_respuesta', (req) => wa.borrarRespuestaRapida(req.params.rid), (req) => ({ id: req.params.rid })))
 app.post('/api/chats/:id/salida/:msgId/reintentar', exigirEscritura, accion('reintentar_envio', (req) => wa.reintentarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 app.post('/api/chats/:id/salida/:msgId/descartar', exigirEscritura, accion('descartar_envio', (req) => wa.descartarSalida(chatId(req), req.params.msgId), (req) => ({ mensaje: req.params.msgId })))
 // Integrantes de un grupo, para el "@" del cuadro de texto.

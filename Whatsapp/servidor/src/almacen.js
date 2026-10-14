@@ -72,7 +72,8 @@ mudarCarpetasViejas()
 
 for (const dir of [DATA_DIR, LINEA_DIR, MSG_DIR]) fs.mkdirSync(dir, { recursive: true })
 
-const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false }
+// respuestasRapidas: el botón de respuestas rápidas en los chats (lo activa un administrador para todos).
+const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false, respuestasRapidas: true }
 
 const estado = EN_SUPABASE ? {} : leerJson(ESTADO_FILE, {})
 function completarEstado() {

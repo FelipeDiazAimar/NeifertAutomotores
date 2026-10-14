@@ -227,6 +227,31 @@ describe('WhatsappPage', () => {
     expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:actualizar' }, 'http://localhost:3100')
   })
 
+  it('un administrador activa las respuestas rápidas para todos y abre la lista desde el encabezado', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({}))
+    montar()
+    const iframe = await screen.findByTitle('WhatsApp de la concesionaria')
+    const panel = iframe.contentWindow
+    const postMessage = vi.spyOn(panel, 'postMessage')
+    const delPanel = (data) =>
+      act(() => window.dispatchEvent(new MessageEvent('message', { origin: 'http://localhost:3100', source: panel, data: { origen: 'nf-wa', ...data } })))
+    const estado = { tipo: 'nf-wa:estado', conexion: 'conectado', clase: '', texto: 'Conectada', vista: 'inbox', hayLinea: true, puedeActualizar: true, actualizarHabilitado: true }
+
+    await delPanel({ tipo: 'nf-wa:listo' })
+    // Un vendedor (sin "puedeHistorial") no ve el control.
+    await delPanel({ ...estado, puedeHistorial: false, respuestasRapidas: true })
+    expect(screen.queryByRole('button', { name: /Respuestas rápidas/ })).toBeNull()
+
+    await delPanel({ ...estado, puedeHistorial: true, respuestasRapidas: false })
+    await userEvent.click(screen.getByRole('button', { name: /Respuestas rápidas/ }))
+    const interruptor = screen.getByRole('switch', { name: 'Mostrar el botón en los chats' })
+    expect(interruptor).toHaveAttribute('aria-checked', 'false')
+    await userEvent.click(interruptor)
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:respuestas-activar', activar: true }, 'http://localhost:3100')
+    await userEvent.click(screen.getByRole('button', { name: 'Administrar respuestas' }))
+    expect(postMessage).toHaveBeenCalledWith({ tipo: 'nf-wa:respuestas' }, 'http://localhost:3100')
+  })
+
   it('si el panel nunca termina de cargar, vuelve a probar en vez de quedar cargando', async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const fetch = servidorQue(true)
