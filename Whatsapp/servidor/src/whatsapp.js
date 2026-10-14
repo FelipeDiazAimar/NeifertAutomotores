@@ -53,7 +53,7 @@ import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
-import { aNotaDeVoz, formaDeOnda, miniatura } from './audio.js'
+import { aNotaDeVoz, duracionOgg, formaDeOnda, miniatura } from './audio.js'
 import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
 import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos, medirR2 } from './archivos.js'
 import * as cuota from './cuota.js'
@@ -2809,7 +2809,12 @@ export function enviarArchivo(chatId, buffer, { mime, nombre, caption }) {
 export async function enviarNotaDeVoz(chatId, buffer, segundos) {
   const ogg = await aNotaDeVoz(buffer)
   const ondas = await formaDeOnda(ogg).catch(() => null)
-  return enviarOEncolar(chatId, { tipo: 'nota_voz', segundos, ondas }, ogg)
+  // La duración sale del archivo, redondeada para abajo como la pone el celular: el tiempo
+  // que mide el navegador al grabar da un poco más, y el iPhone no la reproducía si la nota
+  // decía durar más de lo que dura.
+  const real = duracionOgg(ogg)
+  const declarados = real != null ? Math.max(1, Math.floor(real)) : segundos
+  return enviarOEncolar(chatId, { tipo: 'nota_voz', segundos: declarados, ondas }, ogg)
 }
 
 /** Abre (o crea) un chat con un número que puede no haber escrito nunca. */

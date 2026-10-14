@@ -2,7 +2,7 @@ import './entorno.js'
 import { spawnSync } from 'node:child_process'
 import ffmpegPath from 'ffmpeg-static'
 import { describe, expect, it } from 'vitest'
-import { aNotaDeVoz } from '../src/audio.js'
+import { aNotaDeVoz, duracionOgg } from '../src/audio.js'
 
 /** Las páginas del Ogg: [{ datos }] con el contenido de cada una. */
 function paginas(ogg) {
@@ -32,5 +32,8 @@ describe('nota de voz con el mismo formato que la del celular (el iPhone es exig
     const r = spawnSync(ffmpegPath, ['-v', 'error', '-i', 'pipe:0', '-f', 'null', '-'], { input: ogg })
     expect(r.status).toBe(0)
     expect(String(r.stderr).trim()).toBe('')
+    // La duración real, para declararla redondeada para abajo como el celular (2 s de audio).
+    expect(duracionOgg(ogg)).toBeGreaterThan(1.9)
+    expect(duracionOgg(ogg)).toBeLessThan(2.1)
   })
 })

@@ -72,6 +72,24 @@ export function etiquetaDeWhatsapp(ogg) {
   return Buffer.concat([ogg.subarray(0, p2), pagina, ogg.subarray(p2 + largoPagina(p2))])
 }
 
+/**
+ * Cuánto dura un Ogg/Opus de verdad, en segundos: la posición de la última página menos
+ * el pre-skip del encabezado. null si no se puede leer.
+ */
+export function duracionOgg(ogg) {
+  let p = 0
+  let granule = null
+  let preskip = 0
+  while (p + 27 <= ogg.length && ogg.toString('latin1', p, p + 4) === 'OggS') {
+    const segs = ogg[p + 26]
+    const cuerpo = ogg.subarray(p + 27, p + 27 + segs).reduce((s, x) => s + x, 0)
+    if (ogg.toString('latin1', p + 27 + segs, p + 35 + segs) === 'OpusHead') preskip = ogg.readUInt16LE(p + 27 + segs + 10)
+    granule = Number(ogg.readBigInt64LE(p + 6))
+    p += 27 + segs + cuerpo
+  }
+  return granule == null || granule < preskip ? null : (granule - preskip) / 48000
+}
+
 export async function aNotaDeVoz(entrada) {
   try {
     // Igual que la nota que graba el celular: modo voz de Opus (SILK, banda ancha de 8 kHz),
