@@ -37,9 +37,56 @@ function ffmpeg(args, entrada) {
  * Convierte lo que graba el navegador (webm/opus en Chrome, mp4 en Safari) a
  * ogg/opus mono, que es el formato que WhatsApp reproduce como nota de voz.
  */
+// CRC de las páginas Ogg (polinomio 0x04c11db7, sin reflejar).
+const TABLA_CRC = Array.from({ length: 256 }, (_, i) => {
+  let r = i << 24
+  for (let k = 0; k < 8; k++) r = r & 0x80000000 ? (r << 1) ^ 0x04c11db7 : r << 1
+  return r >>> 0
+})
+function crcOgg(pagina) {
+  let crc = 0
+  for (const b of pagina) crc = ((crc << 8) ^ TABLA_CRC[((crc >>> 24) ^ b) & 0xff]) >>> 0
+  return crc
+}
+
+/**
+ * Deja la etiqueta del archivo (OpusTags) como la de las notas del celular: "WhatsApp" y
+ * sin comentarios. Va sola en la segunda página del Ogg: se reemplaza esa página entera.
+ */
+export function etiquetaDeWhatsapp(ogg) {
+  const largoPagina = (p) => 27 + ogg[p + 26] + ogg.subarray(p + 27, p + 27 + ogg[p + 26]).reduce((s, x) => s + x, 0)
+  if (ogg.toString('latin1', 0, 4) !== 'OggS') return ogg
+  const p2 = largoPagina(0)
+  if (ogg.toString('latin1', p2, p2 + 4) !== 'OggS' || ogg.toString('latin1', p2 + 27 + ogg[p2 + 26], p2 + 35 + ogg[p2 + 26]) !== 'OpusTags') return ogg
+  const vendor = Buffer.from('WhatsApp')
+  const paquete = Buffer.alloc(8 + 4 + vendor.length + 4)
+  paquete.write('OpusTags', 0, 'latin1')
+  paquete.writeUInt32LE(vendor.length, 8)
+  vendor.copy(paquete, 12)
+  paquete.writeUInt32LE(0, 12 + vendor.length)
+  const cabecera = Buffer.from(ogg.subarray(p2, p2 + 27))
+  cabecera[26] = 1 // un solo segmento (el paquete mide menos de 255 bytes)
+  const pagina = Buffer.concat([cabecera, Buffer.from([paquete.length]), paquete])
+  pagina.writeUInt32LE(0, 22)
+  pagina.writeUInt32LE(crcOgg(pagina), 22)
+  return Buffer.concat([ogg.subarray(0, p2), pagina, ogg.subarray(p2 + largoPagina(p2))])
+}
+
 export async function aNotaDeVoz(entrada) {
   try {
-    return await ffmpeg(['-i', 'pipe:0', '-vn', '-ac', '1', '-ar', '48000', '-c:a', 'libopus', '-b:a', '32k', '-application', 'voip', '-f', 'ogg', 'pipe:1'], entrada)
+    // Igual que la nota que graba el celular: paquetes de 60 ms (varios tramos de 20 ms en
+    // cada uno), sin los datos que agrega ffmpeg (nombre del programa, encoder=…). El
+    // iPhone es exigente con el archivo: con el formato por defecto de ffmpeg no la
+    // reproducía ("Este audio ya no está disponible") aunque todo lo demás estaba bien.
+    const ogg = await ffmpeg(
+      [
+        '-i', 'pipe:0', '-vn', '-map_metadata', '-1', '-ac', '1', '-ar', '48000',
+        '-c:a', 'libopus', '-b:a', '24k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '60',
+        '-fflags', '+bitexact', '-flags:a', '+bitexact', '-f', 'ogg', 'pipe:1',
+      ],
+      entrada,
+    )
+    return etiquetaDeWhatsapp(ogg)
   } catch (err) {
     throw new Error(`No se pudo convertir el audio: ${err.message}`, { cause: err })
   }
