@@ -2616,10 +2616,11 @@ function renderComposer() {
   el.innerHTML = `
     <button class="icon-btn" id="emojiBtn" data-act="emojis" aria-label="Emojis" title="Emojis" aria-haspopup="dialog" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('smile')}</button>
     <button class="icon-btn" data-act="adjuntar" aria-label="Adjuntar" title="Adjuntar" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('clip')}</button>
+    <button class="icon-btn" data-act="btn-rapidas" aria-label="Respuestas rápidas" title="Respuestas rápidas" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('bolt')}</button>
+    <button class="icon-btn" data-act="btn-catalogo" aria-label="Mandar el catálogo" title="Mandar el catálogo" aria-haspopup="menu" aria-expanded="false" ${off ? 'disabled' : ''}>${ic('store')}</button>
     <div class="field"><textarea id="msgInput" rows="1" placeholder="${sinConexion ? 'Sin conexión: lo que mandes sale cuando vuelva' : 'Escribí un mensaje'}" aria-label="Mensaje" ${off ? 'disabled' : ''}></textarea></div>
     <button class="send rec" id="sendBtn" data-act="grabar" aria-label="Grabar nota de voz" ${off ? 'disabled' : ''}>${ic('mic')}</button>
-    <div class="mencion-panel" id="mencionPanel" role="listbox" aria-label="Mencionar a un integrante" hidden></div>
-    <div class="mencion-panel rapidas-panel" id="rapidasPanel" role="listbox" aria-label="Respuestas rápidas" hidden></div>`
+    <div class="mencion-panel" id="mencionPanel" role="listbox" aria-label="Mencionar a un integrante" hidden></div>`
   const ta = $('#msgInput')
   ta.value = borradores.get(state.activo) || ''
   autoAlto(ta)
@@ -2878,16 +2879,16 @@ async function traerRespuestas(boton) {
   }
 }
 
-/** Pone el texto de la respuesta en el cuadro (cambia el "/atajo" que se estaba escribiendo). */
+/** Pone el texto de la respuesta en el cuadro, donde estaba el cursor (se puede retocar antes de mandar). */
 function usarRespuesta(id) {
   const r = respuestas?.find((x) => x.id === id)
   const ta = $('#msgInput')
   if (!r || !ta) return
-  const antes = ta.value.slice(0, ta.selectionStart).replace(/(^|\s)\/[^\s/]*$/, '$1')
+  const antes = ta.value.slice(0, ta.selectionStart)
   const despues = ta.value.slice(ta.selectionStart)
   ta.value = antes + r.texto + despues
   ta.selectionStart = ta.selectionEnd = (antes + r.texto).length
-  $('#rapidasPanel').hidden = true
+  cerrarMenusChat()
   if ($('#respuestasDlg').open) $('#respuestasDlg').close()
   autoAlto(ta)
   guardarBorrador(state.activo, ta.value)
@@ -2895,27 +2896,66 @@ function usarRespuesta(id) {
   ta.focus()
 }
 
-/** Con "/algo" justo antes del cursor, muestra las respuestas rápidas que coinciden. */
-async function revisarRapidas() {
-  const ta = $('#msgInput')
-  const panel = $('#rapidasPanel')
-  if (!ta || !panel) return
-  const m = /(^|\s)\/([^\s/]{0,25})$/.exec(ta.value.slice(0, ta.selectionStart))
-  if (!m) {
-    panel.hidden = true
-    return
+/*
+ * Botones del chat: respuestas rápidas (la lista del celular: se elige una y queda en el
+ * cuadro para mandarla) y catálogo (se manda con un toque).
+ */
+function cerrarMenusChat() {
+  for (const sel of ['#menuRapidas', '#menuCatalogo']) {
+    const m = $(sel)
+    if (m && !m.hidden) m.hidden = true
   }
+  for (const act of ['btn-rapidas', 'btn-catalogo']) $(`[data-act="${act}"]`)?.setAttribute('aria-expanded', 'false')
+}
+
+function mostrarMenuChat(menu, boton) {
+  const abierto = !menu.hidden
+  cerrarMenusChat()
+  cerrarAdjuntar()
+  if (abierto) return
+  menu.hidden = false
+  ubicarMenu(menu, boton.getBoundingClientRect(), false)
+  boton.setAttribute('aria-expanded', 'true')
+}
+
+async function abrirMenuRapidas(boton) {
+  const menu = $('#menuRapidas')
   const lista = await cargarRespuestas()
-  const q = m[2].toLowerCase()
-  const opciones = lista.filter((r) => r.atajo.toLowerCase().startsWith(q) || (q && r.texto.toLowerCase().includes(q))).slice(0, 8)
-  if (!opciones.length) {
-    panel.hidden = true
-    return
+  menu.innerHTML = `
+    <div class="menu-titulo">Respuestas rápidas</div>
+    <div class="menu-lista">${
+      lista.length
+        ? lista.map((r) => `<button class="item rapida-item" role="menuitem" data-rapida="${esc(r.id)}"><b>/${esc(r.atajo)}</b><span>${esc(r.texto)}</span></button>`).join('')
+        : '<p class="menu-vacio">No hay respuestas rápidas. Se crean en el celular (WhatsApp Business) o con "Administrar".</p>'
+    }</div>
+    <button class="item menu-pie" role="menuitem" data-act="adj-respuestas">${ic('edit')}Administrar respuestas</button>`
+  mostrarMenuChat(menu, boton)
+}
+
+function abrirMenuCatalogo(boton) {
+  $('#menuCatalogo').innerHTML = `
+    <div class="menu-titulo">Mandar el catálogo</div>
+    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-usados">${ic('store')}<span><b>Usados de la página</b><small>Enlace a /catalogo</small></span></button>
+    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-0km">${ic('store')}<span><b>0 km de la página</b><small>Enlace a /catalogo-0km</small></span></button>
+    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="whatsapp">${ic('wa')}<span><b>Catálogo de WhatsApp</b><small>La tarjeta con todos los productos</small></span></button>
+    <button class="item menu-pie" role="menuitem" data-act="adj-catalogo">${ic('search')}Elegir un producto…</button>`
+  mostrarMenuChat($('#menuCatalogo'), boton)
+}
+
+/** Un toque: manda el catálogo elegido al chat abierto. */
+async function enviarCatalogoRapido(cual) {
+  const chat = state.activo
+  cerrarMenusChat()
+  if (!chat) return
+  try {
+    const r =
+      cual === 'whatsapp'
+        ? await api(`/api/chats/${enc(chat)}/catalogo`, { method: 'POST', json: {} })
+        : await api(`/api/chats/${enc(chat)}/catalogo-web`, { method: 'POST', json: { cual: cual === 'web-0km' ? '0km' : 'usados' } })
+    toast(r?.enCola ? 'Sin conexión: el catálogo quedó en la bandeja de salida.' : 'Catálogo enviado.')
+  } catch (err) {
+    toast(err.message)
   }
-  panel.innerHTML = opciones
-    .map((r) => `<button type="button" role="option" data-rapida="${esc(r.id)}">${ic('bolt')}<span><b>/${esc(r.atajo)}</b> ${esc(r.texto)}</span></button>`)
-    .join('')
-  panel.hidden = false
 }
 
 /* ---------------- Menciones (@) en grupos ---------------- */
@@ -3481,6 +3521,11 @@ function conectarEventos() {
   })
   es.addEventListener('estado', (e) => onEstado(JSON.parse(e.data)))
   // Respuestas rápidas cambiadas (acá, en otra pestaña o en el celular).
+  // El catálogo guardado se actualizó (se trajo de nuevo de WhatsApp).
+  es.addEventListener('catalogo', (e) => {
+    productos = JSON.parse(e.data)
+    if ($('#catalogoDlg').open) renderCatalogo()
+  })
   es.addEventListener('importacion', (e) => avanceRespaldo(JSON.parse(e.data)))
   es.addEventListener('respuestas', (e) => {
     respuestas = JSON.parse(e.data)
@@ -3564,9 +3609,10 @@ document.addEventListener('click', async (e) => {
   if (!enMenu) cerrarMenu()
   if (!e.target.closest('#emojiPanel, #emojiBtn')) cerrarEmojis()
   if (!e.target.closest('#menuAdjuntar, [data-act="adjuntar"]')) cerrarAdjuntar()
+  if (!e.target.closest('#menuRapidas, #menuCatalogo, [data-act="btn-rapidas"], [data-act="btn-catalogo"]')) cerrarMenusChat()
   const emo = e.target.closest('[data-emoji]')
   if (emo) return ponerEmoji(emo.dataset.emoji)
-  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion],[data-contacto-fila],[data-producto],[data-rapida],[data-rapida-editar],[data-rapida-borrar],[data-escribirle]')
+  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion],[data-contacto-fila],[data-producto],[data-rapida],[data-rapida-editar],[data-rapida-borrar],[data-escribirle],[data-catalogo-enviar]')
   if (!t) {
     if (e.target.id === 'lightbox') $('#lightbox').hidden = true
     return
@@ -3578,6 +3624,7 @@ document.addEventListener('click', async (e) => {
   if (t.dataset.rapidaEditar) return mostrarFormRespuesta(respuestas?.find((r) => r.id === t.dataset.rapidaEditar) || null)
   if (t.dataset.rapidaBorrar) return borrarRespuesta(t.dataset.rapidaBorrar)
   if (t.dataset.escribirle) return escribirleA(t.dataset.escribirle)
+  if (t.dataset.catalogoEnviar) return enviarCatalogoRapido(t.dataset.catalogoEnviar)
   if (t.dataset.salidaAct) {
     // Bandeja de salida: reintentar un mensaje que falló, o descartarlo.
     const chat = state.activo
@@ -3882,8 +3929,10 @@ document.addEventListener('click', async (e) => {
     case 'adjuntar': abrirAdjuntar(t); break
     case 'adj-archivo': cerrarAdjuntar(); $('#fileInput').click(); break
     case 'adj-contacto': cerrarAdjuntar(); abrirContactos(); break
-    case 'adj-catalogo': cerrarAdjuntar(); abrirCatalogo(); break
-    case 'adj-respuestas': cerrarAdjuntar(); abrirRespuestas(); break
+    case 'adj-catalogo': cerrarAdjuntar(); cerrarMenusChat(); abrirCatalogo(); break
+    case 'adj-respuestas': cerrarAdjuntar(); cerrarMenusChat(); abrirRespuestas(); break
+    case 'btn-rapidas': abrirMenuRapidas(t); break
+    case 'btn-catalogo': abrirMenuCatalogo(t); break
     case 'cerrar-contacto': $('#contactoDlg').close(); break
     case 'contacto-enviar': enviarContactosElegidos(); break
     case 'cerrar-catalogo': $('#catalogoDlg').close(); break
@@ -3967,7 +4016,6 @@ document.addEventListener('input', (e) => {
     syncSendBtn()
     guardarBorrador(state.activo, e.target.value)
     revisarMencion()
-    revisarRapidas()
   }
 })
 
@@ -3980,14 +4028,6 @@ document.addEventListener('keydown', (e) => {
       return ponerMencion(primero.dataset.mencion, primero.dataset.nombre)
     }
   }
-  // Con las respuestas rápidas a la vista, Enter usa la primera.
-  if (e.key === 'Enter' && e.target.id === 'msgInput' && !$('#rapidasPanel')?.hidden) {
-    const primero = $('#rapidasPanel [data-rapida]')
-    if (primero) {
-      e.preventDefault()
-      return usarRespuesta(primero.dataset.rapida)
-    }
-  }
   // Enter envía; Shift+Enter hace un salto de línea, como en WhatsApp Web.
   if (e.key === 'Enter' && !e.shiftKey && e.target.id === 'msgInput' && !e.isComposing) {
     e.preventDefault()
@@ -3997,7 +4037,7 @@ document.addEventListener('keydown', (e) => {
     if (!$('#lightbox').hidden) $('#lightbox').hidden = true
     else if (!$('#emojiPanel').hidden) cerrarEmojis()
     else if (!$('#menuAdjuntar').hidden) cerrarAdjuntar()
-    else if ($('#rapidasPanel') && !$('#rapidasPanel').hidden) $('#rapidasPanel').hidden = true
+    else if (!$('#menuRapidas').hidden || !$('#menuCatalogo').hidden) cerrarMenusChat()
     else if (!$('#infoPane').hidden) cerrarInfo()
     else if (seleccion.activa) salirSeleccion()
     else if (!$('#menuMsg').hidden || !$('#menuChat').hidden) cerrarMenu()

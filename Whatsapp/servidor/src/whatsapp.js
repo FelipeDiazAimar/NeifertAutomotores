@@ -39,6 +39,7 @@ import {
   BAILEYS_LOG,
   CONSERVAR_EDICIONES,
   CONSERVAR_ELIMINADOS,
+  CRM_URL,
   MEDIA_MAX_BYTES,
   MEDIA_RECIENTE_SEG,
   VENTANA_DIAS,
@@ -494,6 +495,8 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       const chats = completa
         ? sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
         : ponerAlDiaChats().catch((err) => log('aviso', 'No se pudieron traer los cambios de los chats', err.message))
+      // El catálogo de WhatsApp Business queda guardado para mostrarlo al instante.
+      chats.then(() => refrescarCatalogo()).catch(() => {})
       // Las respuestas rápidas del celular se traen completas una vez por sesión vinculada.
       if (!meta().respuestasCargadas) {
         chats.then(() => cargarRespuestasRapidas()).catch((err) => log('aviso', 'No se pudieron traer las respuestas rápidas', err.message))
@@ -2598,11 +2601,16 @@ const vistaProducto = (p) => ({
   retailerId: p.retailerId || null,
 })
 
-let catalogoGuardado = { ts: 0, productos: null }
-/** Los productos visibles del catálogo de la línea (el mismo del celular). Se recuerdan 10 minutos. */
-export async function catalogo({ fresco = false } = {}) {
+/*
+ * El catálogo de WhatsApp Business queda guardado en la base (meta.catalogo): el panel lo
+ * muestra al instante, sin esperar a WhatsApp. Se vuelve a traer en segundo plano al
+ * conectar y cuando lo guardado tiene más de unas horas (o con "Volver a traer").
+ */
+const CATALOGO_VIEJO_MS = 6 * 3600e3
+let trayendoCatalogo = null
+
+async function traerCatalogo() {
   asegurarConectado()
-  if (!fresco && catalogoGuardado.productos && Date.now() - catalogoGuardado.ts < 10 * 60_000) return catalogoGuardado.productos
   if (typeof sock.getCatalog !== 'function') throw new Error('Esta versión de Baileys no permite leer el catálogo')
   const productos = []
   let cursor
@@ -2612,8 +2620,43 @@ export async function catalogo({ fresco = false } = {}) {
     if (!r.nextPageCursor || !r.products?.length) break
     cursor = r.nextPageCursor
   }
-  catalogoGuardado = { ts: Date.now(), productos: productos.filter((p) => !p.isHidden).map(vistaProducto) }
-  return catalogoGuardado.productos
+  const guardado = { ts: Date.now(), productos: productos.filter((p) => !p.isHidden).map(vistaProducto) }
+  setMeta({ catalogo: guardado })
+  emitir('catalogo', guardado.productos)
+  return guardado.productos
+}
+
+/** Pide el catálogo a WhatsApp una sola vez aunque lo pidan varios a la vez. */
+function refrescarCatalogo() {
+  trayendoCatalogo ??= traerCatalogo().finally(() => (trayendoCatalogo = null))
+  return trayendoCatalogo
+}
+
+/** Los productos visibles del catálogo de la línea (el mismo del celular). */
+export async function catalogo({ fresco = false } = {}) {
+  const guardado = meta().catalogo
+  if (!fresco && guardado?.productos) {
+    // Lo guardado sale ya; si es viejo, se actualiza por detrás y el panel recibe el nuevo.
+    if (Date.now() - (guardado.ts || 0) > CATALOGO_VIEJO_MS && sock && conexion === 'conectado') {
+      refrescarCatalogo().catch((err) => log('aviso', 'No se pudo actualizar el catálogo', err.message))
+    }
+    return guardado.productos
+  }
+  return refrescarCatalogo()
+}
+
+/*
+ * El catálogo de la página web (los autos publicados en el sitio): un enlace a /catalogo
+ * (usados) o /catalogo-0km, en el mismo dominio que el CRM (CRM_URL).
+ */
+const PAGINAS_CATALOGO = { usados: '/catalogo', '0km': '/catalogo-0km' }
+export function enviarCatalogoWeb(chatId, cual = 'usados', texto = '') {
+  const camino = PAGINAS_CATALOGO[cual]
+  if (!camino) throw Object.assign(new Error('Catálogo desconocido'), { status: 400 })
+  if (!CRM_URL) throw new Error('Falta CRM_URL en la configuración: no se sabe la dirección de la página')
+  const enlace = `${new URL(CRM_URL).origin}${camino}`
+  return enviarOEncolar(chatId, { tipo: 'texto', texto: texto ? `${String(texto).trim()}
+${enlace}` : enlace })
 }
 
 const numeroPropio = () => String(yo?.telefono || numeroLinea() || '').replace(/\D/g, '')
