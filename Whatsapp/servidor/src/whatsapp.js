@@ -433,6 +433,10 @@ async function iniciarConexion() {
   s.ev.on('message-receipt.update', seguro('recibos de lectura', async (recibos) => {
     for (const r of recibos) await procesarRecibo(r)
   }))
+  // Baileys no avisa cuando un celular no pudo bajar un archivo nuestro: se mira el recibo crudo.
+  s.ws.on('CB:receipt', (nodo) => {
+    if (nodo?.attrs?.type === 'server-error') pidieronResubir(nodo).catch(() => {})
+  })
   s.ev.on('messages.reaction', seguro('reacciones', async (reacciones) => {
     for (const r of reacciones) await procesarReaccion(r)
   }))
@@ -1167,7 +1171,72 @@ async function procesarRecibo({ key, receipt }) {
 
 /** Sube el estado de un mensaje propio (nunca lo baja: un "leído" no vuelve a "enviado"). */
 function aplicarEstado(chatId, m, nuevo) {
-  if (nuevo === 'error' || ORDEN.indexOf(nuevo) > ORDEN.indexOf(m.estado)) actualizarMensaje(chatId, m.id, { estado: nuevo })
+  if (nuevo !== 'error' && ORDEN.indexOf(nuevo) <= ORDEN.indexOf(m.estado)) return
+  actualizarMensaje(chatId, m.id, { estado: nuevo })
+  seguirAudio(chatId, m, nuevo)
+}
+
+/* ---------------- Seguimiento de los audios ---------------- */
+
+const AUDIOS = { nota_voz: { nombre: 'Nota de voz', o: 'a' }, audio: { nombre: 'Audio', o: 'o' } }
+const UN_ARCHIVO = { nota_voz: 'una nota de voz', audio: 'un audio', imagen: 'una foto', video: 'un video', gif: 'un video', documento: 'un documento', sticker: 'un sticker' }
+const minSeg = (s) => `${Math.floor((s || 0) / 60)}:${String(Math.floor((s || 0) % 60)).padStart(2, '0')}`
+
+/** "Chat · 0:05 · la mandó Bruno": de qué audio se habla en la actividad. */
+function detalleAudio(chatId, m) {
+  return [nombreDe(chatId), m.media?.segundos ? minSeg(m.media.segundos) : null, m.enviadoPor?.nombre ? `la mandó ${m.enviadoPor.nombre}` : null]
+    .filter(Boolean)
+    .join(' · ')
+}
+
+/**
+ * Qué pasó con un audio que mandamos (entregado, visto, escuchado o con error), en la
+ * actividad del servidor. Solo los de los últimos 2 días: un tilde de un audio viejo que
+ * llega al sincronizar no es noticia. En los grupos WhatsApp no distingue "visto" de
+ * "escuchado" por persona, así que ahí no se sigue.
+ */
+function seguirAudio(chatId, m, nuevo) {
+  const a = AUDIOS[m.tipo]
+  if (!a || !m.deMi || m.estado === nuevo || ahora() - (m.ts || 0) > 2 * 86400) return
+  const detalle = detalleAudio(chatId, m)
+  if (nuevo === 'entregado') log('info', `${a.nombre} entregad${a.o}`, detalle)
+  else if (nuevo === 'leido') log('info', `${a.nombre} vist${a.o}, todavía sin escuchar`, detalle)
+  else if (nuevo === 'reproducido') log('ok', `${a.nombre} escuchad${a.o}`, detalle)
+  else if (nuevo === 'error') log('error', `WhatsApp rechazó ${UN_ARCHIVO[m.tipo]}`, detalle)
+}
+
+/**
+ * Un celular que no pudo bajar un archivo que mandamos pide que se lo vuelvan a subir (el
+ * recibo "server-error"). Baileys lo descarta sin avisar ni responder, y en el celular queda
+ * "no disponible": se anota en la actividad para saberlo.
+ */
+async function pidieronResubir(nodo) {
+  const { attrs } = nodo
+  if (!attrs?.id || !attrs.from) return
+  const propios = [yo?.id, yo?.lid].filter(Boolean).map((j) => jidNormalizedUser(j))
+  const quien = jidNormalizedUser(attrs.participant || attrs.from)
+  const deLaLinea = propios.includes(quien)
+  // Si lo pide el celular de la línea, el chat es el del destinatario (como en Baileys).
+  const remoto = deLaLinea && attrs.recipient && !isJidGroup(attrs.from) ? attrs.recipient : attrs.from
+  const chatId = await jidDelChat({ remoteJid: remoto, id: attrs.id, fromMe: true })
+  const m = buscarMensaje(chatId, attrs.id)
+  const que = UN_ARCHIVO[m?.tipo] || 'un archivo'
+  const celular = deLaLinea ? 'El celular de la línea' : isJidGroup(attrs.from) ? `El celular de ${nombreDe(quien)}` : 'El celular del contacto'
+  log('aviso', `${celular} no pudo bajar ${que}`, `${m && AUDIOS[m.tipo] ? detalleAudio(chatId, m) : nombreDe(chatId)} · pidió que se lo vuelvan a subir y eso todavía no se hace`)
+}
+
+/** El panel avisa que un audio no se pudo escuchar ahí (ya reintentó): un aviso por audio cada 10 minutos. */
+const avisosDeAudio = new Map()
+export function audioQueNoSeEscucho(chatId, id, motivo) {
+  const m = typeof chatId === 'string' && typeof id === 'string' ? buscarMensaje(chatId, id) : null
+  if (!m || !AUDIOS[m.tipo]) return { ok: false }
+  const antes = avisosDeAudio.get(`${chatId}|${id}`)
+  if (antes && Date.now() - antes < 600_000) return { ok: true }
+  avisosDeAudio.set(`${chatId}|${id}`, Date.now())
+  if (avisosDeAudio.size > 200) avisosDeAudio.delete(avisosDeAudio.keys().next().value)
+  const cuando = new Date((m.ts || 0) * 1000).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' })
+  log('aviso', `No se pudo escuchar ${UN_ARCHIVO[m.tipo]} en el panel`, `${nombreDe(chatId)} · ${m.deMi ? 'mandad' : 'recibid'}${AUDIOS[m.tipo].o} el ${cuando} · ${String(motivo || 'sin detalle').slice(0, 120)}`)
+  return { ok: true }
 }
 
 // Estados que llegaron antes que su mensaje: id → { estado, ts }. Viven 2 minutos.
@@ -2343,7 +2412,8 @@ async function enviar(chatId, contenido, buffer, quoted, firmante) {
       const a = enviado?.message?.audioMessage
       const ruta = a?.directPath || ''
       const como = /\/t62\.7117-/.test(ruta) ? 'como nota de voz' : `como audio común (${ruta.split('/')[2] || 'sin ruta'})`
-      log('info', 'Nota de voz subida', `${como} · ${a?.streamingSidecar?.length ? 'con firma para iPhone' : 'SIN firma para iPhone'}`)
+      const firma = a?.streamingSidecar?.length ? 'con firma para iPhone' : 'SIN firma para iPhone'
+      log(firma.startsWith('SIN') ? 'aviso' : 'info', 'Nota de voz enviada', `${nombreDe(chatId)} · ${minSeg(Number(a?.seconds) || 0)} · ${como} · ${firma}`)
     }
     if (enviado?.message) {
       enviados.set(enviado.key.id, enviado.message)
@@ -2850,14 +2920,19 @@ export function enviarArchivo(chatId, buffer, { mime, nombre, caption }) {
 
 /** Nota de voz: se convierte a ogg/opus (como las del celular) y lleva su forma de onda real. */
 export async function enviarNotaDeVoz(chatId, buffer, segundos) {
-  const ogg = await aNotaDeVoz(buffer)
-  const ondas = await formaDeOnda(ogg).catch(() => null)
-  // La duración sale del archivo, redondeada para abajo como la pone el celular: el tiempo
-  // que mide el navegador al grabar da un poco más, y el iPhone no la reproducía si la nota
-  // decía durar más de lo que dura.
-  const real = duracionOgg(ogg)
-  const declarados = real != null ? Math.max(1, Math.floor(real)) : segundos
-  return enviarOEncolar(chatId, { tipo: 'nota_voz', segundos: declarados, ondas }, ogg)
+  try {
+    const ogg = await aNotaDeVoz(buffer)
+    const ondas = await formaDeOnda(ogg).catch(() => null)
+    // La duración sale del archivo, redondeada para abajo como la pone el celular: el tiempo
+    // que mide el navegador al grabar da un poco más, y el iPhone no la reproducía si la nota
+    // decía durar más de lo que dura.
+    const real = duracionOgg(ogg)
+    const declarados = real != null ? Math.max(1, Math.floor(real)) : segundos
+    return await enviarOEncolar(chatId, { tipo: 'nota_voz', segundos: declarados, ondas }, ogg)
+  } catch (err) {
+    log('error', 'No se pudo mandar la nota de voz', `${nombreDe(chatId)} · ${err.message}`)
+    throw err
+  }
 }
 
 /** Abre (o crea) un chat con un número que puede no haber escrito nunca. */

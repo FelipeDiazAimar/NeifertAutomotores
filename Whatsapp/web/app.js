@@ -2580,10 +2580,19 @@ function audioDe(id) {
   return a
 }
 
+const MOTIVO_AUDIO = {
+  1: 'se canceló la carga',
+  2: 'se cortó la conexión con el servidor',
+  3: 'el navegador no pudo decodificar el archivo',
+  4: 'no se pudo cargar el archivo (servidor caído o archivo faltante)',
+}
+
 /** Reproduce un audio. Si no carga, prueba otra vez con uno nuevo: suele ser un corte de un momento. */
 async function reproducir(id) {
+  const chatId = state.activo
+  let a
   for (let intento = 0; intento < 2; intento++) {
-    const a = audioDe(id)
+    a = audioDe(id)
     try {
       await a.play()
       return
@@ -2594,6 +2603,9 @@ async function reproducir(id) {
     }
   }
   toast('No se pudo reproducir el audio. Probá de nuevo en un momento.')
+  // Queda en la actividad del servidor, para saber qué audios fallan y por qué.
+  const motivo = MOTIVO_AUDIO[a?.error?.code] || 'el navegador no lo dejó arrancar'
+  if (!NUBE) api('/api/audio-no-se-escucho', { method: 'POST', json: { chatId, id, motivo } }).catch(() => {})
 }
 
 function actualizarVoz(id) {

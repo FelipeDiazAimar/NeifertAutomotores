@@ -403,6 +403,8 @@ app.get('/api/chats/:id/media/:msgId', ruta(async (req, res) => {
 }))
 app.post('/api/chats/:id/descargar-todo', ruta((req) => wa.descargarTodo(chatId(req), { reintentar: !!req.body?.reintentar })))
 app.post('/api/chats/:id/media/:msgId/descargar', ruta((req) => wa.descargarAhora(chatId(req), req.params.msgId)))
+// El panel avisa que un audio no se pudo escuchar (fuera de /api/chats/:id: lo avisa también quien solo mira el chat).
+app.post('/api/audio-no-se-escucho', ruta((req) => wa.audioQueNoSeEscucho(req.body?.chatId, req.body?.id, req.body?.motivo)))
 
 app.use('/api', (req, res) => res.status(404).json({ error: 'Ruta inexistente' }))
 
