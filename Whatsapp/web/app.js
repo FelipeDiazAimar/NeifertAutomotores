@@ -2560,16 +2560,40 @@ function vozHtml(m) {
 }
 
 function audioDe(id) {
-  let a = audios.get(id)
-  if (a) return a
-  a = new Audio(urlMedia(state.mensajes.get(id)))
+  const previo = audios.get(id)
+  // Un audio que no cargó (el servidor se estaba reiniciando, se cortó el túnel) queda con
+  // error para siempre: el navegador no lo vuelve a pedir aunque el servidor ya esté. Se
+  // arma uno nuevo, desde donde iba.
+  if (previo && !previo.error) return previo
+  const a = new Audio(urlMedia(state.mensajes.get(id)))
   a.preload = 'metadata'
   a.playbackRate = state.velocidades.get(id) || 1
+  if (previo?.currentTime) a.currentTime = previo.currentTime
   for (const ev of ['timeupdate', 'play', 'pause', 'loadedmetadata']) a.addEventListener(ev, () => actualizarVoz(id))
   a.addEventListener('ended', () => { a.currentTime = 0; actualizarVoz(id) })
-  a.addEventListener('error', () => toast('No se pudo reproducir el audio.'))
+  a.addEventListener('error', () => {
+    // Si no llegó a arrancar, el aviso lo da reproducir() después de reintentar.
+    if (a.currentTime > 0) toast('Se cortó el audio. Tocalo de nuevo para seguir.')
+    actualizarVoz(id)
+  })
   audios.set(id, a)
   return a
+}
+
+/** Reproduce un audio. Si no carga, prueba otra vez con uno nuevo: suele ser un corte de un momento. */
+async function reproducir(id) {
+  for (let intento = 0; intento < 2; intento++) {
+    const a = audioDe(id)
+    try {
+      await a.play()
+      return
+    } catch (err) {
+      // Lo pausaron antes de que arrancara: no es un error.
+      if (err?.name === 'AbortError' && !a.error) return
+      if (intento === 0) await new Promise((r) => setTimeout(r, 1500))
+    }
+  }
+  toast('No se pudo reproducir el audio. Probá de nuevo en un momento.')
 }
 
 function actualizarVoz(id) {
@@ -3726,7 +3750,7 @@ document.addEventListener('click', async (e) => {
     const id = t.dataset.play
     for (const [otro, a] of audios) if (otro !== id) a.pause()
     const a = audioDe(id)
-    if (a.paused) a.play().catch(() => toast('No se pudo reproducir el audio.'))
+    if (a.paused) reproducir(id)
     else a.pause()
     return
   }
