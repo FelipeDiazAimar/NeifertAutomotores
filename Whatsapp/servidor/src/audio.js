@@ -49,27 +49,131 @@ function crcOgg(pagina) {
   return crc
 }
 
+/** Los paquetes de un Ogg, en orden, y la posición (granule) de la última página. */
+function paquetesOgg(ogg) {
+  const paquetes = []
+  let granule = 0
+  let serie = 0
+  let pendiente = []
+  for (let p = 0; p + 27 <= ogg.length && ogg.toString('latin1', p, p + 4) === 'OggS'; ) {
+    const segs = ogg[p + 26]
+    serie = ogg.readUInt32LE(p + 14)
+    granule = Number(ogg.readBigInt64LE(p + 6))
+    let q = p + 27 + segs
+    for (const largo of ogg.subarray(p + 27, p + 27 + segs)) {
+      pendiente.push(ogg.subarray(q, q + largo))
+      q += largo
+      // Un segmento de menos de 255 bytes cierra el paquete.
+      if (largo < 255) {
+        paquetes.push(Buffer.concat(pendiente))
+        pendiente = []
+      }
+    }
+    p = q
+  }
+  return { paquetes, granule, serie }
+}
+
+/** Cuántas muestras (a 48 kHz) tiene cada tramo de un paquete Opus, según su TOC. */
+function muestrasPorTramo(toc) {
+  const config = toc >> 3
+  const ms = config < 12 ? [10, 20, 40, 60][config & 3] : config < 16 ? [10, 20][config & 1] : [2.5, 5, 10, 20][config & 3]
+  return ms * 48
+}
+
 /**
- * Deja la etiqueta del archivo (OpusTags) como la de las notas del celular: "WhatsApp" y
- * sin comentarios. Va sola en la segunda página del Ogg: se reemplaza esa página entera.
+ * Junta paquetes de un tramo (código 0) en paquetes de hasta 6 tramos (código 3, tamaño
+ * variable), como los arma el celular: 6 tramos de 20 ms = 120 ms por paquete.
  */
-export function etiquetaDeWhatsapp(ogg) {
-  const largoPagina = (p) => 27 + ogg[p + 26] + ogg.subarray(p + 27, p + 27 + ogg[p + 26]).reduce((s, x) => s + x, 0)
-  if (ogg.toString('latin1', 0, 4) !== 'OggS') return ogg
-  const p2 = largoPagina(0)
-  if (ogg.toString('latin1', p2, p2 + 4) !== 'OggS' || ogg.toString('latin1', p2 + 27 + ogg[p2 + 26], p2 + 35 + ogg[p2 + 26]) !== 'OpusTags') return ogg
-  const vendor = Buffer.from('WhatsApp')
-  const paquete = Buffer.alloc(8 + 4 + vendor.length + 4)
-  paquete.write('OpusTags', 0, 'latin1')
-  paquete.writeUInt32LE(vendor.length, 8)
-  vendor.copy(paquete, 12)
-  paquete.writeUInt32LE(0, 12 + vendor.length)
-  const cabecera = Buffer.from(ogg.subarray(p2, p2 + 27))
-  cabecera[26] = 1 // un solo segmento (el paquete mide menos de 255 bytes)
-  const pagina = Buffer.concat([cabecera, Buffer.from([paquete.length]), paquete])
-  pagina.writeUInt32LE(0, 22)
+function juntarTramos(paquetes, porPaquete = 6) {
+  const salida = []
+  let grupo = []
+  const cerrar = () => {
+    if (!grupo.length) return
+    const tramos = grupo.map((p) => p.subarray(1))
+    const largos = []
+    for (const t of tramos.slice(0, -1)) {
+      if (t.length < 252) largos.push(t.length)
+      else {
+        const primero = 252 + (t.length & 3)
+        largos.push(primero, (t.length - primero) >> 2)
+      }
+    }
+    // TOC con código 3 (también el último, aunque quede de un tramo, como el celular) y la
+    // cantidad de tramos, con la marca de tamaño variable si hay más de uno.
+    const cabeza = Buffer.from([(grupo[0][0] & 0xfc) | 3, (grupo.length > 1 ? 0x80 : 0) | grupo.length, ...largos])
+    salida.push({ datos: Buffer.concat([cabeza, ...tramos]), muestras: muestrasPorTramo(grupo[0][0]) * grupo.length })
+    grupo = []
+  }
+  for (const p of paquetes) {
+    // Solo se juntan tramos sueltos con la misma configuración; cualquier otro paquete va solo.
+    if ((p[0] & 3) !== 0) {
+      cerrar()
+      salida.push({ datos: p, muestras: muestrasPorTramo(p[0]) * ((p[0] & 3) === 3 ? p[1] & 0x3f : 2) })
+      continue
+    }
+    if (grupo.length && ((grupo[0][0] & 0xfc) !== (p[0] & 0xfc) || grupo.length === porPaquete)) cerrar()
+    grupo.push(p)
+  }
+  cerrar()
+  return salida
+}
+
+/** Una página Ogg con sus paquetes enteros. */
+function paginaOgg({ paquetes, granule, serie, numero, tipo = 0 }) {
+  const segmentos = []
+  for (const p of paquetes) {
+    for (let r = p.length; ; r -= 255) {
+      segmentos.push(Math.min(r, 255))
+      if (r < 255) break
+    }
+  }
+  const cabecera = Buffer.alloc(27)
+  cabecera.write('OggS', 0, 'latin1')
+  cabecera[5] = tipo
+  cabecera.writeBigInt64LE(BigInt(granule), 6)
+  cabecera.writeUInt32LE(serie, 14)
+  cabecera.writeUInt32LE(numero, 18)
+  cabecera[26] = segmentos.length
+  const pagina = Buffer.concat([cabecera, Buffer.from(segmentos), ...paquetes])
   pagina.writeUInt32LE(crcOgg(pagina), 22)
-  return Buffer.concat([ogg.subarray(0, p2), pagina, ogg.subarray(p2 + largoPagina(p2))])
+  return pagina
+}
+
+/**
+ * Rearma el Ogg de ffmpeg como el de las notas que graba el celular:
+ * - la etiqueta (OpusTags) dice "WhatsApp", sin comentarios;
+ * - paquetes de 6 tramos de 20 ms (ffmpeg los deja de a uno, o de 2 tramos de 60 ms);
+ * - páginas de 14 paquetes (1,68 s) y la última sin la marca de fin, como el celular.
+ * El iPhone reproducía la nota al llegar pero después la daba por "no disponible".
+ */
+export function comoElCelular(ogg) {
+  const { paquetes, granule: final, serie } = paquetesOgg(ogg)
+  if (paquetes.length < 3 || paquetes[0].toString('latin1', 0, 8) !== 'OpusHead') return ogg
+  const preskip = paquetes[0].readUInt16LE(10)
+  const vendor = Buffer.from('WhatsApp')
+  const etiqueta = Buffer.alloc(8 + 4 + vendor.length + 4)
+  etiqueta.write('OpusTags', 0, 'latin1')
+  etiqueta.writeUInt32LE(vendor.length, 8)
+  vendor.copy(etiqueta, 12)
+  etiqueta.writeUInt32LE(0, 12 + vendor.length)
+
+  const audio = juntarTramos(paquetes.slice(2))
+  const paginas = [
+    paginaOgg({ paquetes: [paquetes[0]], granule: 0, serie, numero: 0, tipo: 2 }),
+    paginaOgg({ paquetes: [etiqueta], granule: 0, serie, numero: 1 }),
+  ]
+  const POR_PAGINA = 14
+  let muestras = preskip
+  for (let i = 0; i < audio.length; i += POR_PAGINA) {
+    const tanda = audio.slice(i, i + POR_PAGINA)
+    muestras += tanda.reduce((s, p) => s + p.muestras, 0)
+    const ultima = i + POR_PAGINA >= audio.length
+    // La última lleva la posición que calculó ffmpeg: descuenta el relleno del final.
+    const granule = ultima ? Math.min(muestras, final) : muestras
+    paginas.push(paginaOgg({ paquetes: tanda.map((p) => p.datos), granule, serie, numero: paginas.length }))
+  }
+  return Buffer.concat(paginas)
 }
 
 /**
@@ -93,18 +197,19 @@ export function duracionOgg(ogg) {
 export async function aNotaDeVoz(entrada) {
   try {
     // Igual que la nota que graba el celular: modo voz de Opus (SILK, banda ancha de 8 kHz),
-    // paquetes de 120 ms, unos 16 kbps y sin los datos que agrega ffmpeg. El iPhone es
+    // tramos de 20 ms, unos 16 kbps y sin los datos que agrega ffmpeg. El iPhone es
     // exigente: con el modo música (CELT) que elegía ffmpeg la reproducía al llegar, pero
-    // después mostraba "Este audio ya no está disponible".
+    // después mostraba "Este audio ya no está disponible". Los tramos se juntan de a 6
+    // por paquete después (comoElCelular): ffmpeg no lo hace.
     const ogg = await ffmpeg(
       [
         '-i', 'pipe:0', '-vn', '-map_metadata', '-1', '-ac', '1', '-ar', '48000',
-        '-c:a', 'libopus', '-b:a', '16k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '120', '-cutoff', '8000',
+        '-c:a', 'libopus', '-b:a', '16k', '-vbr', 'on', '-application', 'voip', '-frame_duration', '20', '-cutoff', '8000',
         '-fflags', '+bitexact', '-flags:a', '+bitexact', '-f', 'ogg', 'pipe:1',
       ],
       entrada,
     )
-    return etiquetaDeWhatsapp(ogg)
+    return comoElCelular(ogg)
   } catch (err) {
     throw new Error(`No se pudo convertir el audio: ${err.message}`, { cause: err })
   }

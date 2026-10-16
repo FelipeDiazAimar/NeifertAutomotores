@@ -27,7 +27,11 @@ describe('nota de voz con el mismo formato que la del celular (el iPhone es exig
     expect(etiqueta.datos.subarray(12, 20).toString()).toBe('WhatsApp')
     expect(etiqueta.datos).toHaveLength(24)
     expect(audio.datos[0] >> 3).toBeLessThan(12) // modo voz (SILK), como el del celular, no música (CELT)
-    expect(audio.datos[0] & 3).toBeGreaterThan(0) // paquetes de varios tramos (120 ms)
+    expect((audio.datos[0] >> 3) & 3).toBe(1) // tramos de 20 ms, como el celular
+    expect(audio.datos[0] & 3).toBe(3) // varios tramos por paquete...
+    expect(audio.datos[1] & 0x3f).toBe(6) // ...6, de 20 ms: 120 ms por paquete
+    // Como el celular: la última página no lleva la marca de fin (EOS).
+    expect(ogg[ogg.lastIndexOf('OggS') + 5]).toBe(0)
     // ffmpeg verifica el CRC de cada página: si la etiqueta quedó mal armada, falla.
     const r = spawnSync(ffmpegPath, ['-v', 'error', '-i', 'pipe:0', '-f', 'null', '-'], { input: ogg })
     expect(r.status).toBe(0)
