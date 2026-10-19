@@ -339,13 +339,10 @@ app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
 app.post('/api/chats/:id/texto', exigirEscritura, accion('enviar_texto', (req) => wa.enviarTexto(chatId(req), req.body?.texto, req.body?.citadoId, req.body?.menciones), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, largo: String(req.body?.texto || '').length })))
 app.post('/api/chats/:id/contacto', exigirEscritura, accion('enviar_contacto', (req) => wa.enviarContactos(chatId(req), req.body?.contactos, req.body?.citadoId), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, contactos: (req.body?.contactos || []).length })))
 app.post('/api/chats/:id/producto', exigirEscritura, accion('enviar_producto', (req) => wa.enviarProducto(chatId(req), req.body?.id), (req, r) => ({ mensaje: r.id, producto: req.body?.id })))
-app.post('/api/chats/:id/vehiculo', exigirEscritura, accion('enviar_vehiculo', async (req) => wa.enviarVehiculo(chatId(req), await crm.vehiculoPublicado(req.body?.id)), (req, r) => ({ mensaje: r.id, enCola: !!r.enCola, vehiculo: req.body?.id })))
 app.post('/api/chats/:id/catalogo-web', exigirEscritura, accion('enviar_catalogo_web', (req) => wa.enviarCatalogoWeb(chatId(req), req.body?.cual, req.body?.texto), (req, r) => ({ mensaje: r.id, cual: req.body?.cual })))
 app.post('/api/chats/:id/catalogo', exigirEscritura, accion('enviar_catalogo', (req) => wa.enviarCatalogo(chatId(req), req.body?.texto), (req, r) => ({ mensaje: r.id })))
 // Catálogo de WhatsApp Business y respuestas rápidas: los mismos del celular.
 app.get('/api/catalogo', ruta((req) => wa.catalogo({ fresco: req.query.fresco === '1' })))
-// Los autos publicados en la página, para mandar uno como card.
-app.get('/api/vehiculos', ruta(() => crm.vehiculosPublicados()))
 app.get('/api/respuestas', ruta(() => wa.listarRespuestasRapidas()))
 // Las respuestas rápidas son las mismas para todos (y las del celular): las cambia un administrador
 // ("Administrar respuestas", en el botón de respuestas rápidas del chat).
