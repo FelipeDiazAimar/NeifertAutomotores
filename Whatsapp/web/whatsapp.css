@@ -538,8 +538,25 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .catalogo-todo small { font-size: 12px; color: var(--ink-3); }
 .producto-fila img, .producto-sin-foto { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex: none; background: var(--hover); }
 .producto-sin-foto { display: grid; place-items: center; color: var(--ink-3); }
-.catalogo-marcas { margin-top: 8px; max-height: 76px; overflow-y: auto; }
-.catalogo-marcas:empty { display: none; }
+.catalogo-dlg { width: min(860px, calc(100vw - 24px)); }
+.catalogo-dlg input[type="search"] { width: 100%; margin-top: 10px; }
+.catalogo-filtros { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; }
+.catalogo-filtros:empty { display: none; }
+.catalogo-marcas { max-height: 64px; overflow-y: auto; }
+.catalogo-grilla { list-style: none; margin: 10px 0; padding: 0 2px 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 10px; max-height: min(58vh, 560px); overflow-y: auto; }
+.catalogo-grilla .empty { grid-column: 1 / -1; padding: 20px 8px; text-align: center; font-size: 13px; color: var(--ink-3); }
+.vehiculo-card { display: flex; flex-direction: column; width: 100%; height: 100%; border: 1px solid var(--line); border-radius: 14px; overflow: hidden; text-align: left; background: var(--solid); }
+.vehiculo-card:hover, .vehiculo-card:focus-visible { border-color: var(--wa); }
+.vehiculo-card:disabled { opacity: 0.6; }
+.vehiculo-foto { position: relative; aspect-ratio: 4 / 3; background: var(--hover); display: grid; place-items: center; color: var(--ink-3); }
+.vehiculo-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.vehiculo-foto em { position: absolute; top: 6px; left: 6px; font-style: normal; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--ink); color: var(--bg); }
+.vehiculo-datos { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 4px; min-width: 0; }
+.vehiculo-datos b { font-size: 13.5px; }
+.vehiculo-datos small { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.vehiculo-datos strong { font-size: 14px; margin-top: 2px; }
+.vehiculo-enviar { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 10px 10px; padding: 6px; border-radius: 10px; background: var(--wa-soft); color: var(--wa); font-size: 13px; font-weight: 600; }
+.vehiculo-enviar svg.i { width: 16px; height: 16px; }
 .respuesta-fila { display: flex; align-items: center; gap: 4px; }
 .respuesta-usar { flex: 1; min-width: 0; display: flex; flex-direction: column; padding: 8px; border-radius: 10px; text-align: left; }
 .respuesta-usar:hover { background: var(--hover); }

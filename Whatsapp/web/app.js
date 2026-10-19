@@ -2776,8 +2776,9 @@ async function escribirleA(telefono) {
   }
 }
 
-/* Catálogo de WhatsApp Business: el completo (enlace) o un producto. */
-let productos = null
+/* Catálogo de la página: se elige un auto y le llega como card (foto, datos, precio y enlace). */
+let vehiculos = null
+const filtroCatalogo = { tipo: '', marca: '' }
 
 const precioDe = (p) => {
   if (p.precio == null) return ''
@@ -2787,68 +2788,77 @@ const precioDe = (p) => {
     return `${p.moneda || '$'} ${fmtNum(p.precio)}`
   }
 }
-
-/* La marca es el comienzo del nombre del producto ("CHEVROLET TRACKER LT 1.2…"). */
-const MARCAS_DOBLES = ['ALFA ROMEO', 'ASTON MARTIN', 'GREAT WALL', 'LAND ROVER', 'MERCEDES BENZ', 'ROLLS ROYCE']
-const marcaDe = (p) => {
-  const nombre = String(p.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')
-  return MARCAS_DOBLES.find((m) => nombre.startsWith(`${m} `)) || nombre.split(' ')[0] || ''
-}
 const sinTildes = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
-let marcaCatalogo = ''
 
 async function abrirCatalogo(fresco = false) {
-  $('#catalogoBuscar').value = ''
-  if (!fresco) marcaCatalogo = ''
+  if (!fresco) {
+    $('#catalogoBuscar').value = ''
+    Object.assign(filtroCatalogo, { tipo: '', marca: '' })
+  }
   if (!$('#catalogoDlg').open) $('#catalogoDlg').showModal()
-  if (productos && !fresco) return renderCatalogo()
-  $('#catalogoLista').innerHTML = '<li class="empty">Trayendo el catálogo…</li>'
-  $('#catalogoMarcas').innerHTML = ''
+  // Lo que ya se trajo se muestra al instante; el stock cambia, así que se vuelve a pedir igual.
+  if (vehiculos) renderCatalogo()
+  else {
+    $('#catalogoLista').innerHTML = '<li class="empty">Trayendo los vehículos…</li>'
+    $('#catalogoFiltros').innerHTML = ''
+  }
   try {
-    productos = await api(`/api/catalogo${fresco ? '?fresco=1' : ''}`)
+    vehiculos = await api('/api/vehiculos')
     renderCatalogo()
   } catch (err) {
-    productos = null
-    $('#catalogoLista').innerHTML = `<li class="empty">${esc(err.message)}</li>`
+    if (!vehiculos) $('#catalogoLista').innerHTML = `<li class="empty">${esc(err.message)}</li>`
+    else toast(err.message)
   }
 }
 
+const chipCatalogo = (campo, id, label, n) =>
+  `<button class="chip" type="button" data-act="catalogo-filtro" data-campo="${campo}" data-valor="${esc(id)}" aria-pressed="${filtroCatalogo[campo] === id}">${esc(label)}<em class="tnum">${n}</em></button>`
+
+const cardVehiculo = (v) => `<li><button class="vehiculo-card" type="button" data-vehiculo="${esc(v.id)}" title="Mandar este vehículo al chat">
+    <span class="vehiculo-foto">${v.foto ? `<img src="${esc(v.foto)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ic('store')}${v.reservado ? '<em>Reservado</em>' : v.ceroKm ? '<em>0 km</em>' : ''}</span>
+    <span class="vehiculo-datos">
+      <b>${esc(`${v.marca} ${v.modelo}`)}</b>
+      ${v.version ? `<small>${esc(v.version)}</small>` : ''}
+      <small class="tnum">${esc([v.anio, v.km != null ? `${fmtNum(v.km)} km` : ''].filter(Boolean).join(' · '))}</small>
+      <strong class="tnum">${esc(precioDe(v) || 'Precio a consultar')}</strong>
+    </span>
+    <span class="vehiculo-enviar">${ic('send')}Enviar</span>
+  </button></li>`
+
 function renderCatalogo() {
+  const todos = vehiculos || []
   // Cada palabra buscada tiene que estar (en cualquier orden): "tracker 2022", "cronos drive".
   const palabras = sinTildes($('#catalogoBuscar').value).split(/\s+/).filter(Boolean)
-  const cuenta = new Map()
-  for (const p of productos || []) cuenta.set(marcaDe(p), (cuenta.get(marcaDe(p)) || 0) + 1)
-  if (!cuenta.has(marcaCatalogo)) marcaCatalogo = ''
-  const marcas = [...cuenta].filter(([m]) => m).sort(([a], [b]) => a.localeCompare(b))
-  $('#catalogoMarcas').innerHTML =
-    marcas.length > 1
-      ? [['', 'Todas', productos.length], ...marcas.map(([m, n]) => [m, m, n])]
-          .map(([id, label, n]) => `<button class="chip" type="button" data-act="catalogo-marca" data-valor="${esc(id)}" aria-pressed="${marcaCatalogo === id}">${esc(label)}<em class="tnum">${n}</em></button>`)
-          .join('')
-      : ''
-  const lista = (productos || []).filter((p) => {
-    if (marcaCatalogo && marcaDe(p) !== marcaCatalogo) return false
-    const texto = sinTildes(`${p.nombre} ${p.descripcion} ${p.retailerId || ''}`)
+  const delTipo = todos.filter((v) => !filtroCatalogo.tipo || (filtroCatalogo.tipo === '0km') === v.ceroKm)
+  const marcas = new Map()
+  for (const v of delTipo) if (v.marca) marcas.set(v.marca, (marcas.get(v.marca) || 0) + 1)
+  if (!marcas.has(filtroCatalogo.marca)) filtroCatalogo.marca = ''
+  const ceroKm = todos.filter((v) => v.ceroKm).length
+  $('#catalogoFiltros').innerHTML = todos.length
+    ? `<div class="chips">${chipCatalogo('tipo', '', 'Todos', todos.length)}${chipCatalogo('tipo', 'usados', 'Usados', todos.length - ceroKm)}${chipCatalogo('tipo', '0km', '0 km', ceroKm)}</div>
+       <div class="chips catalogo-marcas">${chipCatalogo('marca', '', 'Todas las marcas', delTipo.length)}${[...marcas]
+         .sort(([a], [b]) => a.localeCompare(b, 'es'))
+         .map(([m, n]) => chipCatalogo('marca', m, m, n))
+         .join('')}</div>`
+    : ''
+  const lista = delTipo.filter((v) => {
+    if (filtroCatalogo.marca && v.marca !== filtroCatalogo.marca) return false
+    const texto = sinTildes(`${v.marca} ${v.modelo} ${v.version} ${v.anio ?? ''} ${v.combustible} ${v.transmision}`)
     return palabras.every((w) => texto.includes(w))
   })
   $('#catalogoLista').innerHTML = lista.length
-    ? lista
-        .map((p) => `<li><button class="fwd-fila producto-fila" data-producto="${esc(p.id)}" title="Mandar este producto">
-            ${p.imagen ? `<img src="${esc(p.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : `<span class="producto-sin-foto">${ic('store')}</span>`}
-            <span><b>${esc(p.nombre)}</b><span class="tnum">${esc(precioDe(p) || p.descripcion.slice(0, 60))}</span></span>
-            <span class="fwd-check">${ic('send')}</span>
-          </button></li>`)
-        .join('')
-    : `<li class="empty">${productos?.length ? 'Ningún producto coincide.' : 'El catálogo de la línea está vacío.'}</li>`
+    ? lista.map(cardVehiculo).join('')
+    : `<li class="empty">${todos.length ? 'Ningún vehículo coincide.' : 'No hay vehículos publicados en la página.'}</li>`
 }
 
-async function mandarDelCatalogo(boton, ruta, json) {
+async function mandarVehiculo(boton) {
   if (!state.activo) return
   boton.disabled = true
   try {
-    const r = await api(`/api/chats/${enc(state.activo)}/${ruta}`, { method: 'POST', json })
+    const r = await api(`/api/chats/${enc(state.activo)}/vehiculo`, { method: 'POST', json: { id: boton.dataset.vehiculo } })
     $('#catalogoDlg').close()
     if (r?.enCola) toast('Sin conexión: quedó en la bandeja de salida y se manda solo cuando vuelva.', 5000)
+    else toast('Vehículo enviado.')
   } catch (err) {
     toast(err.message)
   } finally {
@@ -3006,10 +3016,9 @@ async function abrirMenuRapidas(boton) {
 function abrirMenuCatalogo(boton) {
   $('#menuCatalogo').innerHTML = `
     <div class="menu-titulo">Mandar el catálogo</div>
-    <button class="item catalogo-item" role="menuitem" data-act="adj-catalogo">${ic('search')}<span><b>Un vehículo</b><small>Buscalo por marca o modelo: le llega con foto y precio</small></span></button>
+    <button class="item catalogo-item" role="menuitem" data-act="adj-catalogo">${ic('search')}<span><b>Un vehículo de la página</b><small>Buscalo y filtralo: le llega con foto, datos y precio</small></span></button>
     <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-usados">${ic('store')}<span><b>Usados de la página</b><small>Enlace a /catalogo</small></span></button>
-    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-0km">${ic('store')}<span><b>0 km de la página</b><small>Enlace a /catalogo-0km</small></span></button>
-    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="whatsapp">${ic('wa')}<span><b>Catálogo de WhatsApp</b><small>La tarjeta con todos los productos</small></span></button>`
+    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-0km">${ic('store')}<span><b>0 km de la página</b><small>Enlace a /catalogo-0km</small></span></button>`
   mostrarMenuChat($('#menuCatalogo'), boton)
 }
 
@@ -3019,10 +3028,7 @@ async function enviarCatalogoRapido(cual) {
   cerrarMenusChat()
   if (!chat) return
   try {
-    const r =
-      cual === 'whatsapp'
-        ? await api(`/api/chats/${enc(chat)}/catalogo`, { method: 'POST', json: {} })
-        : await api(`/api/chats/${enc(chat)}/catalogo-web`, { method: 'POST', json: { cual: cual === 'web-0km' ? '0km' : 'usados' } })
+    const r = await api(`/api/chats/${enc(chat)}/catalogo-web`, { method: 'POST', json: { cual: cual === 'web-0km' ? '0km' : 'usados' } })
     toast(r?.enCola ? 'Sin conexión: el catálogo quedó en la bandeja de salida.' : 'Catálogo enviado.')
   } catch (err) {
     toast(err.message)
@@ -3599,11 +3605,6 @@ function conectarEventos() {
   })
   es.addEventListener('estado', (e) => onEstado(JSON.parse(e.data)))
   // Respuestas rápidas cambiadas (acá, en otra pestaña o en el celular).
-  // El catálogo guardado se actualizó (se trajo de nuevo de WhatsApp).
-  es.addEventListener('catalogo', (e) => {
-    productos = JSON.parse(e.data)
-    if ($('#catalogoDlg').open) renderCatalogo()
-  })
   es.addEventListener('importacion', (e) => avanceRespaldo(JSON.parse(e.data)))
   es.addEventListener('respuestas', (e) => {
     respuestas = JSON.parse(e.data)
@@ -3690,14 +3691,14 @@ document.addEventListener('click', async (e) => {
   if (!e.target.closest('#menuRapidas, #menuCatalogo, [data-act="btn-rapidas"], [data-act="btn-catalogo"]')) cerrarMenusChat()
   const emo = e.target.closest('[data-emoji]')
   if (emo) return ponerEmoji(emo.dataset.emoji)
-  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion],[data-contacto-fila],[data-producto],[data-rapida],[data-rapida-editar],[data-rapida-borrar],[data-escribirle],[data-catalogo-enviar]')
+  const t = e.target.closest('[data-chat],[data-filter],[data-play],[data-seek],[data-ver],[data-view],[data-act],[data-pref],[data-descargar],[data-opciones],[data-reaccionar],[data-cita],[data-velocidad],[data-revelar],[data-chat-act],[data-persona],[data-info-tab],[data-res],[data-fwd],[data-bajar],[data-salida-act],[data-mencion],[data-contacto-fila],[data-vehiculo],[data-rapida],[data-rapida-editar],[data-rapida-borrar],[data-escribirle],[data-catalogo-enviar]')
   if (!t) {
     if (e.target.id === 'lightbox') $('#lightbox').hidden = true
     return
   }
   if (t.dataset.mencion) return ponerMencion(t.dataset.mencion, t.dataset.nombre)
   if (t.dataset.contactoFila) return alternarContacto(t.dataset.contactoFila)
-  if (t.dataset.producto) return mandarDelCatalogo(t, 'producto', { id: t.dataset.producto })
+  if (t.dataset.vehiculo) return mandarVehiculo(t)
   if (t.dataset.rapida) return usarRespuesta(t.dataset.rapida)
   if (t.dataset.rapidaEditar) return mostrarFormRespuesta(respuestas?.find((r) => r.id === t.dataset.rapidaEditar) || null)
   if (t.dataset.rapidaBorrar) return borrarRespuesta(t.dataset.rapidaBorrar)
@@ -4015,8 +4016,7 @@ document.addEventListener('click', async (e) => {
     case 'contacto-enviar': enviarContactosElegidos(); break
     case 'cerrar-catalogo': $('#catalogoDlg').close(); break
     case 'catalogo-actualizar': abrirCatalogo(true); break
-    case 'catalogo-marca': marcaCatalogo = t.dataset.valor; renderCatalogo(); break
-    case 'catalogo-todo': mandarDelCatalogo(t, 'catalogo', {}); break
+    case 'catalogo-filtro': filtroCatalogo[t.dataset.campo] = t.dataset.valor; renderCatalogo(); break
     case 'cerrar-respuestas': $('#respuestasDlg').close(); break
     case 'respuesta-nueva': mostrarFormRespuesta({}); break
     case 'respuesta-cancelar': mostrarFormRespuesta(null); renderRespuestas(); break

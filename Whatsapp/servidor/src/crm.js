@@ -214,3 +214,42 @@ export async function crearTarea(jid, { titulo, descripcion, fecha, hora, priori
 export async function usuariosCrm() {
   return rest('usuarios?select=id,nombre,usuario,rol&activo=eq.true&order=nombre.asc')
 }
+
+/* ---------------- Vehículos de la página (para mandar uno a un chat) ---------------- */
+
+// Solo columnas públicas: nunca las privadas de crm.vehiculos (dueño, patente, nota…).
+const CAMPOS_VEHICULO = 'id,marca,modelo,version,anio,km,moneda,precio_contado,combustible,transmision,es_0km,estado,vehiculo_fotos(url,es_portada,orden)'
+// Lo mismo que muestra la página, sin los vendidos.
+const PUBLICADOS = 'publicado=eq.true&estado=in.(disponible,reservado)'
+
+const vistaVehiculo = (v) => {
+  const fotos = [...(v.vehiculo_fotos || [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  return {
+    id: v.id,
+    marca: v.marca || '',
+    modelo: v.modelo || '',
+    version: v.version || '',
+    anio: v.anio ?? null,
+    km: v.km ?? null,
+    moneda: v.moneda || 'ARS',
+    precio: v.precio_contado ?? null,
+    combustible: v.combustible || '',
+    transmision: v.transmision || '',
+    ceroKm: !!v.es_0km,
+    reservado: v.estado === 'reservado',
+    foto: (fotos.find((f) => f.es_portada) || fotos[0])?.url || null,
+  }
+}
+
+/** Los autos publicados en la página (disponibles y reservados), por marca y modelo. */
+export async function vehiculosPublicados() {
+  const filas = await rest(`vehiculos?select=${CAMPOS_VEHICULO}&${PUBLICADOS}&order=marca.asc,modelo.asc,anio.desc`)
+  return filas.map(vistaVehiculo)
+}
+
+export async function vehiculoPublicado(id) {
+  if (!id) throw error('Falta el vehículo')
+  const [v] = await rest(`vehiculos?select=${CAMPOS_VEHICULO}&${PUBLICADOS}&id=eq.${encodeURIComponent(id)}`)
+  if (!v) throw error('Ese vehículo ya no está publicado en la página', 404)
+  return vistaVehiculo(v)
+}

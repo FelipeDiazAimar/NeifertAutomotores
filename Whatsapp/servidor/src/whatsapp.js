@@ -54,7 +54,7 @@ import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
-import { aNotaDeVoz, duracionOgg, formaDeOnda, miniatura } from './audio.js'
+import { aJpeg, aNotaDeVoz, duracionOgg, formaDeOnda, miniatura } from './audio.js'
 import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
 import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos, medirR2 } from './archivos.js'
 import * as cuota from './cuota.js'
@@ -2727,6 +2727,38 @@ export function enviarCatalogoWeb(chatId, cual = 'usados', texto = '') {
   const enlace = `${new URL(CRM_URL).origin}${camino}`
   return enviarOEncolar(chatId, { tipo: 'texto', texto: texto ? `${String(texto).trim()}
 ${enlace}` : enlace })
+}
+
+/** El texto de la card de un auto de la página: nombre, datos, precio y el enlace a su ficha. */
+export function textoVehiculo(v, enlace) {
+  const datos = [v.anio, v.km != null ? `${Number(v.km).toLocaleString('es-AR')} km` : null, v.combustible, v.transmision].filter(Boolean).join(' · ')
+  const precio =
+    v.precio != null
+      ? new Intl.NumberFormat('es-AR', { style: 'currency', currency: v.moneda || 'ARS', maximumFractionDigits: 0 }).format(v.precio)
+      : 'Precio a consultar'
+  return [`*${[v.marca, v.modelo, v.version].filter(Boolean).join(' ')}*`, datos, precio, v.reservado ? 'Reservado' : null, enlace].filter(Boolean).join('\n')
+}
+
+/**
+ * Un auto de la página como card: la foto de portada con los datos y el enlace a su ficha
+ * (/catalogo/:id o /catalogo-0km/:id, en el dominio del CRM). Sin foto, va solo el texto.
+ */
+export async function enviarVehiculo(chatId, v) {
+  if (!CRM_URL) throw new Error('Falta CRM_URL en la configuración: no se sabe la dirección de la página')
+  const enlace = `${new URL(CRM_URL).origin}${v.ceroKm ? '/catalogo-0km' : '/catalogo'}/${v.id}`
+  const caption = textoVehiculo(v, enlace)
+  let foto = null
+  if (v.foto) {
+    try {
+      const r = await fetch(v.foto, { signal: AbortSignal.timeout(20000) })
+      if (!r.ok) throw new Error(`No se pudo bajar la foto (${r.status})`)
+      foto = await aJpeg(Buffer.from(await r.arrayBuffer()))
+    } catch (err) {
+      log('aviso', 'El vehículo salió sin foto', `${v.marca} ${v.modelo} · ${err.message}`)
+    }
+  }
+  if (!foto) return enviarOEncolar(chatId, { tipo: 'texto', texto: caption })
+  return enviarOEncolar(chatId, { tipo: 'archivo', mime: 'image/jpeg', nombre: `${v.marca} ${v.modelo}.jpg`.trim(), caption }, foto)
 }
 
 const numeroPropio = () => String(yo?.telefono || numeroLinea() || '').replace(/\D/g, '')

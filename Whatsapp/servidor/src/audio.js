@@ -236,6 +236,11 @@ export async function formaDeOnda(audio, barras = 64) {
   return picos.map((p) => Math.round((p / max) * 100))
 }
 
+/** Foto en JPEG (1600 px de ancho como mucho): las de la página son webp y WhatsApp quiere JPEG. */
+export function aJpeg(buffer) {
+  return ffmpeg(['-i', 'pipe:0', '-vf', "scale='min(1600,iw)':-2", '-frames:v', '1', '-f', 'image2', '-c:v', 'mjpeg', '-q:v', '3', 'pipe:1'], buffer)
+}
+
 /**
  * Miniatura JPEG (480 px de ancho como mucho) de una foto o del primer segundo de un
  * video. Así la lista de mensajes no baja fotos de varios MB para mostrar una vista previa.
