@@ -225,7 +225,8 @@
     <button class="icon-btn" type="button" data-act="catalogo-actualizar" aria-label="Volver a traer el catálogo" title="Volver a traer"><svg class="i"><use href="#i-refresh"/></svg></button>
   </div>
   <button class="catalogo-todo" type="button" data-act="catalogo-todo"><svg class="i"><use href="#i-store"/></svg><span><b>Mandar el catálogo completo</b><small>Le llega el enlace con todos los productos</small></span></button>
-  <input type="search" id="catalogoBuscar" placeholder="Buscar un producto" aria-label="Buscar un producto">
+  <input type="search" id="catalogoBuscar" placeholder="Buscar marca, modelo, año…" aria-label="Buscar un vehículo">
+  <div class="chips catalogo-marcas" id="catalogoMarcas" role="group" aria-label="Filtrar por marca"></div>
   <ul class="fwd-lista" id="catalogoLista"></ul>
   <div class="btn-row">
     <button class="btn ghost" type="button" data-act="cerrar-catalogo">Cerrar</button>

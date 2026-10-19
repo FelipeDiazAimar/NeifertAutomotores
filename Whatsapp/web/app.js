@@ -2788,11 +2788,22 @@ const precioDe = (p) => {
   }
 }
 
+/* La marca es el comienzo del nombre del producto ("CHEVROLET TRACKER LT 1.2…"). */
+const MARCAS_DOBLES = ['ALFA ROMEO', 'ASTON MARTIN', 'GREAT WALL', 'LAND ROVER', 'MERCEDES BENZ', 'ROLLS ROYCE']
+const marcaDe = (p) => {
+  const nombre = String(p.nombre || '').trim().toUpperCase().replace(/\s+/g, ' ')
+  return MARCAS_DOBLES.find((m) => nombre.startsWith(`${m} `)) || nombre.split(' ')[0] || ''
+}
+const sinTildes = (t) => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+let marcaCatalogo = ''
+
 async function abrirCatalogo(fresco = false) {
   $('#catalogoBuscar').value = ''
+  if (!fresco) marcaCatalogo = ''
   if (!$('#catalogoDlg').open) $('#catalogoDlg').showModal()
   if (productos && !fresco) return renderCatalogo()
   $('#catalogoLista').innerHTML = '<li class="empty">Trayendo el catálogo…</li>'
+  $('#catalogoMarcas').innerHTML = ''
   try {
     productos = await api(`/api/catalogo${fresco ? '?fresco=1' : ''}`)
     renderCatalogo()
@@ -2803,8 +2814,23 @@ async function abrirCatalogo(fresco = false) {
 }
 
 function renderCatalogo() {
-  const q = $('#catalogoBuscar').value.trim().toLowerCase()
-  const lista = (productos || []).filter((p) => !q || `${p.nombre} ${p.descripcion} ${p.retailerId || ''}`.toLowerCase().includes(q))
+  // Cada palabra buscada tiene que estar (en cualquier orden): "tracker 2022", "cronos drive".
+  const palabras = sinTildes($('#catalogoBuscar').value).split(/\s+/).filter(Boolean)
+  const cuenta = new Map()
+  for (const p of productos || []) cuenta.set(marcaDe(p), (cuenta.get(marcaDe(p)) || 0) + 1)
+  if (!cuenta.has(marcaCatalogo)) marcaCatalogo = ''
+  const marcas = [...cuenta].filter(([m]) => m).sort(([a], [b]) => a.localeCompare(b))
+  $('#catalogoMarcas').innerHTML =
+    marcas.length > 1
+      ? [['', 'Todas', productos.length], ...marcas.map(([m, n]) => [m, m, n])]
+          .map(([id, label, n]) => `<button class="chip" type="button" data-act="catalogo-marca" data-valor="${esc(id)}" aria-pressed="${marcaCatalogo === id}">${esc(label)}<em class="tnum">${n}</em></button>`)
+          .join('')
+      : ''
+  const lista = (productos || []).filter((p) => {
+    if (marcaCatalogo && marcaDe(p) !== marcaCatalogo) return false
+    const texto = sinTildes(`${p.nombre} ${p.descripcion} ${p.retailerId || ''}`)
+    return palabras.every((w) => texto.includes(w))
+  })
   $('#catalogoLista').innerHTML = lista.length
     ? lista
         .map((p) => `<li><button class="fwd-fila producto-fila" data-producto="${esc(p.id)}" title="Mandar este producto">
@@ -2980,10 +3006,10 @@ async function abrirMenuRapidas(boton) {
 function abrirMenuCatalogo(boton) {
   $('#menuCatalogo').innerHTML = `
     <div class="menu-titulo">Mandar el catálogo</div>
+    <button class="item catalogo-item" role="menuitem" data-act="adj-catalogo">${ic('search')}<span><b>Un vehículo</b><small>Buscalo por marca o modelo: le llega con foto y precio</small></span></button>
     <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-usados">${ic('store')}<span><b>Usados de la página</b><small>Enlace a /catalogo</small></span></button>
     <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="web-0km">${ic('store')}<span><b>0 km de la página</b><small>Enlace a /catalogo-0km</small></span></button>
-    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="whatsapp">${ic('wa')}<span><b>Catálogo de WhatsApp</b><small>La tarjeta con todos los productos</small></span></button>
-    <button class="item menu-pie" role="menuitem" data-act="adj-catalogo">${ic('search')}Elegir un producto…</button>`
+    <button class="item catalogo-item" role="menuitem" data-catalogo-enviar="whatsapp">${ic('wa')}<span><b>Catálogo de WhatsApp</b><small>La tarjeta con todos los productos</small></span></button>`
   mostrarMenuChat($('#menuCatalogo'), boton)
 }
 
@@ -3989,6 +4015,7 @@ document.addEventListener('click', async (e) => {
     case 'contacto-enviar': enviarContactosElegidos(); break
     case 'cerrar-catalogo': $('#catalogoDlg').close(); break
     case 'catalogo-actualizar': abrirCatalogo(true); break
+    case 'catalogo-marca': marcaCatalogo = t.dataset.valor; renderCatalogo(); break
     case 'catalogo-todo': mandarDelCatalogo(t, 'catalogo', {}); break
     case 'cerrar-respuestas': $('#respuestasDlg').close(); break
     case 'respuesta-nueva': mostrarFormRespuesta({}); break
