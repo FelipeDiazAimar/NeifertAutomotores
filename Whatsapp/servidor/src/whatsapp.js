@@ -86,7 +86,11 @@ import {
   telefonoDe,
   upsertChat,
   vistaMensaje,
+  chatsArchivados,
   contarMarcas,
+  indiceWa,
+  indicesWa,
+  setIndiceWa,
   estaArchivado,
   buscarChat,
   esGrupo,
@@ -1102,8 +1106,7 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   if (tipoUpsert === 'notify' && !deMi) {
     sumarNoLeido(chatId)
     // Igual que el celular: si la cuenta tiene activado "desarchivar al recibir mensajes", el chat vuelve a la lista.
-    const creds = sock?.authState?.creds || authActual?.creds
-    if (estaArchivado(chatId) && creds?.accountSettings?.unarchiveChats) setArchivado(chatId, false)
+    if (estaArchivado(chatId) && desarchivaAlRecibir()) setArchivado(chatId, false)
   }
 
   // 'liberado': se borró para no pasar el tope de R2 (ver liberarEspacio); no se vuelve a bajar solo.
@@ -1516,10 +1519,12 @@ let cambiosDeArchivo = 0 // chats que pasaron de archivado a no archivado (o al 
 
 // Archivados tal como los mandó WhatsApp en esta sincronización: id del chat → id crudo.
 const archivadosVistos = new Map()
-// Con qué id identifica WhatsApp a cada chat en las marcas (archivar, fijar, silenciar):
-// el teléfono o el LID. Los cambios del panel tienen que ir con el mismo, o el celular no
-// los reconoce como de ese chat.
-const indiceWa = new Map() // id del chat acá → id en las marcas de WhatsApp
+
+/** "Desarchivar al recibir mensajes" del celular: lo último que mandó WhatsApp, o lo de la sesión. */
+function desarchivaAlRecibir() {
+  const creds = sock?.authState?.creds || authActual?.creds
+  return !!(ajusteDesarchivar ?? creds?.accountSettings?.unarchiveChats)
+}
 
 /** ¿La otra persona escribió después de `ts` (segundos)? Para cuando no está el mensaje de corte. */
 function recibioDespuesDeTs(id, ts) {
@@ -1533,9 +1538,7 @@ function archivadoVigente(ch, id) {
     return false
   }
   archivadosVistos.set(id, ch.id)
-  const creds = sock?.authState?.creds || authActual?.creds
-  const desarchiva = ajusteDesarchivar ?? creds?.accountSettings?.unarchiveChats
-  if (!desarchiva) return true
+  if (!desarchivaAlRecibir()) return true
   const corte = rangoArchivado.get(ch.id)
   // Primero por el mensaje de corte; si no está guardado, por su fecha.
   let despues = corte?.ids?.length ? recibioDespuesDe(id, corte.ids) : null
@@ -1578,7 +1581,7 @@ async function procesarChats(chats, { crearGrupos = false } = {}) {
     if (ignorar(ch.id)) continue
     const id = ch.pnJid ? jidNormalizedUser(ch.pnJid) : await jidDelChat({ remoteJid: ch.id })
     if (ignorar(id)) continue
-    if (cambiaArchivo || cambiaFijado || cambiaSilencio) indiceWa.set(id, jidNormalizedUser(ch.id))
+    if (cambiaArchivo || cambiaFijado || cambiaSilencio) setIndiceWa(id, jidNormalizedUser(ch.id))
     // Un grupo que WhatsApp lista como nuevo entra a la bandeja sin esperar un mensaje.
     if (crearGrupos && isJidGroup(id) && !existeChat(id)) {
       upsertChat(id, { ultimoTs: toNumber(ch.conversationTimestamp) || 0 })
@@ -1603,7 +1606,7 @@ const COLECCIONES_CHATS = ['regular_high', 'regular_low', 'critical_unblock_low'
 const COLECCIONES_AL_DIA = [...COLECCIONES_CHATS, 'regular']
 // Sube cuando cambia cómo se interpretan los archivados: obliga a una sincronización
 // completa al conectar, para corregir lo que quedó guardado con la regla anterior.
-const REGLA_ARCHIVADOS = 2
+const REGLA_ARCHIVADOS = 3
 
 /**
  * Al reconectar: trae lo que se cambió en el celular mientras el servidor estuvo apagado
@@ -1648,10 +1651,19 @@ export async function sincronizarChats() {
     // Los eventos se procesan apenas termina la sincronización: se espera un momento antes de contar.
     await new Promise((r) => setTimeout(r, 1500))
     reevaluarArchivados()
+    // La foto completa trae todos los archivados del celular: lo archivado solo acá (por un
+    // cambio que el celular no tomó) vuelve a la bandeja. Lo que todavía está saliendo, no.
+    let soloAca = 0
+    for (const id of chatsArchivados()) {
+      if (archivadosVistos.has(id) || colaMarcas.has(`${id}|archivar`)) continue
+      if (setArchivado(id, false)) soloAca++
+    }
+    cambiosDeArchivo += soloAca
     setMeta({ chatsSincronizados: Date.now(), reglaArchivados: REGLA_ARCHIVADOS })
-    log('info', 'Archivados revisados', `${cuentaArchivo.siguen} siguen · ${cuentaArchivo.vuelven} volvieron a la bandeja por mensajes nuevos · ${cuentaArchivo.sinCorte} sin el mensaje de corte guardado · desarchivar al recibir: ${ajusteDesarchivar ?? 'sin dato'}`)
-    const porLid = [...indiceWa.values()].filter((j) => j.endsWith('@lid')).length
-    log('info', 'Ids de las marcas de WhatsApp', `${porLid} chats por LID · ${indiceWa.size - porLid} por teléfono o grupo`)
+    log('info', 'Archivados revisados', `${cuentaArchivo.siguen} siguen · ${cuentaArchivo.vuelven} volvieron a la bandeja por mensajes nuevos · ${cuentaArchivo.sinCorte} sin el mensaje de corte guardado · ${soloAca} archivados solo en el panel volvieron a la bandeja · desarchivar al recibir: ${ajusteDesarchivar ?? 'sin dato'}`)
+    const ids = indicesWa()
+    const porLid = ids.filter((j) => j.endsWith('@lid')).length
+    log('info', 'Ids de las marcas de WhatsApp', `${porLid} chats por LID · ${ids.length - porLid} por teléfono o grupo`)
     Object.assign(cuentaArchivo, { siguen: 0, vuelven: 0, sinCorte: 0 })
     const r = contarMarcas()
     log('ok', 'Chats sincronizados', `${r.archivados} archivados · ${r.fijados} fijados`)
@@ -1895,8 +1907,11 @@ export async function salirDelGrupo(chatId) {
 export const DURACIONES_SILENCIO = { '8h': 8 * 3600e3, '1s': 7 * 24 * 3600e3, siempre: null }
 
 /** WhatsApp pide el último mensaje del chat para saber a qué altura aplicar el cambio. */
-/** El id del chat como lo usa WhatsApp en las marcas (ver indiceWa). */
-const jidMarcas = (chatId) => indiceWa.get(chatId) || chatId
+/**
+ * El id del chat como lo usa WhatsApp en las marcas (ver indiceWa). Un chat que nunca tuvo
+ * marcas va como los mensajes (ver destinoDe): al LID si se conoce; si no, al número.
+ */
+const jidMarcas = (chatId) => indiceWa(chatId) || (isPnUser(chatId) && lidDePn(chatId)) || chatId
 
 /**
  * El último mensaje del chat, para el "hasta acá" de archivar o marcar leído. La clave va
@@ -2009,7 +2024,7 @@ async function enviarMarca({ chatId, mod, descripcion, alFallar }) {
       if (!sock || conexion !== 'conectado') throw new Error('WhatsApp no está conectado')
       await sock.chatModify(mod, jidMarcas(chatId))
       if (descripcion) {
-        const como = !indiceWa.has(chatId) ? 'id sin confirmar por WhatsApp' : jidMarcas(chatId).endsWith('@lid') ? 'por LID' : 'por teléfono o grupo'
+        const como = !indiceWa(chatId) ? 'id sin confirmar por WhatsApp' : jidMarcas(chatId).endsWith('@lid') ? 'por LID' : 'por teléfono o grupo'
         log('info', 'Cambio enviado al celular', `${descripcion} · ${nombreDe(chatId)} · ${como}`)
       }
       return

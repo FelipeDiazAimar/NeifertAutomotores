@@ -227,6 +227,7 @@ export async function cargarTodo() {
     archivados: marcas.archivados || {},
     fijados: marcas.fijados || {},
     silenciados: marcas.silenciados || {},
+    indiceWa: marcas.indiceWa || {},
   }
 
   // Mensajes de a tandas, ordenados por clave para poder paginar sin OFFSET.
@@ -363,7 +364,7 @@ async function volcar(cliente, { mensajes, chats, contactos, estadoKv, borrar, b
 }
 
 const kvDe = (estado) => [
-  { clave: 'marcas', valor: { archivados: estado.archivados, fijados: estado.fijados, silenciados: estado.silenciados } },
+  { clave: 'marcas', valor: { archivados: estado.archivados, fijados: estado.fijados, silenciados: estado.silenciados, indiceWa: estado.indiceWa } },
   { clave: 'lids', valor: estado.lids },
   { clave: 'meta', valor: estado.meta },
   { clave: 'fotos', valor: estado.fotos },

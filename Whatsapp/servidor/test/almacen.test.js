@@ -94,3 +94,29 @@ describe('LID (identificador interno de WhatsApp)', () => {
     expect(a.lidDePn('5493564000000@s.whatsapp.net')).toBeNull()
   })
 })
+
+describe('archivados y el id de las marcas de WhatsApp', () => {
+  it('el id con que WhatsApp marca cada chat queda guardado (sobrevive a un reinicio)', async () => {
+    const JID = '5493406000777@s.whatsapp.net'
+    expect(a.indiceWa(JID)).toBeNull()
+    a.setIndiceWa(JID, '161000000000777@lid')
+    expect(a.indiceWa(JID)).toBe('161000000000777@lid')
+    expect(a.indicesWa()).toContain('161000000000777@lid')
+    // Se escribe en el estado de la línea, no solo en memoria.
+    await new Promise((r) => setTimeout(r, 600))
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const { LINEA_DIR } = await import('../src/config.js')
+    const guardado = fs.readdirSync(LINEA_DIR).filter((f) => f.endsWith('.json')).map((f) => fs.readFileSync(path.join(LINEA_DIR, f), 'utf8')).join('')
+    expect(guardado).toContain('161000000000777@lid')
+  })
+
+  it('lista los chats archivados guardados', () => {
+    const JID = '5493406000778@s.whatsapp.net'
+    a.upsertChat(JID, { ultimoTs: 1 })
+    a.setArchivado(JID, true)
+    expect(a.chatsArchivados()).toContain(JID)
+    a.setArchivado(JID, false)
+    expect(a.chatsArchivados()).not.toContain(JID)
+  })
+})

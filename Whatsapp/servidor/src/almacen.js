@@ -85,6 +85,7 @@ function completarEstado() {
   estado.fotos ??= {}
   estado.carpetas ??= {}
   estado.silenciados ??= {}
+  estado.indiceWa ??= {}
   estado.config = { ...CONFIG_INICIAL, ...estado.config }
 }
 completarEstado()
@@ -182,6 +183,19 @@ export const pnDeLid = (lid) => estado.lids[lid] || null
 /* ---------------- Archivados, fijados y marcas de sincronización ---------------- */
 
 export const estaArchivado = (jid) => !!estado.archivados[jid]
+export const chatsArchivados = () => Object.keys(estado.archivados)
+/*
+ * Con qué id identifica WhatsApp a cada chat en las marcas (archivar, fijar, silenciar): el
+ * teléfono o el LID. Queda guardado: si se perdiera al reiniciar, archivar desde el panel
+ * saldría con un id que el celular no reconoce como de ese chat.
+ */
+export const indiceWa = (jid) => estado.indiceWa[jid] || null
+export const indicesWa = () => Object.values(estado.indiceWa)
+export function setIndiceWa(jid, wa) {
+  if (estado.indiceWa[jid] === wa) return
+  estado.indiceWa[jid] = wa
+  guardarEstado()
+}
 export const fijadoDe = (jid) => estado.fijados[jid] || null
 export const silenciadoDe = (jid) => estado.silenciados[jid] || null
 export const buscarChat = (jid) => estado.chats[jid] || null
