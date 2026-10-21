@@ -8,9 +8,9 @@ import {
 } from '@/crm/lib/vistas.js'
 
 describe('vistas.js', () => {
-  it('VISTAS tiene las 13 vistas top-level en orden', () => {
+  it('VISTAS tiene las 14 vistas top-level en orden', () => {
     expect(VISTAS.map((v) => v.key)).toEqual([
-      'panel', 'clientes', 'vehiculos', 'peritaje', 'gestoria', 'tareas', 'alertas', 'usuarios', 'roles',
+      'panel', 'clientes', 'vehiculos', 'presupuestos', 'peritaje', 'gestoria', 'tareas', 'alertas', 'usuarios', 'roles',
       'leads', 'contenido', 'estadisticas', 'admin',
     ])
   })
@@ -26,6 +26,7 @@ describe('vistas.js', () => {
     it('subrutas mapean a su vista', () => {
       expect(vistaDeRuta('/crm/clientes/abc-123')).toBe('clientes')
       expect(vistaDeRuta('/crm/vehiculos')).toBe('vehiculos')
+      expect(vistaDeRuta('/crm/presupuestos')).toBe('presupuestos')
       expect(vistaDeRuta('/crm/peritaje')).toBe('peritaje')
       expect(vistaDeRuta('/crm/gestoria')).toBe('gestoria')
       expect(vistaDeRuta('/crm/tareas')).toBe('tareas')

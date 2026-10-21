@@ -2,7 +2,7 @@ import { Link, NavLink, useNavigate } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import {
   X, Car, Bell, LayoutDashboard, LayoutTemplate, BarChart3, Home, UserCog, LogOut, Users, ListTodo,
-  ClipboardCheck, FileStack, MessageCircle,
+  ClipboardCheck, FileStack, FileText, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import Logo from '@/components/common/Logo'
@@ -17,6 +17,7 @@ const NAV = [
   { to: '/crm', label: 'Panel', icon: LayoutDashboard, vista: 'panel', end: true },
   { to: '/admin/crm', label: 'Carga Leads', icon: Users, vista: 'leads' },
   { to: '/crm/vehiculos', label: 'Catálogo', icon: Car, vista: 'vehiculos' },
+  { to: '/crm/presupuestos', label: 'Presupuestos', icon: FileText, vista: 'presupuestos' },
   { to: '/crm/clientes', label: 'Clientes', icon: Users, vista: 'clientes' },
   { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas', vista: 'tareas' },
   { to: '/crm/alertas', label: 'Alertas', icon: Bell, vista: 'alertas' },

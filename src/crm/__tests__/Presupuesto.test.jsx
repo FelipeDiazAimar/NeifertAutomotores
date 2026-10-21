@@ -20,8 +20,25 @@ class RO {
 }
 globalThis.ResizeObserver ??= RO
 
+const plantillaHolder = vi.hoisted(() => ({
+  guardar: { mutate: vi.fn(), isPending: false },
+  puedeEditar: true,
+}))
+vi.mock('../hooks/usePlantillaPresupuesto.js', () => ({
+  usePlantillaPresupuesto: () => ({
+    plantilla: null,
+    cargando: false,
+    error: null,
+    guardar: plantillaHolder.guardar,
+    puedeEditar: plantillaHolder.puedeEditar,
+  }),
+}))
+vi.mock('../hooks/useCrmPerfil.js', () => ({
+  useCrmPerfil: () => ({ id: 'u1', rol: 'admin', esAdmin: true }),
+}))
+
 const { default: FichaVehiculo } = await import('../components/FichaVehiculo.jsx')
-const { construirDatosPresupuesto, tituloVehiculo } = await import('../lib/presupuestoTemplate.js')
+const { construirDatosPresupuesto, formatearPrecio, tituloVehiculo } = await import('../lib/presupuestoTemplate.js')
 
 const v = {
   id: 'v1',
@@ -49,13 +66,24 @@ function wrap(ui) {
 }
 
 describe('Presupuesto vehículo', () => {
-  beforeEach(() => localStorage.clear())
+  beforeEach(() => {
+    localStorage.clear()
+    plantillaHolder.guardar.mutate.mockClear()
+    plantillaHolder.puedeEditar = true
+  })
 
   it('construye título y precio desde el vehículo', () => {
     const d = construirDatosPresupuesto(v)
     expect(tituloVehiculo(v)).toBe('CHEVROLET S-10 WT C/D 4X2')
     expect(d.precioEntrega).toMatch(/45\.500\.000/)
     expect(d.financiacion).toHaveLength(6)
+  })
+
+  it('formatea USD con prefijo y respeta la moneda del vehículo', () => {
+    expect(formatearPrecio(14100, 'USD')).toBe('USD 14.100')
+    expect(formatearPrecio(45500000, 'ARS')).toBe('$45.500.000')
+    const d = construirDatosPresupuesto({ ...v, moneda: 'USD', precio_contado: 14100 }, {}, null)
+    expect(d.precioEntrega).toBe('USD 14.100')
   })
 
   it('el botón Presupuesto está a la izquierda de Editar y abre el modal con preview', async () => {
@@ -102,13 +130,25 @@ describe('Presupuesto vehículo', () => {
     expect(precio).toBeInTheDocument()
   })
 
-  it('Editar plantilla muestra el formulario y guarda', async () => {
+  it('Editar plantilla muestra el formulario y guarda en la plantilla compartida', async () => {
     const user = userEvent.setup()
     wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
     await user.click(screen.getByRole('button', { name: /presupuesto/i }))
     await user.click(await screen.findByTestId('presupuesto-editar'))
     expect(screen.getByLabelText(/título \(vehículo\)/i)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: /guardar plantilla/i }))
-    expect(localStorage.getItem('nf-presupuesto-template-v1')).toContain('financiacion')
+    expect(plantillaHolder.guardar.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ incluye: expect.any(String), financiacion: expect.any(Array) }),
+      expect.anything(),
+    )
+  })
+
+  it('sin permiso de edición no muestra Editar plantilla', async () => {
+    plantillaHolder.puedeEditar = false
+    const user = userEvent.setup()
+    wrap(<FichaVehiculo vehiculo={v} onCambiarEstado={vi.fn()} onEliminar={vi.fn()} puedeEliminar={false} />)
+    await user.click(screen.getByRole('button', { name: /presupuesto/i }))
+    await screen.findByTestId('presupuesto-plantilla')
+    expect(screen.queryByTestId('presupuesto-editar')).not.toBeInTheDocument()
   })
 })

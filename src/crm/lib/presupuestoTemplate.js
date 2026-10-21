@@ -9,10 +9,11 @@ export function fechaHoyAR(d = new Date()) {
   return `${dd}/${mm}/${yyyy}`
 }
 
-export function formatearPrecio(n) {
+export function formatearPrecio(n, moneda) {
   if (n == null || n === '') return '—'
   const num = Number(n)
   if (Number.isNaN(num)) return String(n)
+  if (String(moneda).toUpperCase() === 'USD') return `USD ${nf.format(num)}`
   return `$${nf.format(num)}`
 }
 
@@ -91,10 +92,12 @@ export function limpiarPlantillaGuardada() {
   }
 }
 
-/** Datos completos para renderizar: mezcla vehículo + plantilla guardada + overrides. */
-export function construirDatosPresupuesto(vehiculo = {}, overrides = {}) {
-  const guardada = cargarPlantillaGuardada()
-  const financiacion = (overrides.financiacion ?? guardada.financiacion ?? PRESUPUESTO_DEFAULTS.financiacion).map(
+/** Datos completos para renderizar: mezcla vehículo + plantilla + overrides.
+ *  `plantilla` es la plantilla compartida (DB); si se omite, se usa la
+ *  guardada en este navegador (compatibilidad). */
+export function construirDatosPresupuesto(vehiculo = {}, overrides = {}, plantilla) {
+  const base = plantilla ?? cargarPlantillaGuardada()
+  const financiacion = (overrides.financiacion ?? base.financiacion ?? PRESUPUESTO_DEFAULTS.financiacion).map(
     (f, i) => ({
       entrega: f?.entrega ?? FINANCIACION_DEFAULT[i]?.entrega ?? '',
       cuotas: f?.cuotas ?? FINANCIACION_DEFAULT[i]?.cuotas ?? '',
@@ -104,15 +107,27 @@ export function construirDatosPresupuesto(vehiculo = {}, overrides = {}) {
     fecha: overrides.fecha ?? fechaHoyAR(),
     titulo: overrides.titulo ?? tituloVehiculo(vehiculo),
     subtitulo: overrides.subtitulo ?? subtituloVehiculo(vehiculo),
-    precioEntrega: overrides.precioEntrega ?? formatearPrecio(vehiculo.precio_contado),
-    patentamientoMonto: overrides.patentamientoMonto ?? guardada.patentamientoMonto ?? '$2.500.000',
-    incluye: overrides.incluye ?? guardada.incluye ?? PRESUPUESTO_DEFAULTS.incluye,
-    regalo: overrides.regalo ?? guardada.regalo ?? PRESUPUESTO_DEFAULTS.regalo,
-    condiciones: overrides.condiciones ?? guardada.condiciones ?? PRESUPUESTO_DEFAULTS.condiciones,
+    precioEntrega: overrides.precioEntrega ?? formatearPrecio(vehiculo.precio_contado, vehiculo.moneda),
+    patentamientoMonto: overrides.patentamientoMonto ?? base.patentamientoMonto ?? '$2.500.000',
+    incluye: overrides.incluye ?? base.incluye ?? PRESUPUESTO_DEFAULTS.incluye,
+    regalo: overrides.regalo ?? base.regalo ?? PRESUPUESTO_DEFAULTS.regalo,
+    condiciones: overrides.condiciones ?? base.condiciones ?? PRESUPUESTO_DEFAULTS.condiciones,
     patentamientoTexto:
-      overrides.patentamientoTexto ?? guardada.patentamientoTexto ?? PRESUPUESTO_DEFAULTS.patentamientoTexto,
-    fechaLimite: overrides.fechaLimite ?? guardada.fechaLimite ?? PRESUPUESTO_DEFAULTS.fechaLimite,
+      overrides.patentamientoTexto ?? base.patentamientoTexto ?? PRESUPUESTO_DEFAULTS.patentamientoTexto,
+    fechaLimite: overrides.fechaLimite ?? base.fechaLimite ?? PRESUPUESTO_DEFAULTS.fechaLimite,
     financiacion,
+  }
+}
+
+/** Solo los campos de plantilla (lo que se comparte y persiste). */
+export function extraerPlantilla(datos = {}) {
+  return {
+    incluye: datos.incluye,
+    regalo: datos.regalo,
+    condiciones: datos.condiciones,
+    patentamientoTexto: datos.patentamientoTexto,
+    fechaLimite: datos.fechaLimite,
+    financiacion: (datos.financiacion ?? []).map((f) => ({ entrega: f?.entrega ?? '', cuotas: f?.cuotas ?? '' })),
   }
 }
 

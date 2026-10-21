@@ -63,3 +63,37 @@ export async function copiarPresupuestoImagen(nodo) {
   await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
   return blob
 }
+
+/** Manda el presupuesto a la impresora (genera el PNG y abre el diálogo). */
+export async function imprimirPresupuesto(nodo, titulo = 'Presupuesto') {
+  if (!nodo) throw new Error('Nada para imprimir')
+  const dataUrl = await toPng(nodo, {
+    cacheBust: true,
+    pixelRatio: 2,
+    backgroundColor: '#06070b',
+  })
+  const iframe = document.createElement('iframe')
+  iframe.style.position = 'fixed'
+  iframe.style.right = '0'
+  iframe.style.bottom = '0'
+  iframe.style.width = '0'
+  iframe.style.height = '0'
+  iframe.style.border = '0'
+  document.body.appendChild(iframe)
+  const doc = iframe.contentDocument
+  doc.open()
+  doc.write(
+    `<html><head><title>${titulo}</title><style>@page{margin:0}body{margin:0}img{width:100%;display:block}</style></head><body><img src="${dataUrl}"/></body></html>`,
+  )
+  doc.close()
+  await new Promise((resolver) => {
+    const img = doc.querySelector('img')
+    if (img?.complete) return resolver()
+    img.onload = () => resolver()
+    img.onerror = () => resolver()
+    setTimeout(resolver, 3000)
+  })
+  iframe.contentWindow.focus()
+  iframe.contentWindow.print()
+  setTimeout(() => iframe.remove(), 5000)
+}

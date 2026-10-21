@@ -35,4 +35,24 @@ describe('AppSidebar', () => {
     const link = screen.getByText('Panel').closest('a')
     expect(link).toHaveAttribute('href', '/crm')
   })
+
+  it('sin la vista no muestra Presupuestos', () => {
+    render(<MemoryRouter><AppSidebar /></MemoryRouter>)
+    expect(screen.queryByText('Presupuestos')).not.toBeInTheDocument()
+  })
+
+  it('con la vista muestra Presupuestos y apunta a /crm/presupuestos', async () => {
+    vi.resetModules()
+    vi.doMock('@/crm/hooks/useMisVistas', () => ({
+      useMisVistas: () => ({ vistas: ['panel', 'presupuestos'], cargando: false }),
+    }))
+    const { default: SidebarConPresupuestos } = await import('../AppSidebar')
+    render(
+      <MemoryRouter>
+        <SidebarConPresupuestos />
+      </MemoryRouter>,
+    )
+    const link = screen.getByText('Presupuestos').closest('a')
+    expect(link).toHaveAttribute('href', '/crm/presupuestos')
+  })
 })

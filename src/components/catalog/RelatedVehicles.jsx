@@ -51,6 +51,7 @@ export default function RelatedVehicles({ current, condition = 'todos', basePath
               className="group/card glass relative w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
             >
               {(v.status || 'disponible') === 'vendido' && <SoldRibbon />}
+              {(v.status || 'disponible') === 'reservado' && <SoldRibbon label="Reservado" tone="gray" />}
               <div className="relative aspect-[4/3] overflow-hidden">
                 {v.main_image_url || v.images?.[0] ? (
                   <img

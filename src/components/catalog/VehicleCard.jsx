@@ -303,6 +303,7 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
         className="group glass relative flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 shadow-glass sm:flex-row sm:gap-4 sm:p-3"
       >
         {isSold && <SoldRibbon />}
+        {isReserved && <SoldRibbon label="Reservado" tone="gray" />}
         <Link
           to={`${basePath}/${vehicle.id}`}
           className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
@@ -311,11 +312,6 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:bottom-auto sm:left-auto sm:right-2 sm:top-2 sm:px-2.5 sm:text-xs">
             {vehicle.year}
           </span>
-          {isReserved && (
-            <span className="absolute left-2 top-2 z-10 rounded-full bg-ink px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wide text-bg">
-              Reservado
-            </span>
-          )}
         </Link>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
           <Link to={`${basePath}/${vehicle.id}`}>
@@ -350,6 +346,7 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
       className="group glass relative overflow-hidden rounded-[20px] shadow-glass"
     >
       {isSold && <SoldRibbon />}
+      {isReserved && <SoldRibbon label="Reservado" tone="gray" />}
       <Link to={`${basePath}/${vehicle.id}`} className="block">
         <div className="relative aspect-square overflow-hidden">
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
@@ -357,18 +354,11 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
           <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[10px] font-semibold text-[#0b0b0f] backdrop-blur sm:hidden">
             {vehicle.year}
           </span>
-          {(groupLabel || isReserved) && (
+          {groupLabel && (
             <div className="absolute left-2 top-2 z-10 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
-              {groupLabel && (
-                <span className="rounded-full bg-neifert px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
-                  {groupLabel.brand} · {groupLabel.count}
-                </span>
-              )}
-              {isReserved && (
-                <span className="rounded-full bg-ink px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-bg">
-                  Reservado
-                </span>
-              )}
+              <span className="rounded-full bg-neifert px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+                {groupLabel.brand} · {groupLabel.count}
+              </span>
             </div>
           )}
           {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}

@@ -1,7 +1,7 @@
 import { Link, NavLink, useNavigate } from 'react-router-dom'
 import {
   Home, Car, BarChart3, Bell, LayoutDashboard, LayoutTemplate, LogOut, UserCog, Users, ListTodo,
-  ClipboardCheck, FileStack, KeyRound, MessageCircle,
+  ClipboardCheck, FileStack, FileText, KeyRound, MessageCircle,
 } from 'lucide-react'
 import { supabase } from '@/services/supabaseClient'
 import Logo from '@/components/common/Logo'
@@ -16,6 +16,7 @@ const NAV = [
   { to: '/crm', label: 'Panel', icon: LayoutDashboard, vista: 'panel', end: true },
   { to: '/admin/crm', label: 'Carga Leads', icon: Users, vista: 'leads' },
   { to: '/crm/vehiculos', label: 'Catálogo', icon: Car, vista: 'vehiculos' },
+  { to: '/crm/presupuestos', label: 'Presupuestos', icon: FileText, vista: 'presupuestos' },
   { to: '/crm/clientes', label: 'Clientes', icon: Users, vista: 'clientes' },
   { to: '/crm/tareas', label: 'Tareas', icon: ListTodo, badge: 'tareas', vista: 'tareas' },
   { to: '/crm/alertas', label: 'Alertas', icon: Bell, vista: 'alertas' },
