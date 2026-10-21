@@ -503,8 +503,9 @@ async function alActualizarConexion(s, { connection, lastDisconnect, qr }) {
       const chats = completa
         ? sincronizarChats().catch((err) => log('aviso', 'No se pudieron sincronizar los chats archivados', err.message))
         : ponerAlDiaChats().catch((err) => log('aviso', 'No se pudieron traer los cambios de los chats', err.message))
-      // El catálogo de WhatsApp Business queda guardado para mostrarlo al instante.
-      chats.then(() => refrescarCatalogo()).catch(() => {})
+      // El catálogo de WhatsApp Business se precarga ya (sin esperar a los chats) para que
+      // la ventana "Mandar un vehículo" lo muestre al instante.
+      precargarCatalogo(s)
       // Las respuestas rápidas del celular se traen completas una vez por sesión vinculada.
       if (!meta().respuestasCargadas) {
         chats.then(() => cargarRespuestasRapidas()).catch((err) => log('aviso', 'No se pudieron traer las respuestas rápidas', err.message))
@@ -2698,23 +2699,45 @@ async function traerCatalogo() {
   asegurarConectado()
   if (typeof sock.getCatalog !== 'function') throw new Error('Esta versión de Baileys no permite leer el catálogo')
   const productos = []
+  const guardar = (ts) => {
+    const guardado = { ts, productos: productos.filter((p) => !p.isHidden).map(vistaProducto) }
+    setMeta({ catalogo: guardado })
+    emitir('catalogo', guardado.productos)
+    return guardado.productos
+  }
   let cursor
-  for (let pagina = 0; pagina < 20; pagina++) {
-    const r = await conTimeout(sock.getCatalog({ limit: 100, cursor }), 30000, 'WhatsApp tardó demasiado en mandar el catálogo')
+  // De a 10, como el celular: con páginas de 100 WhatsApp a veces no contesta nunca.
+  for (let pagina = 0; pagina < 200; pagina++) {
+    let r
+    try {
+      r = await conTimeout(sock.getCatalog({ limit: 10, cursor }), 20000, 'WhatsApp no contestó con la lista de vehículos del catálogo. Probá de nuevo con el botón de recargar.')
+    } catch (err) {
+      if (!productos.length) throw err
+      // Queda lo que llegó; con ts 0 se vuelve a pedir completo la próxima vez que se abra.
+      log('aviso', 'El catálogo llegó incompleto', `${productos.length} productos · ${err.message}`)
+      return guardar(0)
+    }
     productos.push(...(r.products || []))
     if (!r.nextPageCursor || !r.products?.length) break
     cursor = r.nextPageCursor
+    guardar(0) // el panel va mostrando los autos a medida que llegan (ts 0: todavía no está completo)
   }
-  const guardado = { ts: Date.now(), productos: productos.filter((p) => !p.isHidden).map(vistaProducto) }
-  setMeta({ catalogo: guardado })
-  emitir('catalogo', guardado.productos)
-  return guardado.productos
+  return guardar(Date.now())
 }
 
 /** Pide el catálogo a WhatsApp una sola vez aunque lo pidan varios a la vez. */
 function refrescarCatalogo() {
   trayendoCatalogo ??= traerCatalogo().finally(() => (trayendoCatalogo = null))
   return trayendoCatalogo
+}
+
+/** Al conectar: trae el catálogo y, si WhatsApp no contesta, reintenta a los 2 minutos (hasta 5 veces). */
+function precargarCatalogo(s, intento = 1) {
+  if (s !== sock || conexion !== 'conectado') return
+  refrescarCatalogo().catch((err) => {
+    log('aviso', `No se pudo precargar el catálogo (intento ${intento})`, err.message)
+    if (intento < 5) setTimeout(() => precargarCatalogo(s, intento + 1), 120_000).unref()
+  })
 }
 
 /** Los productos visibles del catálogo de la línea (el mismo del celular). */

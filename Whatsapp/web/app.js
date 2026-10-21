@@ -2810,7 +2810,7 @@ async function abrirCatalogo(fresco = false) {
   if (!$('#catalogoDlg').open) $('#catalogoDlg').showModal()
   if (productos && !fresco) return renderCatalogo()
   if (!productos) {
-    $('#catalogoLista').innerHTML = '<li class="empty">Trayendo el catálogo…</li>'
+    $('#catalogoLista').innerHTML = '<li class="empty">Trayendo los vehículos del catálogo de WhatsApp Business…</li>'
     $('#catalogoFiltros').innerHTML = ''
   }
   try {
