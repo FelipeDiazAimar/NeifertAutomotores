@@ -1,6 +1,9 @@
 import { createClient } from '@supabase/supabase-js'
 import { enviarPush as enviarPushReal } from '../../src/server/webPush.js'
-import { enviarEmail as enviarEmailReal } from '../../src/server/resendEmail.js'
+import {
+  enviarEmail as enviarEmailReal,
+  htmlAlerta,
+} from '../../src/server/resendEmail.js'
 
 const MARGEN_MS = 45 * 60 * 1000 // tolerancia: cron cada 15-30 min + margen
 
@@ -24,13 +27,22 @@ function tocaAvisar(fecha, hora, ahora) {
  *  GET|POST /api/crm/check-alertas
  *  Authorization: Bearer <CRON_SECRET>
  */
-export async function handleCheckAlertas(req, res, { env = process.env, deps = {} } = {}) {
+export async function handleCheckAlertas(
+  req,
+  res,
+  { env = process.env, deps = {} } = {}
+) {
   res.setHeader('Access-Control-Allow-Origin', '*')
-  if (req.method !== 'GET' && req.method !== 'POST') return res.status(405).json({ ok: false, error: 'Method not allowed' })
+  if (req.method !== 'GET' && req.method !== 'POST')
+    return res.status(405).json({ ok: false, error: 'Method not allowed' })
 
   const secret = env.CRON_SECRET
-  const got = (req.headers.authorization || req.headers.Authorization || '').replace(/^Bearer\s+/i, '')
-  if (!secret || got !== secret) return res.status(401).json({ ok: false, error: 'No autorizado' })
+  const got = (req.headers.authorization || req.headers.Authorization || '').replace(
+    /^Bearer\s+/i,
+    ''
+  )
+  if (!secret || got !== secret)
+    return res.status(401).json({ ok: false, error: 'No autorizado' })
 
   const url = env.VITE_SUPABASE_URL
   const serviceKey = env.SUPABASE_SERVICE_ROLE_KEY
@@ -38,34 +50,51 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
   // hace falta un cliente real — no vale la pena validar env vars ahí.
   let _admin = null
   const admin = () => {
-    if (!_admin) _admin = deps.makeAdmin ? deps.makeAdmin() : createClient(url, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } })
+    if (!_admin)
+      _admin = deps.makeAdmin
+        ? deps.makeAdmin()
+        : createClient(url, serviceKey, {
+            auth: { persistSession: false, autoRefreshToken: false },
+          })
     return _admin
   }
   const db = () => admin().schema('crm')
 
   const ahora = (deps.now || (() => new Date()))()
 
-  const cargarAlertasPendientes = deps.cargarAlertasPendientes || (async () => {
-    const { data, error } = await db().from('alertas')
-      .select('*, asignado:usuarios!alertas_asignado_a_fkey(email)')
-      .eq('hecha', false)
-      .or('notificado_push.eq.false,notificado_email.eq.false')
-    if (error) throw error
-    return data ?? []
-  })
-  const cargarSuscripciones = deps.cargarSuscripciones || (async (usuarioId) => {
-    const { data, error } = await db().from('push_subscriptions').select('*').eq('usuario_id', usuarioId)
-    if (error) throw error
-    return data ?? []
-  })
-  const marcarNotificada = deps.marcarNotificada || (async (id, patch) => {
-    const { error } = await db().from('alertas').update(patch).eq('id', id)
-    if (error) throw error
-  })
-  const borrarSuscripcionesVencidas = deps.borrarSuscripcionesVencidas || (async (endpoints) => {
-    if (!endpoints.length) return
-    await db().from('push_subscriptions').delete().in('endpoint', endpoints)
-  })
+  const cargarAlertasPendientes =
+    deps.cargarAlertasPendientes ||
+    (async () => {
+      const { data, error } = await db()
+        .from('alertas')
+        .select('*, asignado:usuarios!alertas_asignado_a_fkey(email)')
+        .eq('hecha', false)
+        .or('notificado_push.eq.false,notificado_email.eq.false')
+      if (error) throw error
+      return data ?? []
+    })
+  const cargarSuscripciones =
+    deps.cargarSuscripciones ||
+    (async (usuarioId) => {
+      const { data, error } = await db()
+        .from('push_subscriptions')
+        .select('*')
+        .eq('usuario_id', usuarioId)
+      if (error) throw error
+      return data ?? []
+    })
+  const marcarNotificada =
+    deps.marcarNotificada ||
+    (async (id, patch) => {
+      const { error } = await db().from('alertas').update(patch).eq('id', id)
+      if (error) throw error
+    })
+  const borrarSuscripcionesVencidas =
+    deps.borrarSuscripcionesVencidas ||
+    (async (endpoints) => {
+      if (!endpoints.length) return
+      await db().from('push_subscriptions').delete().in('endpoint', endpoints)
+    })
   const enviarPush = deps.enviarPush || enviarPushReal
   const enviarEmail = deps.enviarEmail || enviarEmailReal
 
@@ -79,6 +108,7 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
 
     let pushOk = Boolean(a.notificado_push)
     let emailOk = Boolean(a.notificado_email)
+    let entregoAlgo = false
 
     if (!pushOk) {
       try {
@@ -93,6 +123,7 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
             },
           })
           await borrarSuscripcionesVencidas(vencidas)
+          entregoAlgo = true
         }
         pushOk = true
       } catch (e) {
@@ -106,8 +137,10 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
           await enviarEmail({
             to: a.asignado.email,
             subject: `Alerta: ${a.titulo}`,
-            html: `<p><strong>${a.titulo}</strong></p><p>${a.descripcion ?? ''}</p>`,
+            html: htmlAlerta({ titulo: a.titulo, descripcion: a.descripcion }),
+            text: [a.titulo, a.descripcion].filter(Boolean).join('\n\n'),
           })
+          entregoAlgo = true
         }
         emailOk = true
       } catch (e) {
@@ -115,7 +148,19 @@ export async function handleCheckAlertas(req, res, { env = process.env, deps = {
       }
     }
 
-    if (pushOk !== Boolean(a.notificado_push) || emailOk !== Boolean(a.notificado_email)) {
+    // Si no se entregó nada por ningún canal y la alerta estaba intacta,
+    // avisar el motivo en vez de marcarla en silencio: sin suscripción push
+    // ni email del asignado no hay a dónde enviar.
+    if (!entregoAlgo && !a.notificado_push && !a.notificado_email) {
+      errores.push(
+        `alerta ${a.id}: el asignado no tiene suscripción push ni email — no se envió nada`
+      )
+    }
+
+    if (
+      pushOk !== Boolean(a.notificado_push) ||
+      emailOk !== Boolean(a.notificado_email)
+    ) {
       await marcarNotificada(a.id, { notificado_push: pushOk, notificado_email: emailOk })
       enviadas++
     }

@@ -16,6 +16,14 @@ export default defineConfig(({ mode }) => {
   // del cliente (import.meta.env solo expone las VITE_*).
   const env = loadEnv(mode, process.cwd(), '')
 
+  // El .env de Vite NO llega a process.env: el código de servidor que corre
+  // dentro del dev (proxies de /api/crm/*, web-push, resend) lee sus claves
+  // de ahí y en dev quedaban undefined. Se completa lo que falte (equivale
+  // a `node --env-file=.env`, solo proceso de desarrollo).
+  for (const [k, v] of Object.entries(env)) {
+    if (process.env[k] === undefined) process.env[k] = v
+  }
+
   return {
     plugins: [
       react(),
@@ -25,6 +33,9 @@ export default defineConfig(({ mode }) => {
         crmExtApiToken: env.CRM_EXT_API_TOKEN,
         crmSyncUser: env.CRM_SYNC_USER,
         crmSyncPass: env.CRM_SYNC_PASS,
+        // El .env de Vite no llega a process.env: se pasa explícito para
+        // que /api/crm/usuarios y /api/crm/check-alertas funcionen en dev.
+        env,
       }),
       r2ProxyPlugin({
         accessKeyId: env.R2_ACCESS_KEY_ID,

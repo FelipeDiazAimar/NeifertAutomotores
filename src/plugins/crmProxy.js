@@ -42,6 +42,7 @@ export function crmProxyPlugin({
   crmExtApiToken,
   crmSyncUser,
   crmSyncPass,
+  env = process.env,
 } = {}) {
   return {
     name: 'crm-viejo-proxy',
@@ -50,11 +51,15 @@ export function crmProxyPlugin({
         if (!crmSyncUser || !crmSyncPass) {
           return sendJson(res, 501, {
             ok: false,
-            error: 'Falta CRM_SYNC_USER/CRM_SYNC_PASS en el servidor para sincronizar clientes.',
+            error:
+              'Falta CRM_SYNC_USER/CRM_SYNC_PASS en el servidor para sincronizar clientes.',
           })
         }
         try {
-          const data = await fetchCrmClientes({ syncUser: crmSyncUser, syncPass: crmSyncPass })
+          const data = await fetchCrmClientes({
+            syncUser: crmSyncUser,
+            syncPass: crmSyncPass,
+          })
           sendJson(res, 200, { ok: true, data })
         } catch (e) {
           console.error('[crm-proxy] clientes:', e.message)
@@ -81,7 +86,8 @@ export function crmProxyPlugin({
 
       server.middlewares.use('/api/crm/seed-usuarios', async (req, res) => {
         const { handleSeedUsuarios } = await import('../server/seedUsuarios.js')
-        const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
+        const body =
+          req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
         const shim = {
           setHeader: (k, v) => res.setHeader(k, v),
           status: (c) => {
@@ -99,7 +105,8 @@ export function crmProxyPlugin({
 
       server.middlewares.use('/api/crm/usuarios', async (req, res) => {
         const { handleUsuarios } = await import('../../api/crm/usuarios.js')
-        const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
+        const body =
+          req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
         const shim = {
           setHeader: (k, v) => res.setHeader(k, v),
           status: (c) => {
@@ -112,7 +119,7 @@ export function crmProxyPlugin({
           },
           end: (b) => res.end(b),
         }
-        await handleUsuarios({ ...req, body }, shim)
+        await handleUsuarios({ ...req, headers: req.headers, body }, shim, { env })
       })
 
       server.middlewares.use('/api/crm/check-alertas', async (req, res) => {
@@ -129,7 +136,7 @@ export function crmProxyPlugin({
           },
           end: (b) => res.end(b),
         }
-        await handleCheckAlertas(req, shim)
+        await handleCheckAlertas({ ...req, headers: req.headers }, shim, { env })
       })
 
       server.middlewares.use('/api/crm/vehiculos', async (_req, res) => {
@@ -150,7 +157,10 @@ export function crmProxyPlugin({
 
       server.middlewares.use('/api/crm/leads', async (req, res) => {
         if (!crmExtApiToken) {
-          return sendJson(res, 501, { ok: false, error: 'Falta CRM_EXT_API_TOKEN en el servidor.' })
+          return sendJson(res, 501, {
+            ok: false,
+            error: 'Falta CRM_EXT_API_TOKEN en el servidor.',
+          })
         }
         if (req.method === 'GET') {
           try {
@@ -164,8 +174,15 @@ export function crmProxyPlugin({
         if (req.method === 'POST') {
           try {
             const { name, phone, notes, brand, model } = await readJsonBody(req)
-            if (!name || !phone) return sendJson(res, 400, { ok: false, error: 'Faltan name/phone.' })
-            const result = await createExtLead(crmExtApiToken, { name, phone, notes, brand, model })
+            if (!name || !phone)
+              return sendJson(res, 400, { ok: false, error: 'Faltan name/phone.' })
+            const result = await createExtLead(crmExtApiToken, {
+              name,
+              phone,
+              notes,
+              brand,
+              model,
+            })
             return sendJson(res, 200, { ok: true, ...result })
           } catch (e) {
             console.error('[crm-proxy] leads (POST):', e.message)
@@ -174,7 +191,6 @@ export function crmProxyPlugin({
         }
         sendJson(res, 405, { ok: false, error: 'Method not allowed' })
       })
-
     },
   }
 }

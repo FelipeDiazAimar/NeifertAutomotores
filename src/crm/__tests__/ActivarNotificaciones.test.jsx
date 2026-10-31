@@ -1,77 +1,51 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-const activarMock = vi.fn()
-vi.mock('@/crm/hooks/usePushNotifications', () => ({
-  usePushNotifications: () => ({ activar: activarMock, activando: false, soportado: true }),
-}))
-vi.mock('@/hooks/useAuth', () => ({
-  useAuth: () => ({ session: { user: { id: 'u1' } }, isDemo: false }),
-}))
-const obtenerMiPerfilMock = vi.fn()
-vi.mock('@/crm/services/crmUsuarios.service', () => ({
-  obtenerMiPerfil: (...args) => obtenerMiPerfilMock(...args),
-}))
-const guardarMiEmailMock = vi.fn()
-vi.mock('@/crm/services/usuarios.service', () => ({
-  guardarMiEmail: (...args) => guardarMiEmailMock(...args),
+const estadoHolder = vi.hoisted(() => ({ estado: 'apagadas' }))
+const activarMock = vi.hoisted(() => vi.fn())
+const desactivarMock = vi.hoisted(() => vi.fn())
+vi.mock('../hooks/usePushNotifications', () => ({
+  usePushNotifications: () => ({
+    estado: estadoHolder.estado,
+    activar: activarMock,
+    desactivar: desactivarMock,
+    activando: false,
+    soportado: true,
+  }),
 }))
 
-async function renderizar() {
-  const { default: ActivarNotificaciones } = await import('../components/ActivarNotificaciones.jsx')
-  return render(<ActivarNotificaciones />)
-}
+const { default: ActivarNotificaciones } =
+  await import('../components/ActivarNotificaciones.jsx')
 
-describe('ActivarNotificaciones con email', () => {
-  beforeEach(() => {
-    vi.clearAllMocks()
-    guardarMiEmailMock.mockResolvedValue({ ok: true })
+describe('ActivarNotificaciones', () => {
+  beforeEach(() => vi.clearAllMocks())
+
+  it('apagadas: muestra activar y al clicar pide el permiso', async () => {
+    estadoHolder.estado = 'apagadas'
+    render(<ActivarNotificaciones />)
+    const btn = screen.getByRole('button', { name: /activar notificaciones/i })
+    expect(btn).toBeInTheDocument()
+    await userEvent.click(btn)
+    expect(activarMock).toHaveBeenCalled()
+    expect(desactivarMock).not.toHaveBeenCalled()
   })
 
-  it('si el perfil ya tiene email, activa directo sin modal', async () => {
-    obtenerMiPerfilMock.mockResolvedValue({ id: 'u1', email: 'bruno@neifert.com' })
-    const usuario = userEvent.setup()
-    await renderizar()
-    await usuario.click(screen.getByRole('button', { name: /notificaciones/i }))
-    await waitFor(() => expect(activarMock).toHaveBeenCalled())
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-  })
-
-  it('si el perfil no tiene email, abre un modal que lo pide', async () => {
-    obtenerMiPerfilMock.mockResolvedValue({ id: 'u1', email: null })
-    const usuario = userEvent.setup()
-    await renderizar()
-    await usuario.click(screen.getByRole('button', { name: /notificaciones/i }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
+  it('activadas: muestra desactivar y al clicar desuscribe', async () => {
+    estadoHolder.estado = 'activadas'
+    render(<ActivarNotificaciones />)
+    const btn = screen.getByRole('button', { name: /desactivar notificaciones/i })
+    await userEvent.click(btn)
+    expect(desactivarMock).toHaveBeenCalled()
     expect(activarMock).not.toHaveBeenCalled()
   })
 
-  it('email inválido muestra error y no guarda ni activa', async () => {
-    obtenerMiPerfilMock.mockResolvedValue({ id: 'u1', email: null })
-    const usuario = userEvent.setup()
-    await renderizar()
-    await usuario.click(screen.getByRole('button', { name: /notificaciones/i }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-    // 'a@b' pasa la validación nativa del input type=email pero no nuestro
-    // formato (exigimos punto en el dominio).
-    await usuario.type(screen.getByPlaceholderText(/empleado@neifertautomotores/), 'a@b')
-    await usuario.click(screen.getByRole('button', { name: /guardar y activar/i }))
-    expect(await screen.findByText(/email válido/i)).toBeInTheDocument()
-    expect(guardarMiEmailMock).not.toHaveBeenCalled()
+  it('bloqueadas: no pide permiso al clicar', async () => {
+    estadoHolder.estado = 'bloqueadas'
+    render(<ActivarNotificaciones />)
+    await userEvent.click(screen.getByRole('button', { name: /activar notificaciones/i }))
     expect(activarMock).not.toHaveBeenCalled()
-  })
-
-  it('email válido lo guarda y después activa', async () => {
-    obtenerMiPerfilMock.mockResolvedValue({ id: 'u1', email: null })
-    const usuario = userEvent.setup()
-    await renderizar()
-    await usuario.click(screen.getByRole('button', { name: /notificaciones/i }))
-    await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
-    await usuario.type(screen.getByPlaceholderText(/empleado@neifertautomotores/), 'bruno@neifert.com')
-    await usuario.click(screen.getByRole('button', { name: /guardar y activar/i }))
-    await waitFor(() => expect(guardarMiEmailMock).toHaveBeenCalledWith('bruno@neifert.com'))
-    await waitFor(() => expect(activarMock).toHaveBeenCalled())
+    expect(desactivarMock).not.toHaveBeenCalled()
   })
 })

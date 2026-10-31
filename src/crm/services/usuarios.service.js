@@ -30,7 +30,10 @@ export async function actualizarUsuario(id, parche) {
 export async function guardarRol(rol, vistas_default) {
   const { error } = await db()
     .from('roles')
-    .upsert({ rol, vistas_default, actualizado_en: new Date().toISOString() }, { onConflict: 'rol' })
+    .upsert(
+      { rol, vistas_default, actualizado_en: new Date().toISOString() },
+      { onConflict: 'rol' }
+    )
   if (error) throw error
 }
 
@@ -60,6 +63,11 @@ async function llamarEndpoint(body) {
 /** Guarda el email propio del usuario logueado (para las alertas). */
 export function guardarMiEmail(email) {
   return llamarEndpoint({ accion: 'guardar_mi_email', email })
+}
+
+/** Borra la suscripción push propia de este navegador (desactivar avisos). */
+export function desuscribirPush(endpoint) {
+  return llamarEndpoint({ accion: 'push_unsubscribe', endpoint })
 }
 
 /** Alta de usuario (crea el auth user + fila en crm.usuarios). */
