@@ -277,6 +277,13 @@ function formatear(texto, menciones = null) {
     links.push(url)
     return `\u0000${links.length - 1}\u0000`
   })
+  // Teléfonos: como en WhatsApp Web, al tocarlos sale "Chatear con…" / "Copiar número".
+  // shortcut: sin libphonenumber; 8–15 dígitos, sin fechas ni montos con puntos de miles.
+  html = html.replace(/(^|[^\w+.,/-])(\+?\d[\d ().-]{5,}\d)(?![\w-])/g, (todo, antes, num) => {
+    const digitos = num.replace(/\D/g, '')
+    if (digitos.length < 8 || digitos.length > 15 || /^\d{1,3}(\.\d{3})+$/.test(num) || /^\d{4}-\d\d-\d\d$/.test(num)) return todo
+    return `${antes}<a href="#" class="tel" data-tel="${digitos}">${num}</a>`
+  })
   html = html
     .replace(/```([\s\S]+?)```/g, '<code>$1</code>')
     .replace(/(^|[\s(>])\*(?=\S)([^*\n]*?\S)\*(?=$|[\s.,!?:;)<])/g, '$1<strong>$2</strong>')
@@ -291,6 +298,42 @@ function formatear(texto, menciones = null) {
     return `<a href="${href}" target="_blank" rel="noopener noreferrer">${url}</a>`
   })
 }
+
+// Foto que no carga (la borraron de R2): prueba con la siguiente del auto y, si no queda ninguna, deja el ícono.
+document.addEventListener('error', (e) => {
+  const img = e.target
+  if (!(img instanceof HTMLImageElement) || !img.closest?.('.vehiculo-foto')) return
+  const [siguiente, ...resto] = (img.dataset.otras || '').split('|').filter(Boolean)
+  if (siguiente) {
+    img.dataset.otras = resto.join('|')
+    img.src = siguiente
+  } else {
+    img.replaceWith(Object.assign(document.createElement('span'), { className: 'sin-foto', innerHTML: ic('store') }))
+  }
+}, true)
+
+document.addEventListener('click', (e) => {
+  document.querySelector('.menu-tel')?.remove()
+  const a = e.target.closest?.('a.tel')
+  if (!a) return
+  e.preventDefault()
+  const tel = a.dataset.tel
+  // Un celular argentino suelto (sin 54) se completa con el código del país.
+  const completo = tel.length === 10 ? `549${tel}` : /^54[1-8]\d{9}$/.test(tel) ? `549${tel.slice(2)}` : tel
+  const menu = Object.assign(document.createElement('div'), { className: 'menu-msg menu-tel', role: 'menu' })
+  menu.innerHTML = `<button class="item" role="menuitem" data-a="chat">${ic('chat')}Chatear con +${esc(completo)}</button><button class="item" role="menuitem" data-a="copiar">${ic('copy')}Copiar número de teléfono</button>`
+  const r = a.getBoundingClientRect()
+  menu.style.left = `${Math.min(r.left, innerWidth - 260)}px`
+  menu.style.top = `${Math.min(r.bottom + 4, innerHeight - 110)}px`
+  menu.addEventListener('click', (ev) => {
+    const b = ev.target.closest('[data-a]')
+    if (!b) return
+    if (b.dataset.a === 'chat') escribirleA(completo)
+    else navigator.clipboard?.writeText(`+${completo}`).then(() => toast('Número copiado'))
+  })
+  document.body.append(menu)
+  e.stopPropagation()
+})
 
 const segmentador = typeof Intl.Segmenter === 'function' ? new Intl.Segmenter('es', { granularity: 'grapheme' }) : null
 /** Mensajes de 1 a 3 emojis se muestran grandes, como en WhatsApp. */
@@ -2780,10 +2823,14 @@ async function escribirleA(telefono) {
  * Catálogo de WhatsApp Business: se elige un auto y le llega como el producto que manda el
  * celular (foto, nombre, descripción y el botón "Ver", con "Enviar mensaje a la empresa").
  */
-let productos = null
+let productos = null // catálogo de WhatsApp Business
+let vehiculosWeb = null // autos de la página
+let fuenteCatalogo = 'wa' // 'wa' | 'web'
 let marcaCatalogo = ''
+const listaCatalogo = () => (fuenteCatalogo === 'web' ? vehiculosWeb : productos)
 
 const precioDe = (p) => {
+  if (p.precioTexto) return p.precioTexto
   if (p.precio == null) return ''
   try {
     return new Intl.NumberFormat('es-AR', { style: 'currency', currency: p.moneda || 'ARS', maximumFractionDigits: 0 }).format(p.precio)
@@ -2808,16 +2855,20 @@ async function abrirCatalogo(fresco = false) {
     marcaCatalogo = ''
   }
   if (!$('#catalogoDlg').open) $('#catalogoDlg').showModal()
-  if (productos && !fresco) return renderCatalogo()
-  if (!productos) {
-    $('#catalogoLista').innerHTML = '<li class="empty">Trayendo los vehículos del catálogo de WhatsApp Business…</li>'
+  const web = fuenteCatalogo === 'web'
+  document.querySelectorAll('[data-act="catalogo-fuente"]').forEach((b) => b.setAttribute('aria-pressed', String(b.dataset.valor === fuenteCatalogo)))
+  if (listaCatalogo() && !fresco) return renderCatalogo()
+  if (!listaCatalogo()) {
+    $('#catalogoLista').innerHTML = `<li class="empty">${web ? 'Trayendo los autos de la página…' : 'Trayendo los vehículos del catálogo de WhatsApp Business…'}</li>`
     $('#catalogoFiltros').innerHTML = ''
   }
   try {
-    productos = await api(`/api/catalogo${fresco ? '?fresco=1' : ''}`)
-    renderCatalogo()
+    const lista = await api(web ? '/api/vehiculos-web' : `/api/catalogo${fresco ? '?fresco=1' : ''}`)
+    if (web) vehiculosWeb = lista
+    else productos = lista
+    if (fuenteCatalogo === (web ? 'web' : 'wa')) renderCatalogo()
   } catch (err) {
-    if (!productos) $('#catalogoLista').innerHTML = `<li class="empty">${esc(err.message)}</li>`
+    if (!listaCatalogo()) $('#catalogoLista').innerHTML = `<li class="empty">${esc(err.message)}</li>`
     else toast(err.message)
   }
 }
@@ -2825,7 +2876,19 @@ async function abrirCatalogo(fresco = false) {
 const chipMarca = (id, label, n) =>
   `<button class="chip" type="button" data-act="catalogo-marca" data-valor="${esc(id)}" aria-pressed="${marcaCatalogo === id}">${esc(label)}<em class="tnum">${n}</em></button>`
 
-const cardProducto = (p) => `<li><button class="vehiculo-card" type="button" data-producto="${esc(p.id)}" title="Mandar este vehículo al chat">
+// Autos de la página: mismo diseño que las tarjetas del sitio (marca en rojo, año en la foto, precio contado).
+const cardWeb = (p) => `<li><button class="vehiculo-card web" type="button" data-producto="${esc(p.id)}" title="Mandar este vehículo al chat">
+    <span class="vehiculo-foto">${p.imagen ? `<img src="${esc(rutaApi(p.imagen))}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ic('store')}<i class="anio">${esc(p.anio)}</i>${p.reservado ? '<em>Reservado</em>' : ''}</span>
+    <span class="vehiculo-datos">
+      <span class="marca">${esc(p.marca)}</span>
+      <b>${esc(p.modelo)}</b>
+      <small>${esc([p.km ? `${fmtNum(p.km)} km` : 'Sin uso', p.combustible, p.transmision].filter(Boolean).join(' · '))}</small>
+      <span class="precio"><em>Precio contado</em><strong class="tnum">${esc(p.precioTexto || 'Consultar')}</strong></span>
+    </span>
+    <span class="vehiculo-enviar">${ic('send')}Enviar</span>
+  </button></li>`
+
+const cardProducto = (p) => p.marca ? cardWeb(p) : `<li><button class="vehiculo-card" type="button" data-producto="${esc(p.id)}" title="Mandar este vehículo al chat">
     <span class="vehiculo-foto">${p.imagen ? `<img src="${esc(p.imagen)}" alt="" loading="lazy" referrerpolicy="no-referrer">` : ic('store')}${reservado(p) ? '<em>Reservado</em>' : ''}</span>
     <span class="vehiculo-datos">
       <b>${esc(nombreLimpio(p))}</b>
@@ -2836,7 +2899,7 @@ const cardProducto = (p) => `<li><button class="vehiculo-card" type="button" dat
   </button></li>`
 
 function renderCatalogo() {
-  const todos = productos || []
+  const todos = listaCatalogo() || []
   // Cada palabra buscada tiene que estar (en cualquier orden): "tracker 2023", "cronos drive".
   const palabras = sinTildes($('#catalogoBuscar').value).split(/\s+/).filter(Boolean)
   const marcas = new Map()
@@ -2856,14 +2919,14 @@ function renderCatalogo() {
   })
   $('#catalogoLista').innerHTML = lista.length
     ? lista.map(cardProducto).join('')
-    : `<li class="empty">${todos.length ? 'Ningún vehículo coincide.' : 'El catálogo de WhatsApp Business está vacío.'}</li>`
+    : `<li class="empty">${todos.length ? 'Ningún vehículo coincide.' : fuenteCatalogo === 'web' ? 'No hay autos publicados en la página.' : 'El catálogo de WhatsApp Business está vacío.'}</li>`
 }
 
 async function mandarProducto(boton) {
   if (!state.activo) return
   boton.disabled = true
   try {
-    const r = await api(`/api/chats/${enc(state.activo)}/producto`, { method: 'POST', json: { id: boton.dataset.producto } })
+    const r = await api(`/api/chats/${enc(state.activo)}/${fuenteCatalogo === 'web' ? 'vehiculo-web' : 'producto'}`, { method: 'POST', json: { id: boton.dataset.producto } })
     $('#catalogoDlg').close()
     if (r?.enCola) toast('Sin conexión: quedó en la bandeja de salida y se manda solo cuando vuelva.', 5000)
     else toast('Vehículo enviado.')
@@ -3815,7 +3878,8 @@ document.addEventListener('click', async (e) => {
     return actualizarVoz(id)
   }
   if (t.dataset.ver) {
-    $('#lbFig').innerHTML = `<img src="${t.dataset.ver}" alt="Foto ampliada">`
+    const bajar = `${t.dataset.ver}${t.dataset.ver.includes('?') ? '&' : '?'}descargar=1`
+    $('#lbFig').innerHTML = `<img src="${t.dataset.ver}" alt="Foto ampliada"><a class="btn ghost chico" href="${bajar}" style="align-self:center">${ic('download')}Descargar</a>`
     $('#lightbox').hidden = false
     return
   }
@@ -4028,7 +4092,8 @@ document.addEventListener('click', async (e) => {
     case 'cerrar-contacto': $('#contactoDlg').close(); break
     case 'contacto-enviar': enviarContactosElegidos(); break
     case 'cerrar-catalogo': $('#catalogoDlg').close(); break
-    case 'catalogo-actualizar': abrirCatalogo(true); break
+    case 'catalogo-actualizar': if (fuenteCatalogo === 'web') vehiculosWeb = null; abrirCatalogo(true); break
+    case 'catalogo-fuente': fuenteCatalogo = t.dataset.valor; marcaCatalogo = ''; abrirCatalogo(); break
     case 'catalogo-marca': marcaCatalogo = t.dataset.valor; renderCatalogo(); break
     case 'cerrar-respuestas': $('#respuestasDlg').close(); break
     case 'respuesta-nueva': mostrarFormRespuesta({}); break

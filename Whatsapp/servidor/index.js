@@ -30,7 +30,7 @@ import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
 import { importarRespaldo } from './src/importar.js'
-import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm } from './src/nube.js'
+import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm, soltarServidor, tomarServidor } from './src/nube.js'
 
 // Freno de seguridad: accesible desde otras PC o desde internet, sin login cualquiera
 // podría escribir con el número de la concesionaria. En ese caso no se arranca.
@@ -343,6 +343,14 @@ app.post('/api/chats/:id/catalogo-web', exigirEscritura, accion('enviar_catalogo
 app.post('/api/chats/:id/catalogo', exigirEscritura, accion('enviar_catalogo', (req) => wa.enviarCatalogo(chatId(req), req.body?.texto), (req, r) => ({ mensaje: r.id })))
 // Catálogo de WhatsApp Business y respuestas rápidas: los mismos del celular.
 app.get('/api/catalogo', ruta((req) => wa.catalogo({ fresco: req.query.fresco === '1' })))
+// Los autos de la página web: se listan y se mandan como tarjeta con el enlace a su ficha.
+app.get('/api/vehiculos-web', ruta(() => wa.vehiculosWeb()))
+app.get('/api/vehiculos-web/:id/foto', ruta(async (req, res) => {
+  const jpg = await wa.fotoVehiculoWeb(req.params.id)
+  if (!jpg) throw Object.assign(new Error('Sin foto'), { status: 404 })
+  res.set('Cache-Control', 'private, max-age=86400').type('image/jpeg').send(jpg)
+}))
+app.post('/api/chats/:id/vehiculo-web', exigirEscritura, accion('enviar_vehiculo_web', (req) => wa.enviarVehiculoWeb(chatId(req), req.body?.id), (req, r) => ({ mensaje: r.id, vehiculo: req.body?.id })))
 app.get('/api/respuestas', ruta(() => wa.listarRespuestasRapidas()))
 // Las respuestas rápidas son las mismas para todos (y las del celular): las cambia un administrador
 // ("Administrar respuestas", en el botón de respuestas rápidas del chat).
@@ -357,7 +365,12 @@ app.get('/api/crm/clientes', ruta((req) => crm.buscarClientes(req.query.q)))
 app.get('/api/crm/usuarios', ruta(() => crm.usuariosCrm()))
 app.get('/api/chats/:id/crm', ruta((req) => crm.fichaCrm(chatId(req))))
 app.post('/api/chats/:id/crm/vincular', exigirEscritura, accion('crm_vincular', (req) => crm.vincularCliente(chatId(req), req.body?.clienteId || null), (req) => ({ cliente: req.body?.clienteId || null })))
-app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_cliente', (req) => crm.crearCliente(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.cliente?.id })))
+app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_cliente', async (req) => {
+  const ficha = await crm.crearCliente(chatId(req), req.body || {}, req.usuario)
+  // El mismo contacto queda en la agenda de WhatsApp de la línea (no frena si WhatsApp falla).
+  await wa.guardarContactoEnLinea(chatId(req), ficha.cliente?.nombre)
+  return ficha
+}, (req, r) => ({ cliente: r.cliente?.id })))
 app.post('/api/chats/:id/crm/seguimiento', exigirEscritura, accion('crm_seguimiento', (req) => crm.registrarSeguimiento(chatId(req), req.body?.texto, req.usuario), (req, r) => ({ cliente: r.clienteId })))
 app.post('/api/chats/:id/crm/tarea', exigirEscritura, accion('crm_tarea', (req) => crm.crearTarea(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, tarea: r.tareaId })))
 
@@ -416,6 +429,21 @@ try {
   console.error(`No se pudo cargar el almacén desde Supabase: ${err.message}`)
   console.error('Revisá WA_DATABASE_URL en Whatsapp/servidor/.env, o arrancá con ALMACEN=local para trabajar con archivos.')
   process.exit(1)
+}
+
+// Una línea, un servidor: si otro ya la tiene, este no arranca (así no se pisan ni se desvinculan).
+if (almacen.modo === 'supabase') {
+  const toma = await tomarServidor().catch((err) => {
+    console.error(`No se pudo verificar si la línea está en uso: ${err.message}`)
+    process.exit(1)
+  })
+  if (!toma.ok) {
+    const o = toma.ocupada
+    console.error(`La línea +${numeroLinea()} ya está en uso por otro servidor (${o.host || '?'}, ${o.carpeta || '?'}). Este no arranca para no desvincularla.`)
+    console.error('Usá la app de escritorio de la concesionaria, o apagá el otro servidor. Si ese servidor ya no existe, esperá 90 segundos o arrancá con WA_TOMAR_CONTROL=1.')
+    await cerrarAlmacen().catch(() => {})
+    process.exit(3)
+  }
 }
 
 const servidor = app.listen(PUERTO, HOST, () => {
@@ -500,6 +528,7 @@ async function cerrar({ cerrarLectura = false } = {}) {
       .then(() => log('info', 'Vista sin conexión del CRM cerrada', 'Nadie ve los chats hasta que el servidor vuelva'))
       .catch((err) => log('aviso', 'No se pudo cerrar la vista sin conexión del CRM', err.message))
   }
+  await soltarServidor().catch(() => {})
   wa.detener()
   servidor.close()
   // Lo que falta guardar en Supabase se escribe antes de salir (con un tope de 8 s).

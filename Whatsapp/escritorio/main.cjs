@@ -267,6 +267,11 @@ function arrancarServidor() {
   servidor.on('exit', (codigo) => {
     servidor = null
     if (saliendo) return
+    // Código 3: otro servidor tiene la línea. No es una falla de esta versión: espera y reintenta.
+    if (codigo === 3) {
+      registrar('La línea está en uso por otro servidor; se reintenta en 60 s')
+      return setTimeout(arrancarServidor, 60_000)
+    }
     // Una versión bajada que se cae enseguida, tres veces seguidas: se vuelve a la anterior.
     if (Date.now() - arranque.ts < 90_000) fallosSeguidos++
     else fallosSeguidos = 0

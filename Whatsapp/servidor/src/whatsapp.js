@@ -40,6 +40,8 @@ import {
   CONSERVAR_EDICIONES,
   CONSERVAR_ELIMINADOS,
   CRM_URL,
+  SUPABASE_SERVICE_ROLE_KEY,
+  SUPABASE_URL,
   MEDIA_MAX_BYTES,
   MEDIA_RECIENTE_SEG,
   VENTANA_DIAS,
@@ -2292,7 +2294,19 @@ export function obtenerMedia(chatId, id) {
   if (!m?.media?.archivo || !existeMedia(chatId, m.media.archivo)) {
     throw Object.assign(new Error('El archivo todavía no está descargado'), { status: 404 })
   }
-  return { clave: claveMedia(chatId, m.media.archivo), mime: m.media.mime, nombre: m.media.nombre }
+  return { clave: claveMedia(chatId, m.media.archivo), mime: m.media.mime, nombre: nombreDescarga(chatId, m) }
+}
+
+/** Nombre con el que se baja un archivo: el original si lo tiene; si no, "Chat 2026-10-31 15.42.jpg" (se ordena por fecha). */
+function nombreDescarga(chatId, m) {
+  if (m.media.nombre) return m.media.nombre
+  const t = new Date((m.ts || 0) < 1e12 ? (m.ts || 0) * 1000 : m.ts)
+  const f = Object.fromEntries(
+    new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Argentina/Cordoba', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })
+      .formatToParts(t).map((p) => [p.type, p.value]),
+  )
+  const chat = String(nombreDe(chatId) || 'chat').replace(/[\\/:*?"<>|\p{Cc}]+/gu, ' ').replace(/\s+/g, ' ').trim().slice(0, 60) || 'chat'
+  return `${chat} ${f.year}-${f.month}-${f.day} ${f.hour}.${f.minute}.${extensionDe(m.media.mime)}`
 }
 
 /**
@@ -2499,6 +2513,8 @@ function contenidoDe(p, buffer) {
   if (p.tipo === 'texto') {
     const contenido = { text: p.texto }
     if (p.menciones?.length) contenido.mentions = p.menciones
+    // Tarjeta con foto (los autos de la página); en la bandeja de salida se pierde y va el enlace solo.
+    if (p.linkPreview) contenido.linkPreview = p.linkPreview
     return contenido
   }
   if (p.tipo === 'contacto') {
@@ -2710,9 +2726,17 @@ async function traerCatalogo() {
   for (let pagina = 0; pagina < 200; pagina++) {
     let r
     try {
-      r = await conTimeout(sock.getCatalog({ limit: 10, cursor }), 20000, 'WhatsApp no contestó con la lista de vehículos del catálogo. Probá de nuevo con el botón de recargar.')
+      r = await conTimeout(sock.getCatalog({ limit: 10, cursor }), cursor ? 20000 : 45000, 'WhatsApp no contestó con la lista de vehículos del catálogo. Probá de nuevo con el botón de recargar.')
     } catch (err) {
-      if (!productos.length) throw err
+      if (!productos.length) {
+        // Plan B: la consulta por colecciones (otra pregunta a WhatsApp; a veces contesta cuando la lista no).
+        const viaColecciones = await conTimeout(sock.getCollections(undefined, 51), 45000, err.message).catch(() => null)
+        const vistos = new Map((viaColecciones?.collections || []).flatMap((c) => c.products || []).map((p) => [p.id, p]))
+        if (!vistos.size) throw err
+        log('aviso', 'El catálogo se trajo por colecciones', `${vistos.size} productos · la lista directa no contestó`)
+        productos.push(...vistos.values())
+        return guardar(Date.now())
+      }
       // Queda lo que llegó; con ts 0 se vuelve a pedir completo la próxima vez que se abra.
       log('aviso', 'El catálogo llegó incompleto', `${productos.length} productos · ${err.message}`)
       return guardar(0)
@@ -2810,6 +2834,97 @@ export async function enviarProducto(chatId, productoId) {
     log('aviso', 'El producto salió como enlace', `${p.nombre} · ${err.message}`)
     return enviarOEncolar(chatId, { tipo: 'texto', texto: `${p.nombre}\n${enlace}` })
   }
+}
+
+/* ---------------- Autos del catálogo de la página web ---------------- */
+
+const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,estado,es_nuevo,imagen_principal,imagenes,descripcion'
+let vehiculosWebCache = { ts: 0, lista: [] }
+
+async function vehiculosWebTodos() {
+  if (Date.now() - vehiculosWebCache.ts < 60_000) return vehiculosWebCache.lista
+  if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) throw Object.assign(new Error('Falta SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY: no se puede leer el catálogo de la página'), { status: 503 })
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/vehiculos?select=${CAMPOS_WEB}&estado=neq.vendido&order=marca,modelo,anio.desc&limit=1000`, {
+    headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+    signal: AbortSignal.timeout(15000),
+  })
+  if (!res.ok) throw Object.assign(new Error(`No se pudo leer el catálogo de la página (${res.status})`), { status: 502 })
+  vehiculosWebCache = { ts: Date.now(), lista: await res.json() }
+  return vehiculosWebCache.lista
+}
+
+const tituloWeb = (v) => [v.marca, v.modelo, v.version].filter(Boolean).join(' ')
+const fotosWeb = (v) => [v.imagen_principal, ...(Array.isArray(v.imagenes) ? v.imagenes : [])].filter((u, i, a) => typeof u === 'string' && u && a.indexOf(u) === i)
+const precioWeb = (v) => (v.precio ? `${v.moneda === 'ARS' ? '$' : 'U$S'} ${Number(v.precio).toLocaleString('es-AR')}` : '')
+
+/** Los autos publicados en la página (disponibles y reservados), con el mismo formato que el catálogo de WhatsApp. */
+export async function vehiculosWeb() {
+  return (await vehiculosWebTodos()).map((v) => ({
+    id: v.id,
+    nombre: tituloWeb(v),
+    marca: v.marca,
+    modelo: [v.modelo, v.version].filter(Boolean).join(' '),
+    anio: v.anio,
+    km: v.km || 0,
+    combustible: v.combustible || '',
+    transmision: v.transmision || '',
+    reservado: v.estado === 'reservado',
+    descripcion: [v.anio, v.km ? `${Number(v.km).toLocaleString('es-AR')} km` : 'Sin uso', v.estado === 'reservado' ? 'Reservado' : ''].filter(Boolean).join(' · '),
+    precioTexto: precioWeb(v),
+    imagen: fotosWeb(v).length ? `/api/vehiculos-web/${v.id}/foto` : null,
+  }))
+}
+
+const fotosCache = new Map() // `${id}` → Buffer jpg 480 px (lo bajado de R2 público, que a veces contesta lento o 404)
+
+/** Foto chica de un auto de la página: la primera que todavía exista. null si ninguna. */
+export async function fotoVehiculoWeb(id) {
+  if (fotosCache.has(id)) return fotosCache.get(id)
+  const v = (await vehiculosWebTodos()).find((x) => x.id === String(id))
+  if (!v) return null
+  for (const url of fotosWeb(v).slice(0, 4)) {
+    try {
+      const r = await fetch(url, { signal: AbortSignal.timeout(15000) })
+      if (!r.ok) continue
+      const jpg = await miniatura(Buffer.from(await r.arrayBuffer()), 'image/jpeg')
+      fotosCache.set(id, jpg)
+      if (fotosCache.size > 150) fotosCache.delete(fotosCache.keys().next().value)
+      return jpg
+    } catch {
+      // Esta foto no sirvió: se prueba con la siguiente.
+    }
+  }
+  return null
+}
+
+/**
+ * Manda un auto de la página como tarjeta: vista previa del enlace con la foto, el título y el
+ * precio, y el enlace a su ficha en el catálogo web (como el producto del catálogo de Business).
+ */
+export async function enviarVehiculoWeb(chatId, id) {
+  asegurarConectado()
+  if (!CRM_URL) throw new Error('Falta CRM_URL en la configuración: no se sabe la dirección de la página')
+  const v = (await vehiculosWebTodos()).find((x) => x.id === String(id))
+  if (!v) throw Object.assign(new Error('Ese auto ya no está en la página'), { status: 404 })
+  const enlace = `${new URL(CRM_URL).origin}/${v.es_nuevo ? 'catalogo-0km' : 'catalogo'}/${v.id}`
+  const titulo = tituloWeb(v)
+  const detalle = [v.anio, v.km ? `${Number(v.km).toLocaleString('es-AR')} km` : '', precioWeb(v)].filter(Boolean).join(' · ')
+  const texto = `*${titulo}*
+${detalle}
+${enlace}`
+  let jpegThumbnail
+  // La primera foto que todavía exista (algunas principales ya no están en R2).
+  for (const foto of fotosWeb(v).slice(0, 4)) {
+    try {
+      const r = await fetch(foto, { signal: AbortSignal.timeout(20000) })
+      if (!r.ok) continue
+      jpegThumbnail = await miniatura(Buffer.from(await r.arrayBuffer()), 'image/jpeg')
+      break
+    } catch (err) {
+      log('aviso', 'Una foto del auto no se pudo usar en la tarjeta', `${titulo} · ${err.message}`)
+    }
+  }
+  return enviarOEncolar(chatId, { tipo: 'texto', texto, linkPreview: { 'matched-text': enlace, title: titulo, description: detalle, jpegThumbnail } })
 }
 
 /* ---------------- Respuestas rápidas ---------------- */
@@ -2970,6 +3085,28 @@ export async function enviarNotaDeVoz(chatId, buffer, segundos) {
   } catch (err) {
     log('error', 'No se pudo mandar la nota de voz', `${nombreDe(chatId)} · ${err.message}`)
     throw err
+  }
+}
+
+/**
+ * Guarda el contacto en la agenda de la línea (como "Añadir a contactos" del celular): queda
+ * en el celular de la concesionaria y quien recibe un mensaje ve el nombre, no "Usuario
+ * desconocido". Sin conexión o si WhatsApp lo rechaza no es un error del CRM: se avisa en el log.
+ */
+export async function guardarContactoEnLinea(chatId, nombre) {
+  const fullName = String(nombre || '').trim()
+  if (!fullName || !isPnUser(chatId)) return false
+  setContacto(chatId, { nombre: fullName })
+  if (!sock || conexion !== 'conectado') {
+    log('aviso', 'El contacto quedó solo en el CRM', `${fullName} · la línea no está conectada para guardarlo en WhatsApp`)
+    return false
+  }
+  try {
+    await conTimeout(sock.addOrEditContact(chatId, { fullName, firstName: fullName.split(/\s+/)[0], saveOnPrimaryAddressbook: true }), 15000, 'WhatsApp no contestó')
+    return true
+  } catch (err) {
+    log('aviso', 'No se pudo guardar el contacto en WhatsApp', `${fullName} · ${err.message}`)
+    return false
   }
 }
 

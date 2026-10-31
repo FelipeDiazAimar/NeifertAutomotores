@@ -14,8 +14,12 @@
  * se escribe acá es solo de la línea con la que corre el servidor (CLAVE_LINEA). Varias
  * líneas (la de prueba y la de la concesionaria) comparten la base sin mezclarse.
  */
+import crypto from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import pg from 'pg'
-import { CLAVE_LINEA, CRM_URL, LINEA as NUMERO, WA_DATABASE_URL } from './config.js'
+import { CLAVE_LINEA, CRM_URL, DATA_DIR, LINEA as NUMERO, WA_DATABASE_URL } from './config.js'
 import { log } from './eventos.js'
 import * as diario from './diario.js'
 
@@ -117,6 +121,67 @@ export async function registrarCrm() {
     [LINEA, host],
   )
   return { host, antes: rowCount }
+}
+
+/*
+ * Un solo servidor por línea. Si otro servidor (otra carpeta, otra PC, un .env copiado) ya tiene
+ * esta línea y sigue latiendo, este no arranca: dos servidores sobre el mismo número se pisan la
+ * sesión y uno desvincula al otro. Cada instalación tiene su id (DATA_DIR/instancia.id); el dueño
+ * puede reiniciar al toque, y si el dueño murió el candado vence solo (LATIDO_VENCE_MS).
+ * WA_TOMAR_CONTROL=1 fuerza la toma, a propósito.
+ */
+const LATIDO_MS = 30_000
+export const LATIDO_VENCE_MS = 90_000
+let latido = null
+
+function idInstancia() {
+  const archivo = path.join(DATA_DIR, 'instancia.id')
+  try {
+    return fs.readFileSync(archivo, 'utf8').trim() || crearId(archivo)
+  } catch {
+    return crearId(archivo)
+  }
+}
+function crearId(archivo) {
+  const id = crypto.randomUUID()
+  fs.mkdirSync(DATA_DIR, { recursive: true })
+  fs.writeFileSync(archivo, id)
+  return id
+}
+
+/** Puro, para probar: ¿puede arrancar este servidor? `actual` es la fila 'servidor' de la línea. */
+export function puedeTomar(actual, miId, ahora = Date.now(), forzar = false) {
+  if (forzar || !actual?.id || actual.id === miId) return true
+  return ahora - (actual.ts || 0) > LATIDO_VENCE_MS
+}
+
+/** Toma la línea o devuelve { ocupada: {...} }. Solo con base compartida y número definido. */
+export async function tomarServidor() {
+  if (!NUMERO) return { ok: true }
+  const db = base()
+  const miId = idInstancia()
+  const datos = () => JSON.stringify({ id: miId, host: os.hostname(), carpeta: path.resolve(DATA_DIR), crmUrl: CRM_URL, ts: Date.now() })
+  const { rows } = await db.query("select valor from wa.estado where linea = $1 and clave = 'servidor'", [NUMERO])
+  const actual = rows[0]?.valor
+  if (!puedeTomar(actual, miId, Date.now(), ['1', 'si', 'true'].includes(String(process.env.WA_TOMAR_CONTROL).toLowerCase()))) return { ok: false, ocupada: actual }
+  const guardar = () =>
+    db.query(
+      `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'servidor', $2::jsonb, now())
+       on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,
+      [NUMERO, datos()],
+    )
+  await guardar()
+  latido = setInterval(() => guardar().catch(() => {}), LATIDO_MS)
+  latido.unref()
+  return { ok: true }
+}
+
+/** Al apagar bien: suelta la línea para que el mismo servidor (u otro) arranque sin esperar. */
+export async function soltarServidor() {
+  if (!latido) return
+  clearInterval(latido)
+  latido = null
+  await base().query("delete from wa.estado where linea = $1 and clave = 'servidor' and valor->>'id' = $2", [NUMERO, idInstancia()])
 }
 
 /* ---------------- Conversión memoria ↔ filas ---------------- */
