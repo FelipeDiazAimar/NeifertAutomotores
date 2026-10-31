@@ -3,6 +3,7 @@ import { Menu } from 'lucide-react'
 import AppSidebar from './AppSidebar'
 import AppMobileSidebar from './AppMobileSidebar'
 import AnimatedOutlet from './AnimatedOutlet'
+import DictadoPorVoz from './DictadoPorVoz'
 import Logo from '@/components/common/Logo'
 import { useUiStore } from '@/store/useUiStore'
 import { useAvisoTareasHoy } from '@/crm/hooks/useAvisoTareasHoy'
@@ -35,6 +36,7 @@ export default function AppLayout() {
         </main>
       </div>
       <AppMobileSidebar />
+      <DictadoPorVoz />
     </div>
   )
 }
