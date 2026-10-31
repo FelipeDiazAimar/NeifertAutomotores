@@ -11,10 +11,8 @@ import DatePicker from '@/components/common/DatePicker'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import LeadVehiculos from '@/components/crm/LeadVehiculos'
-import { resumenIntereses } from '@/services/leads.service'
-import { LEAD_SOURCES } from '@/lib/constants'
-import { useCreateLead } from '@/hooks/useLeads'
-import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
+import { useClienteMutations } from '@/crm/hooks/useClientes'
 import { useTareaMutations } from '@/crm/hooks/useTareas'
 import { useAlertaMutations } from '@/crm/hooks/useAlertas'
 import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
@@ -22,9 +20,8 @@ import { useCrmUsuarios } from '@/crm/hooks/useCrmUsuarios'
 import { TareaCampos, AlertaCampos } from '@/components/crm/LeadSeguimiento'
 import { tareaVacia, alertaVacia, validarSeguimiento, usuariosAsignables } from '@/lib/leadSeguimiento'
 
-// Mismas opciones/etiquetas que el filtro por origen y la columna "Origen"
-// del listado — un solo lugar (LEAD_SOURCES) para no desalinear nombres.
-const SOURCE_OPTIONS = LEAD_SOURCES.map((s) => ({ id: s, label: s }))
+// Origen del lead = canal del cliente: mismas opciones que el filtro de Clientes.
+const SOURCE_OPTIONS = CANAL_OPCIONES
 
 /** Disparador con la misma pinta que los demás inputs del formulario:
  *  muestra cuántos vehículos van cargados y despliega la card de carga. */
@@ -69,7 +66,8 @@ const schema = z.object({
 })
 
 export default function LeadForm() {
-  const { mutateAsync, isPending } = useCreateLead()
+  const { crearCompleto } = useClienteMutations()
+  const isPending = crearCompleto.isPending
   const { crear: crearTarea } = useTareaMutations()
   const { crear: crearAlerta } = useAlertaMutations()
   const { id: miId } = useCrmPerfil()
@@ -83,7 +81,7 @@ export default function LeadForm() {
     watch,
     setValue,
     formState: { errors },
-  } = useForm({ resolver: zodResolver(schema), defaultValues: { source: 'Web', contact_date: todayStr() } })
+  } = useForm({ resolver: zodResolver(schema), defaultValues: { source: 'salon', contact_date: todayStr() } })
 
   const emailLocal = (watch('email') || '').split('@')[0]
 
@@ -99,7 +97,7 @@ export default function LeadForm() {
   const [verAlerta, setVerAlerta] = useState(false)
 
   const limpiar = () => {
-    reset({ source: 'Web', contact_date: todayStr() })
+    reset({ source: 'salon', contact_date: todayStr() })
     setIntereses([])
     setEntrega([])
     setVerIntereses(false)
@@ -118,17 +116,28 @@ export default function LeadForm() {
       toast.error(error)
       return
     }
-    const lead = await mutateAsync({
-      ...values,
-      email: values.email || null,
-      vehiculos_interes: intereses,
-      autos_entrega: entrega,
-      // El campo viejo de texto se deriva del resumen para que la búsqueda
-      // del listado y la tabla sigan funcionando.
-      vehicle_interest: resumenIntereses(intereses) || null,
-    })
-    // El lead ya existe: si la tarea o la alerta fallan, el hook avisa y se sigue.
-    if ((hayTarea || hayAlerta) && isSupabaseConfigured) {
+    // Cliente + sus vehículos de interés/entrega. Si falla, el hook ya avisó.
+    let cliente
+    try {
+      cliente = await crearCompleto.mutateAsync({
+        nombre: values.full_name.trim(),
+        telefono: values.phone,
+        email: values.email || null,
+        canal: values.source,
+        notas: values.notes || null,
+        // Fecha de contacto distinta de hoy: queda como fecha de alta.
+        ...(values.contact_date && values.contact_date !== todayStr()
+          ? { creado_en: `${values.contact_date}T12:00:00-03:00` }
+          : {}),
+        intereses,
+        autos_entrega: entrega,
+      })
+    } catch {
+      return
+    }
+    // El cliente ya existe: si la tarea o la alerta fallan, el hook avisa y se sigue.
+    toast.success('Cliente registrado con éxito')
+    if (hayTarea || hayAlerta) {
       if (!miId) {
         toast.error('Tu usuario no tiene perfil de CRM: no se pudo cargar la tarea/alerta.')
       } else {
@@ -140,7 +149,7 @@ export default function LeadForm() {
               hora: tarea.hora || null,
               prioridad: tarea.prioridad,
               asignado_a: tarea.asignado_a || miId,
-              prospecto_id: lead.id,
+              cliente_id: cliente.id,
             })
             .catch(() => {})
         }
@@ -151,7 +160,7 @@ export default function LeadForm() {
               fecha: alerta.fecha,
               hora: alerta.hora,
               asignado_a: alerta.asignado_a || miId,
-              prospecto_id: lead.id,
+              cliente_id: cliente.id,
             })
             .catch(() => {})
         }
@@ -162,9 +171,9 @@ export default function LeadForm() {
 
   return (
     <GlassCard className="p-6 md:p-8">
-      <h2 className="font-display text-xl font-bold text-ink">Registrar Nuevo Lead</h2>
+      <h2 className="font-display text-xl font-bold text-ink">Registrar Nuevo Cliente</h2>
       <p className="mt-1 text-sm text-ink-2">
-        Ingresá los datos del cliente potencial recibido en el salón.
+        Ingresá los datos del cliente o consulta recibida.
       </p>
 
       <form onSubmit={handleSubmit(onSubmit)} className="mt-6 space-y-4">
@@ -336,7 +345,7 @@ export default function LeadForm() {
             Cancelar
           </Button>
           <Button type="submit" icon={Plus} disabled={isPending}>
-            {isPending ? 'Registrando…' : 'Registrar Lead'}
+            {isPending ? 'Registrando…' : 'Registrar Cliente'}
           </Button>
         </div>
       </form>

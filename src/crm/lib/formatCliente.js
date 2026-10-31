@@ -8,6 +8,8 @@ export const CANAL_OPCIONES = [
   { id: 'instagram', label: 'Instagram' },
   { id: 'ya_cliente', label: 'Ya cliente' },
   { id: 'web', label: 'Web' },
+  { id: 'referido', label: 'Referido' },
+  { id: 'facebook', label: 'Facebook' },
   { id: 'otro', label: 'Otro' },
 ]
 

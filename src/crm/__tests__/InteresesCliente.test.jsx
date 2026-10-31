@@ -9,6 +9,10 @@ vi.mock('../hooks/useClientes.js', () => ({
   useClienteMutations: () => ({ agregarInteres, quitarInteres }),
 }))
 
+vi.mock('../hooks/useOpcionesCampo.js', () => ({
+  useOpcionesCampo: () => ({ opciones: {}, registrarNuevas: vi.fn() }),
+}))
+
 const { default: InteresesCliente } = await import('../components/InteresesCliente.jsx')
 
 describe('InteresesCliente', () => {
@@ -21,6 +25,19 @@ describe('InteresesCliente', () => {
     await userEvent.click(screen.getByRole('button', { name: /^agregar$/i }))
     expect(agregarInteres.mutate).toHaveBeenCalledWith(
       expect.objectContaining({ condicion: 'usado', marca: 'Nissan', modelo: 'Kicks' }),
+    )
+  })
+
+  it('agregar con tipo y valor aproximado los incluye en el item', async () => {
+    agregarInteres.mutate.mockReset()
+    render(<InteresesCliente clienteId="c1" intereses={[]} />)
+    await userEvent.click(screen.getByRole('button', { name: /agregar vehículo/i }))
+    await userEvent.type(screen.getByLabelText(/marca/i), 'Fiat')
+    await userEvent.type(screen.getByLabelText(/tipo/i), 'Furgón')
+    await userEvent.type(screen.getByLabelText(/valor aprox/i), '12000000')
+    await userEvent.click(screen.getByRole('button', { name: /^agregar$/i }))
+    expect(agregarInteres.mutate).toHaveBeenCalledWith(
+      expect.objectContaining({ marca: 'Fiat', tipo: 'Furgón', valor: 12000000, moneda: 'ARS' }),
     )
   })
 

@@ -4,6 +4,9 @@ import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
 import Select from '@/components/common/Select'
 import GlassCard from '@/components/common/GlassCard'
+import Combobox from '@/crm/components/Combobox'
+import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
+import { TIPOS_BASE, MONEDAS, unirOpciones, formatValor } from '@/lib/leadVehiculo'
 import { formatMiles, parseMiles } from '@/lib/numberMask'
 import { cn } from '@/lib/cn'
 
@@ -13,8 +16,8 @@ const CONDICIONES = [
 ]
 
 const VACIO = {
-  condicion: 'usado', marca: '', modelo: '', version: '',
-  anio: '', color: '', km: '', trans: '', notas: '',
+  condicion: 'usado', marca: '', modelo: '', version: '', tipo: '',
+  anio: '', color: '', km: '', valor: '', moneda: 'ARS', trans: '', notas: '',
 }
 
 /** Título del item: marca + modelo + versión (el año va como dato). */
@@ -25,16 +28,19 @@ function tituloVehiculo(v) {
 /** Todos los datos cargados, con etiqueta, omitiendo vacíos. */
 function detallesVehiculo(v) {
   return [
+    v?.tipo && { label: 'Tipo', value: v.tipo },
     v?.anio != null && { label: 'Año', value: String(v.anio) },
     v?.color && { label: 'Color', value: v.color },
     v?.km != null && { label: 'Km', value: `${formatMiles(v.km)} km` },
     v?.trans && { label: 'Transmisión', value: v.trans },
+    formatValor(v?.valor, v?.moneda) && { label: 'Valor aprox.', value: formatValor(v.valor, v.moneda) },
   ].filter(Boolean)
 }
 
 /** Editor reutilizable de listas de vehículos (CRM viejo y nuevo):
  *  sirve para "interés" y para "entrega" — mismo shape en ambos.
- *  Cada item: { condicion, marca, modelo, version, anio, color, km, notas }
+ *  Cada item: { condicion, marca, modelo, version, tipo, anio, color, km,
+ *  valor, moneda, notas }
  *  (+ `trans` solo si `conTransmision`, para autos en entrega del CRM nuevo).
  *  El listado siempre se ve; la card de carga aparece tras "Agregar vehículo"
  *  (botón propio, o controlado desde afuera con `abierto`/`onCambiarAbierto`
@@ -52,6 +58,7 @@ export default function LeadVehiculos({
   onCambiarAbierto = undefined,
 }) {
   const [form, setForm] = useState(VACIO)
+  const { opciones, registrarNuevas } = useOpcionesCampo()
   const [abiertoInterno, setAbiertoInterno] = useState(false)
   const estaAbierto = abierto ?? abiertoInterno
   const setAbierto = onCambiarAbierto ?? setAbiertoInterno
@@ -59,15 +66,24 @@ export default function LeadVehiculos({
 
   function agregar() {
     if (!form.marca.trim()) return
+    // Lo que se escribió y no estaba en el catálogo queda disponible para la próxima.
+    registrarNuevas([
+      { campo: 'marca', valor: form.marca },
+      { campo: 'modelo', valor: form.modelo },
+      { campo: 'tipo', valor: form.tipo },
+    ])
     onAgregar({
       condicion: form.condicion,
       marca: form.marca.trim(),
       modelo: form.modelo.trim() || null,
       version: form.version.trim() || null,
+      tipo: form.tipo.trim() || null,
       anio: form.anio ? Number(form.anio) : null,
       color: form.color.trim() || null,
       // Cero km: no se pide Km, se asume 0.
       km: form.condicion === 'cero' ? 0 : form.km ? Number(form.km) : null,
+      valor: form.valor ? Number(form.valor) : null,
+      moneda: form.moneda,
       ...(conTransmision ? { trans: form.trans.trim() || null } : {}),
       notas: form.notas.trim() || null,
     })
@@ -147,9 +163,10 @@ export default function LeadVehiculos({
         <div className="rounded-2xl border border-dashed border-line p-3">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <Select label="Condición" options={CONDICIONES} value={form.condicion} onChange={(v) => set('condicion', v)} />
-            <Input label="Marca *" value={form.marca} onChange={(e) => set('marca', e.target.value)} placeholder="Ej. Toyota" />
-            <Input label="Modelo" value={form.modelo} onChange={(e) => set('modelo', e.target.value)} placeholder="Ej. Corolla" />
+            <Combobox label="Marca *" value={form.marca} onChange={(v) => set('marca', v)} options={opciones.marca ?? []} placeholder="Ej. Toyota" />
+            <Combobox label="Modelo" value={form.modelo} onChange={(v) => set('modelo', v)} options={opciones.modelo ?? []} placeholder="Ej. Corolla" />
             <Input label="Versión" value={form.version} onChange={(e) => set('version', e.target.value)} placeholder="Ej. XEi" />
+            <Combobox label="Tipo" value={form.tipo} onChange={(v) => set('tipo', v)} options={unirOpciones(TIPOS_BASE, opciones.tipo)} placeholder="Ej. Sedan" />
             <Input label="Año" type="number" value={form.anio} onChange={(e) => set('anio', e.target.value)} placeholder="Ej. 2022" />
             <Input label="Color" value={form.color} onChange={(e) => set('color', e.target.value)} placeholder="Ej. Blanco" />
             {form.condicion !== 'cero' && (
@@ -158,6 +175,8 @@ export default function LeadVehiculos({
             {conTransmision && (
               <Input label="Transmisión" value={form.trans} onChange={(e) => set('trans', e.target.value)} placeholder="Ej. Automática" />
             )}
+            <Input label="Valor aprox." inputMode="numeric" value={formatMiles(form.valor)} onChange={(e) => set('valor', parseMiles(e.target.value))} placeholder="Ej. 12.000.000" />
+            <Select label="Moneda" options={MONEDAS} value={form.moneda} onChange={(v) => set('moneda', v)} />
             <Input label="Notas" value={form.notas} onChange={(e) => set('notas', e.target.value)} placeholder="Detalle…" />
           </div>
           <div className="mt-3 flex items-center justify-end gap-2">

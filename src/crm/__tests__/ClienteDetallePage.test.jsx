@@ -27,6 +27,9 @@ vi.mock('../hooks/useTareas.js', () => ({
   }),
 }))
 vi.mock('../hooks/useCrmUsuarios.js', () => ({ useCrmUsuarios: () => ({ data: [] }) }))
+vi.mock('../hooks/useOpcionesCampo.js', () => ({
+  useOpcionesCampo: () => ({ opciones: {}, registrarNuevas: vi.fn() }),
+}))
 vi.mock('lenis/react', () => ({ useLenis: () => null }))
 
 const { default: ClienteDetallePage } = await import('../pages/ClienteDetallePage.jsx')

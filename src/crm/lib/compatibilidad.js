@@ -99,7 +99,12 @@ function evaluar(cliente, vehiculo) {
 export function compatibilidad(cliente, vehiculo) {
   const candidatos = [cliente]
   for (const i of cliente.intereses ?? []) {
-    candidatos.push({ ...cliente, marca_interes: i.marca, modelo_interes: i.modelo })
+    candidatos.push({
+      ...cliente,
+      marca_interes: i.marca,
+      modelo_interes: i.modelo,
+      tipo_interes: i.tipo || cliente.tipo_interes,
+    })
   }
   let mejor = { score: -1, detalle: [] }
   for (const c of candidatos) {

@@ -11,6 +11,21 @@ export function useClientes(opts) {
   })
 }
 
+export function useResumenClientes() {
+  return useQuery({
+    queryKey: ['crm', 'clientes', 'resumen'],
+    queryFn: svc.resumen,
+  })
+}
+
+export function useProspectosSinCliente() {
+  return useQuery({
+    queryKey: ['crm', 'clientes', 'prospectos-sin-cliente'],
+    queryFn: svc.prospectosSinCliente,
+    staleTime: 30_000,
+  })
+}
+
 export function useCliente(id) {
   return useQuery({
     queryKey: ['crm', 'cliente', id],
@@ -37,6 +52,13 @@ export function useClienteMutations(clienteId) {
   }
   const fail = (e) => toast.error(errMsg(e))
 
+  // Alta con vehículos de interés/entrega incluidos (Carga Leads). Sin toast
+  // propio de éxito: lo muestra quien la usa junto con la tarea/alerta.
+  const crearCompleto = useMutation({
+    mutationFn: (data) => svc.crearConIntereses(data, autorId),
+    onSuccess: ok(),
+    onError: fail,
+  })
   const crear = useMutation({ mutationFn: (data) => svc.crear(data, autorId), onSuccess: ok('Cliente cargado.'), onError: fail })
   const actualizar = useMutation({ mutationFn: ({ id, data }) => svc.actualizar(id, data, autorId), onSuccess: ok('Cambios guardados.'), onError: fail })
   const cambiarStatus = useMutation({ mutationFn: ({ id, de, a }) => svc.cambiarStatus(id, de, a, autorId), onSuccess: ok(), onError: fail })
@@ -55,7 +77,7 @@ export function useClienteMutations(clienteId) {
   const agregarContacto = useMutation({ mutationFn: (texto) => svc.agregarContacto(clienteId, texto, autorId), onSuccess: ok('Contacto agregado.'), onError: fail })
 
   return {
-    crear, actualizar, cambiarStatus, archivar, desarchivar, eliminar,
+    crear, crearCompleto, actualizar, cambiarStatus, archivar, desarchivar, eliminar,
     registrarVenta, agregarInteres, quitarInteres, agregarAutoEntrega, quitarAutoEntrega, agregarContacto,
   }
 }

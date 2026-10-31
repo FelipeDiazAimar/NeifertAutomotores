@@ -16,7 +16,7 @@ const LegalPage = lazy(() => import('@/pages/public/LegalPage'))
 const ContactPage = lazy(() => import('@/pages/public/ContactPage'))
 const StatsPage = lazy(() => import('@/pages/admin/StatsPage'))
 const CrmPage = lazy(() => import('@/pages/admin/CrmPage'))
-const LeadDetailPage = lazy(() => import('@/pages/admin/LeadDetailPage'))
+const LeadRedirectPage = lazy(() => import('@/pages/admin/LeadRedirectPage'))
 const AdminContentPage = lazy(() => import('@/pages/admin/AdminContentPage'))
 const NotFoundPage = lazy(() => import('@/pages/NotFoundPage'))
 
@@ -64,7 +64,7 @@ export default function AppRouter() {
         <Route element={<AppLayout />}>
           <Route element={<VistaGuard />}>
             <Route path="/admin/crm" element={<CrmPage />} />
-            <Route path="/admin/crm/:id" element={<LeadDetailPage />} />
+            <Route path="/admin/crm/:id" element={<LeadRedirectPage />} />
             <Route path="/admin/contenido" element={<AdminContentPage />} />
             <Route path="/admin/estadisticas" element={<StatsPage />} />
             <Route path="/admin/admin" element={<AdminPage />} />

@@ -3,11 +3,13 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-const crearLead = vi.fn()
+const crearCliente = vi.fn()
 const crearTarea = vi.fn()
 const crearAlerta = vi.fn()
 
-vi.mock('@/hooks/useLeads', () => ({ useCreateLead: () => ({ mutateAsync: crearLead, isPending: false }) }))
+vi.mock('@/crm/hooks/useClientes', () => ({
+  useClienteMutations: () => ({ crearCompleto: { mutateAsync: crearCliente, isPending: false } }),
+}))
 vi.mock('@/crm/hooks/useTareas', () => ({ useTareaMutations: () => ({ crear: { mutateAsync: crearTarea } }) }))
 vi.mock('@/crm/hooks/useAlertas', () => ({ useAlertaMutations: () => ({ crear: { mutateAsync: crearAlerta } }) }))
 vi.mock('@/crm/hooks/useCrmUsuarios', () => ({
@@ -20,7 +22,6 @@ vi.mock('@/crm/hooks/useCrmUsuarios', () => ({
   }),
 }))
 vi.mock('@/crm/hooks/useCrmPerfil', () => ({ useCrmPerfil: () => ({ id: 'u1' }) }))
-vi.mock('@/services/supabaseClient', () => ({ isSupabaseConfigured: true }))
 
 import LeadForm from '../LeadForm.jsx'
 import { validarSeguimiento, usuariosAsignables } from '@/lib/leadSeguimiento'
@@ -35,15 +36,15 @@ async function cargarDatosBasicos() {
   await userEvent.type(screen.getByLabelText('Teléfono'), '3492123456')
 }
 
-describe('LeadForm — tarea y alerta', () => {
+describe('LeadForm — alta de cliente con tarea y alerta', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    crearLead.mockResolvedValue({ id: 'lead-1' })
+    crearCliente.mockResolvedValue({ id: 'cli-1' })
     crearTarea.mockResolvedValue({})
     crearAlerta.mockResolvedValue({})
   })
 
-  it('crea la tarea y la alerta vinculadas al lead nuevo', async () => {
+  it('crea la tarea y la alerta vinculadas al cliente nuevo', async () => {
     render(<LeadForm />)
     await cargarDatosBasicos()
     await userEvent.click(desplegable(TAREA))
@@ -53,14 +54,14 @@ describe('LeadForm — tarea y alerta', () => {
     await userEvent.type(titulos[1], 'Recordar presupuesto')
     const horas = screen.getAllByLabelText('Hora')
     await userEvent.type(horas[1], '10:30')
-    await userEvent.click(screen.getByRole('button', { name: /registrar lead/i }))
+    await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
 
     await vi.waitFor(() => expect(crearAlerta).toHaveBeenCalled())
     expect(crearTarea).toHaveBeenCalledWith(
-      expect.objectContaining({ titulo: 'Llamar', prospecto_id: 'lead-1', asignado_a: 'u1' })
+      expect.objectContaining({ titulo: 'Llamar', cliente_id: 'cli-1', asignado_a: 'u1' })
     )
     expect(crearAlerta).toHaveBeenCalledWith(
-      expect.objectContaining({ titulo: 'Recordar presupuesto', hora: '10:30', prospecto_id: 'lead-1' })
+      expect.objectContaining({ titulo: 'Recordar presupuesto', hora: '10:30', cliente_id: 'cli-1' })
     )
   })
 
@@ -72,28 +73,38 @@ describe('LeadForm — tarea y alerta', () => {
     await userEvent.click(screen.getByRole('button', { name: /bruno/i }))
     expect(screen.queryByRole('button', { name: /^admin$/i })).toBeNull()
     await userEvent.click(await screen.findByRole('button', { name: /valeria/i }))
-    await userEvent.click(screen.getByRole('button', { name: /registrar lead/i }))
+    await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
     await vi.waitFor(() => expect(crearTarea).toHaveBeenCalled())
     expect(crearTarea).toHaveBeenCalledWith(expect.objectContaining({ asignado_a: 'u2' }))
+  })
+
+  it('crea el cliente con sus datos y el canal elegido', async () => {
+    render(<LeadForm />)
+    await cargarDatosBasicos()
+    await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
+    await vi.waitFor(() => expect(crearCliente).toHaveBeenCalled())
+    expect(crearCliente).toHaveBeenCalledWith(
+      expect.objectContaining({ nombre: 'Juan Pérez', telefono: '3492123456', canal: 'salon', intereses: [], autos_entrega: [] })
+    )
   })
 
   it('sin título no crea ni tarea ni alerta', async () => {
     render(<LeadForm />)
     await cargarDatosBasicos()
-    await userEvent.click(screen.getByRole('button', { name: /registrar lead/i }))
-    await vi.waitFor(() => expect(crearLead).toHaveBeenCalled())
+    await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
+    await vi.waitFor(() => expect(crearCliente).toHaveBeenCalled())
     expect(crearTarea).not.toHaveBeenCalled()
     expect(crearAlerta).not.toHaveBeenCalled()
   })
 
-  it('una alerta sin hora frena el alta del lead', async () => {
+  it('una alerta sin hora frena el alta del cliente', async () => {
     render(<LeadForm />)
     await cargarDatosBasicos()
     await userEvent.click(desplegable(ALERTA))
     await userEvent.type(screen.getByLabelText('Título'), 'Aviso')
-    await userEvent.click(screen.getByRole('button', { name: /registrar lead/i }))
+    await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
     await new Promise((r) => setTimeout(r, 50))
-    expect(crearLead).not.toHaveBeenCalled()
+    expect(crearCliente).not.toHaveBeenCalled()
   })
 })
 

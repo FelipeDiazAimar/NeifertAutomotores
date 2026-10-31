@@ -1,9 +1,12 @@
+import { useState } from 'react'
 import Spinner from '@/components/common/Spinner'
 import { useKpis, useDemanda, useOportunidades } from '@/crm/hooks/useDashboard'
 import KpiTile from '@/crm/components/KpiTile'
 import GraficoMarcas from '@/crm/components/GraficoMarcas'
 import GraficoTipos from '@/crm/components/GraficoTipos'
 import OportunidadesList from '@/crm/components/OportunidadesList'
+import BuscadorCompradores from '@/crm/components/BuscadorCompradores'
+import { cn } from '@/lib/cn'
 
 const nf = new Intl.NumberFormat('es-AR')
 const nfCompacto = new Intl.NumberFormat('es-AR', { notation: 'compact', maximumFractionDigits: 1 })
@@ -23,6 +26,7 @@ export default function DashboardPage() {
   const { data: kpis, isLoading: cargandoKpis } = useKpis()
   const { data: demanda, isLoading: cargandoDemanda } = useDemanda()
   const { data: oportunidades, isLoading: cargandoOps } = useOportunidades()
+  const [vistaOps, setVistaOps] = useState('stock')
 
   return (
     <div className="space-y-6">
@@ -54,10 +58,34 @@ export default function DashboardPage() {
       </Seccion>
 
       <section>
-        <h2 className="mb-3 font-display text-lg font-bold text-ink">Oportunidades de venta</h2>
-        <Seccion cargando={cargandoOps}>
-          <OportunidadesList items={oportunidades ?? []} />
-        </Seccion>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="font-display text-lg font-bold text-ink">Oportunidades de venta</h2>
+          <div className="glass flex gap-1 rounded-2xl p-1">
+            {[
+              ['stock', 'Por vehículo del stock'],
+              ['buscar', 'Buscar compradores'],
+            ].map(([id, label]) => (
+              <button
+                key={id}
+                type="button"
+                onClick={() => setVistaOps(id)}
+                className={cn(
+                  'rounded-xl px-3.5 py-1.5 text-xs font-semibold transition-colors sm:text-sm',
+                  vistaOps === id ? 'bg-neifert text-white' : 'text-ink-2 hover:text-ink'
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+        {vistaOps === 'stock' ? (
+          <Seccion cargando={cargandoOps}>
+            <OportunidadesList items={oportunidades ?? []} />
+          </Seccion>
+        ) : (
+          <BuscadorCompradores />
+        )}
       </section>
     </div>
   )

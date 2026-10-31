@@ -1,5 +1,6 @@
 import { supabase } from '@/services/supabaseClient'
 import { registrar } from './eventos.service.js'
+import { clienteQueCoincide, canalDeOrigen, itemAFila } from '@/crm/lib/leadCliente'
 
 const db = () => supabase.schema('crm')
 const hoy = () => new Date().toISOString().slice(0, 10)
@@ -139,4 +140,105 @@ export async function quitarAutoEntrega(id) {
 // --- seguimiento ---
 export async function agregarContacto(clienteId, texto, autorId) {
   await registrar({ entidad: 'cliente', entidadId: clienteId, tipo: 'contacto', datos: { texto }, usuarioId: autorId })
+}
+
+/** Alta de un cliente con sus vehículos de interés y autos en entrega (el
+ *  alta de "Carga Leads"). Si fallan los vehículos, el cliente ya quedó
+ *  creado: se avisa con un error claro. */
+export async function crearConIntereses({ intereses = [], autos_entrega = [], ...cliente }, autorId) {
+  const fila = await crear(
+    { ...cliente, ...(autos_entrega.length ? { tiene_auto_entrega: true } : {}) },
+    autorId,
+  )
+  try {
+    if (intereses.length) {
+      const { error } = await db()
+        .from('cliente_intereses')
+        .insert(intereses.map((i) => ({ cliente_id: fila.id, ...itemAFila(i) })))
+      if (error) throw error
+    }
+    if (autos_entrega.length) {
+      const { error } = await db()
+        .from('cliente_autos_entrega')
+        .insert(autos_entrega.map((a) => ({ cliente_id: fila.id, ...itemAFila(a, { conTransmision: true }) })))
+      if (error) throw error
+    }
+  } catch (e) {
+    throw new Error(`El cliente se creó, pero no se pudieron guardar sus vehículos: ${e.message}`, { cause: e })
+  }
+  return fila
+}
+
+/** Números del encabezado de "Carga Leads". */
+export async function resumen() {
+  const inicioHoy = new Date()
+  inicioHoy.setHours(0, 0, 0, 0)
+  const base = () => db().from('clientes').select('id', { count: 'exact', head: true }).is('archivado_en', null)
+  const [total, hoyN, activos, vendidos] = await Promise.all([
+    base(),
+    base().gte('creado_en', inicioHoy.toISOString()),
+    base().in('status', ['activo', 'en_seguimiento']),
+    base().eq('status', 'vendido'),
+  ])
+  for (const r of [total, hoyN, activos, vendidos]) if (r.error) throw r.error
+  return {
+    total: total.count ?? 0,
+    hoy: hoyN.count ?? 0,
+    activos: activos.count ?? 0,
+    vendidos: vendidos.count ?? 0,
+  }
+}
+
+/** Lead viejo (public.prospectos) → id de su cliente. Busca por teléfono; si
+ *  no existe lo crea con los datos del lead, y pasa sus tareas/alertas al
+ *  cliente. Devuelve null si el lead no existe. */
+export async function clienteDeProspecto(prospectoId, autorId) {
+  const { data: p, error } = await supabase
+    .from('prospectos')
+    .select('*')
+    .eq('id', prospectoId)
+    .maybeSingle()
+  if (error) throw error
+  if (!p) return null
+
+  const { data: cs, error: e2 } = await db().from('clientes').select('id, nombre, telefono')
+  if (e2) throw e2
+  let clienteId = clienteQueCoincide(p, cs ?? [])?.id ?? null
+  if (!clienteId) {
+    const fila = await crearConIntereses(
+      {
+        nombre: (p.nombre_completo ?? '').trim() || 'Sin nombre',
+        telefono: p.telefono || null,
+        email: p.email || null,
+        canal: canalDeOrigen(p.origen),
+        notas: p.notas || null,
+        intereses: Array.isArray(p.vehiculos_interes) ? p.vehiculos_interes : [],
+        autos_entrega: Array.isArray(p.autos_entrega) ? p.autos_entrega : [],
+      },
+      autorId,
+    )
+    clienteId = fila.id
+  }
+
+  // Tareas/alertas cargadas sobre el lead pasan al cliente (best-effort).
+  for (const tabla of ['tareas', 'alertas']) {
+    await db().from(tabla).update({ cliente_id: clienteId }).eq('prospecto_id', prospectoId).is('cliente_id', null)
+  }
+  return clienteId
+}
+
+/** Leads de public.prospectos (p. ej. las consultas del formulario web) cuyo
+ *  teléfono todavía no corresponde a ningún cliente. Los más nuevos primero. */
+export async function prospectosSinCliente() {
+  const [pros, cli] = await Promise.all([
+    supabase
+      .from('prospectos')
+      .select('id, nombre_completo, telefono, origen, creado_en')
+      .order('creado_en', { ascending: false })
+      .limit(500),
+    db().from('clientes').select('nombre, telefono'),
+  ])
+  if (pros.error) throw pros.error
+  if (cli.error) throw cli.error
+  return (pros.data ?? []).filter((p) => !clienteQueCoincide(p, cli.data ?? []))
 }

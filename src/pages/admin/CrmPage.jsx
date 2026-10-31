@@ -1,135 +1,101 @@
-import { useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
-import { toast } from 'sonner'
-import {
-  UserPlus,
-  Users,
-  TrendingUp,
-  ClipboardList,
-  Search,
-  DatabaseZap,
-} from 'lucide-react'
-import Button from '@/components/common/Button'
+import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { UserPlus, Users, TrendingUp, ClipboardList, Search } from 'lucide-react'
 import KpiCard from '@/components/crm/KpiCard'
 import LeadForm from '@/components/crm/LeadForm'
-import QuickFilters from '@/components/crm/QuickFilters'
-import LeadTable from '@/components/crm/LeadTable'
-import LeadCard from '@/components/crm/LeadCard'
 import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
 import Select from '@/components/common/Select'
-import SortDropdown from '@/components/catalog/SortDropdown'
-import { useLeads, useLeadCounts } from '@/hooks/useLeads'
-import { useRealtimeLeads } from '@/hooks/useRealtimeLeads'
-import { useCrmStore } from '@/store/useCrmStore'
-import { syncExternalCrm } from '@/services/crmIntegration.service'
-import { LEAD_SORT_OPTIONS, LEAD_SOURCES } from '@/lib/constants'
+import { useIsDesktop } from '@/hooks/useMediaQuery'
+import {
+  useClientes,
+  useClienteMutations,
+  useResumenClientes,
+  useProspectosSinCliente,
+} from '@/crm/hooks/useClientes'
+import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
+import ClienteTable from '@/crm/components/ClienteTable'
+import ClienteCard from '@/crm/components/ClienteCard'
+import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
 import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 10
 
-// Mismas etiquetas que "Origen del lead" en LeadForm y la columna "Origen"
-// de la tabla — un solo lugar (LEAD_SOURCES) para no desalinear nombres.
-const ORIGIN_OPTIONS = [{ id: 'todos', label: 'Todos los orígenes' }, ...LEAD_SOURCES.map((s) => ({ id: s, label: s }))]
+const ORIGIN_OPTIONS = [{ id: 'todos', label: 'Todos los orígenes' }, ...CANAL_OPCIONES]
+
+// Filtro rápido → estados del cliente (null = todos).
+const FILTROS_RAPIDOS = [
+  { id: 'todos', label: 'Todos', status: null },
+  { id: 'activos', label: 'Activos', status: ['activo'] },
+  { id: 'seguimiento', label: 'En seguimiento', status: ['en_seguimiento'] },
+  { id: 'cerrados', label: 'Vendidos / perdidos', status: ['vendido', 'perdido'] },
+]
 
 export default function CrmPage() {
-  useRealtimeLeads()
-  const { data: leads = [], isLoading } = useLeads()
-  const { data: counts } = useLeadCounts()
-  const mobileTab = useCrmStore((s) => s.mobileTab)
-  const setMobileTab = useCrmStore((s) => s.setMobileTab)
-  const search = useCrmStore((s) => s.search)
-  const setSearch = useCrmStore((s) => s.setSearch)
-  const sort = useCrmStore((s) => s.sort)
-  const setSort = useCrmStore((s) => s.setSort)
-  const originFilter = useCrmStore((s) => s.originFilter)
-  const setOriginFilter = useCrmStore((s) => s.setOriginFilter)
-  const quickFilter = useCrmStore((s) => s.quickFilter)
-  const page = useCrmStore((s) => s.page)
-  const setPage = useCrmStore((s) => s.setPage)
-  const qc = useQueryClient()
-  const [syncing, setSyncing] = useState(false)
-  const autoSyncedRef = useRef(false)
+  const esDesktop = useIsDesktop()
+  const { cambiarStatus } = useClienteMutations()
+  const { data: resumen } = useResumenClientes()
+  const { data: sinCliente = [] } = useProspectosSinCliente()
+  useCrmRealtime('clientes', ['crm', 'clientes'])
 
-  // Reset a la página 1 cuando cambia búsqueda/orden/filtro. Ajuste durante
-  // el render (patrón recomendado por React) en vez de un useEffect, que
-  // dispararía un render en cascada.
-  const pageKey = JSON.stringify({ search, sort, quickFilter, originFilter })
-  const [prevPageKey, setPrevPageKey] = useState(pageKey)
-  if (pageKey !== prevPageKey) {
-    setPrevPageKey(pageKey)
-    setPage(1)
-  }
-  const totalPages = Math.max(1, Math.ceil(leads.length / PAGE_SIZE))
-  const pageLeads = leads.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE)
+  const [mobileTab, setMobileTab] = useState('registrar')
+  const [texto, setTexto] = useState('')
+  const [busqueda, setBusqueda] = useState('')
+  const [canal, setCanal] = useState('todos')
+  const [rapido, setRapido] = useState('todos')
+  const [pagina, setPagina] = useState(1)
 
-  const runSync = async ({ silent = false } = {}) => {
-    setSyncing(true)
-    try {
-      const r = await syncExternalCrm()
-      qc.invalidateQueries({ queryKey: ['leads'] })
-      qc.invalidateQueries({ queryKey: ['lead-counts'] })
-      if (!silent || r.count > 0) toast.success(`CRM sincronizado: ${r.count} cliente(s)`)
-    } catch (e) {
-      if (!silent) toast.error('No se pudo sincronizar con el CRM viejo: ' + e.message)
-      else console.warn('[crm-sync] auto-sync falló (silencioso):', e.message)
-    } finally {
-      setSyncing(false)
-    }
-  }
-
-  // Auto-sync best-effort al entrar al panel (una vez por sesión de la página)
   useEffect(() => {
-    if (autoSyncedRef.current) return
-    autoSyncedRef.current = true
-    runSync({ silent: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+    const t = setTimeout(() => setBusqueda(texto), 300)
+    return () => clearTimeout(t)
+  }, [texto])
 
-  const today = new Date().toDateString()
-  const leadsHoy = leads.filter((l) => new Date(l.created_at).toDateString() === today).length
-  const activos = counts?.seguimiento ?? 0
-  const conversion = counts?.todos
-    ? ((counts.finalizados / counts.todos) * 100).toFixed(1)
-    : '0'
-  const totalLeads = counts?.todos ?? 0
+  const filtros = {
+    status: FILTROS_RAPIDOS.find((f) => f.id === rapido)?.status ?? undefined,
+    canal: canal !== 'todos' ? [canal] : undefined,
+  }
+  const { data, isLoading } = useClientes({
+    busqueda,
+    filtros,
+    orden: { campo: 'creado_en', dir: 'desc' },
+    pagina,
+    pageSize: PAGE_SIZE,
+  })
+  const filas = data?.filas ?? []
+  const totalPaginas = Math.max(1, Math.ceil((data?.total ?? 0) / PAGE_SIZE))
+
+  const total = resumen?.total ?? 0
+  const conversion = total ? (((resumen?.vendidos ?? 0) / total) * 100).toFixed(1) : '0'
+
+  // Al cambiar un filtro se vuelve a la primera página.
+  const cambiar = (setter) => (v) => {
+    setter(v)
+    setPagina(1)
+  }
 
   return (
     <div className="space-y-6">
-      <header className="flex flex-wrap items-center justify-between gap-3">
+      <header className="flex flex-wrap items-center gap-3">
         <span className="rounded-full bg-neifert px-4 py-1.5 text-sm font-semibold text-white shadow-glow-red">
           Gestión de Salón
         </span>
-        <div className="flex items-center gap-3">
-          <span className="flex items-center gap-2 text-xs font-medium text-ink-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
-            Abierto ahora
-          </span>
-          <Button
-            variant="glass"
-            size="sm"
-            icon={DatabaseZap}
-            onClick={() => runSync()}
-            disabled={syncing}
-            className="text-xs sm:text-sm"
-          >
-            <span className="hidden sm:inline">{syncing ? 'Sincronizando…' : 'Sincronizar con CRM'}</span>
-            <span className="sm:hidden">{syncing ? 'Sync…' : 'Sync CRM'}</span>
-          </Button>
+        {/* KPIs a la derecha del chip; si no entran, bajan a su propia fila. */}
+        <div className="grid min-w-0 flex-1 basis-[30rem] grid-cols-2 gap-2 lg:grid-cols-4">
+          <KpiCard icon={UserPlus} accent="red" label="Cargados Hoy" value={resumen?.hoy ?? 0} />
+          <KpiCard icon={Users} accent="blue" label="Activos" value={resumen?.activos ?? 0} />
+          <KpiCard icon={TrendingUp} accent="green" label="Conversión" value={`${conversion}%`} />
+          <KpiCard icon={ClipboardList} accent="amber" label="Total Clientes" value={total} />
         </div>
+        <span className="ml-auto flex items-center gap-2 text-xs font-medium text-ink-2">
+          <span className="h-2 w-2 animate-pulse rounded-full bg-success" />
+          Abierto ahora
+        </span>
       </header>
-
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <KpiCard icon={UserPlus} accent="red" label="Leads Hoy" value={leadsHoy} />
-        <KpiCard icon={Users} accent="blue" label="Activos" value={activos} />
-        <KpiCard icon={TrendingUp} accent="green" label="Conversión" value={`${conversion}%`} />
-        <KpiCard icon={ClipboardList} accent="amber" label="Total Leads" value={totalLeads} />
-      </div>
 
       <div className="glass grid grid-cols-2 gap-1 rounded-2xl p-1 md:hidden">
         {[
           ['registrar', 'Registrar', UserPlus],
-          ['leads', 'Leads', ClipboardList],
+          ['leads', 'Clientes', ClipboardList],
         ].map(([id, label, Icon]) => (
           <button
             key={id}
@@ -151,56 +117,92 @@ export default function CrmPage() {
         </div>
 
         <div className={cn('space-y-4', mobileTab !== 'leads' && 'hidden md:block')}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="font-display text-xl font-bold text-ink">
-              Listado de Leads Recientes
-            </h2>
-          </div>
+          {sinCliente.length > 0 && (
+            <details className="glass rounded-2xl px-4 py-3">
+              <summary className="cursor-pointer text-sm font-semibold text-ink">
+                {sinCliente.length} consulta{sinCliente.length === 1 ? '' : 's'} sin pasar a cliente
+                <span className="ml-2 text-xs font-normal text-ink-3">
+                  (formulario web y leads viejos — al abrirlas se crea el cliente)
+                </span>
+              </summary>
+              <ul className="mt-3 divide-y divide-line">
+                {sinCliente.slice(0, 20).map((p) => (
+                  <li key={p.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                    <span className="min-w-0 truncate text-ink">
+                      {p.nombre_completo}
+                      <span className="ml-2 text-xs text-ink-3">{p.telefono}</span>
+                    </span>
+                    <Link
+                      to={`/admin/crm/${p.id}`}
+                      className="shrink-0 text-xs font-semibold text-neifert hover:underline"
+                    >
+                      Abrir
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </details>
+          )}
+
+          <h2 className="font-display text-xl font-bold text-ink">Clientes Recientes</h2>
 
           <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
             <div className="glass field-glass flex h-10 flex-1 items-center gap-2 rounded-xl px-3">
               <Search size={16} className="shrink-0 text-ink-3" />
               <input
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Buscar por nombre o vehículo…"
+                value={texto}
+                onChange={(e) => {
+                  setTexto(e.target.value)
+                  setPagina(1)
+                }}
+                placeholder="Buscar por nombre, teléfono o localidad…"
                 className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
               />
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              <div className="w-48 sm:w-56">
-                <Select
-                  size="sm"
-                  value={originFilter}
-                  onChange={setOriginFilter}
-                  options={ORIGIN_OPTIONS}
-                />
-              </div>
-              <SortDropdown sort={sort} setSort={setSort} options={LEAD_SORT_OPTIONS} label="Orden:" />
+            <div className="w-full shrink-0 sm:w-56">
+              <Select size="sm" value={canal} onChange={cambiar(setCanal)} options={ORIGIN_OPTIONS} />
             </div>
           </div>
 
-          <QuickFilters />
+          <div className="flex flex-wrap gap-2">
+            {FILTROS_RAPIDOS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => cambiar(setRapido)(f.id)}
+                className={cn(
+                  'rounded-full px-3.5 py-1.5 text-xs font-semibold transition-colors',
+                  rapido === f.id ? 'bg-neifert text-white' : 'glass text-ink-2 hover:text-ink'
+                )}
+              >
+                {f.label}
+              </button>
+            ))}
+          </div>
 
           {isLoading ? (
             <div className="grid place-items-center py-16">
               <Spinner />
             </div>
-          ) : leads.length === 0 ? (
+          ) : filas.length === 0 ? (
             <div className="glass grid place-items-center rounded-[20px] py-16 text-center text-ink-2">
-              No hay leads para este filtro.
+              No hay clientes para este filtro.
             </div>
           ) : (
             <>
-              <div className="hidden md:block">
-                <LeadTable leads={pageLeads} />
-              </div>
-              <div className="space-y-3 md:hidden">
-                {pageLeads.map((l) => (
-                  <LeadCard key={l.id} lead={l} />
-                ))}
-              </div>
-              <Pagination page={page} totalPages={totalPages} onChange={setPage} />
+              {esDesktop ? (
+                <ClienteTable
+                  filas={filas}
+                  onCambiarStatus={(c, s) => cambiarStatus.mutate({ id: c.id, de: c.status, a: s })}
+                />
+              ) : (
+                <div className="space-y-3">
+                  {filas.map((c) => (
+                    <ClienteCard key={c.id} cliente={c} />
+                  ))}
+                </div>
+              )}
+              <Pagination page={pagina} totalPages={totalPaginas} onChange={setPagina} />
             </>
           )}
         </div>
