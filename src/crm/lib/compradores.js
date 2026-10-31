@@ -1,14 +1,9 @@
 // "Posibles compradores": cruza una búsqueda (marca / modelo / tipo / rango de
 // precio) con los intereses cargados en los clientes.
 import { DOLAR } from '@/crm/lib/compatibilidad'
+import { normTexto, parecidas, coincidePalabra } from '@/lib/similitud'
 
-const norm = (s) =>
-  (s ?? '')
-    .toString()
-    .trim()
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[̀-ͯ]/g, '')
+const norm = normTexto
 
 const aArs = (valor, moneda) => (moneda === 'USD' ? Number(valor) * DOLAR : Number(valor))
 const hayValor = (v) => v != null && v !== '' && Number(v) > 0
@@ -32,6 +27,7 @@ export function demandasDeCliente(c) {
     persona,
     marca: i.marca,
     modelo: i.modelo,
+    version: i.version,
     tipo: i.tipo,
     condicion: i.condicion,
     anio: i.anio,
@@ -64,19 +60,39 @@ export function esInactivo(persona) {
 function evaluar(d, f) {
   const coincide = []
 
+  // Marca / modelo / tipo toleran errores de tipeo ("toyta", "corola").
   if (f.marca && norm(d.marca)) {
-    if (norm(d.marca) !== norm(f.marca)) return null
+    if (!parecidas(norm(d.marca), norm(f.marca))) return null
     coincide.push('marca')
   }
   if (f.modelo && norm(d.modelo)) {
     const dm = norm(d.modelo)
     const fm = norm(f.modelo)
-    if (!dm.includes(fm) && !fm.includes(dm)) return null
+    if (!dm.includes(fm) && !fm.includes(dm) && !parecidas(dm, fm)) return null
     coincide.push('modelo')
   }
   if (f.tipo && norm(d.tipo)) {
-    if (norm(d.tipo) !== norm(f.tipo)) return null
+    if (!parecidas(norm(d.tipo), norm(f.tipo))) return null
     coincide.push('tipo')
+  }
+
+  // Texto libre: cada palabra tiene que aparecer (aunque sea parecida) en el
+  // vehículo de interés o en el nombre del cliente.
+  let extra = 0
+  const terminos = terminosDeTexto(f.texto)
+  if (terminos.length) {
+    const palabrasVeh = norm([d.marca, d.modelo, d.version, d.tipo, d.anio].filter(Boolean).join(' ')).split(' ').filter(Boolean)
+    const palabrasNombre = norm(d.persona?.nombre).split(' ').filter(Boolean)
+    let enVeh = 0
+    let enNombre = 0
+    for (const t of terminos) {
+      if (palabrasVeh.some((w) => coincidePalabra(t, w))) enVeh++
+      else if (palabrasNombre.some((w) => coincidePalabra(t, w))) enNombre++
+      else return null
+    }
+    if (enVeh) coincide.push('texto')
+    if (enNombre) coincide.push('nombre')
+    extra = Math.max(0, enVeh + enNombre - 1)
   }
 
   const min = hayValor(f.precioMin) ? aArs(f.precioMin, f.moneda) : null
@@ -102,15 +118,24 @@ function evaluar(d, f) {
   const coincideVeh = coincide.some((c) => c === 'marca' || c === 'modelo' || c === 'tipo')
   if (hayVeh && !coincideVeh) return null
   if (coincide.length === 0 && !sinValor) return null
+  // Con texto libre, "sin valor" solo no alcanza: tiene que haber coincidido el texto.
+  if (terminos.length && !coincide.some((c) => c === 'texto' || c === 'nombre')) return null
 
-  const score = coincide.length
+  const score = coincide.length + extra
   if (sinValor) coincide.push('sin_valor')
   return { score, coincide }
 }
 
+/** Palabras útiles del texto libre (sin las de una sola letra). */
+function terminosDeTexto(texto) {
+  return norm(texto).split(' ').filter((t) => t.length >= 2)
+}
+
 /** Hay algún criterio cargado en la búsqueda. */
 export function hayFiltros(f) {
-  return Boolean(f.marca || f.modelo || f.tipo || hayValor(f.precioMin) || hayValor(f.precioMax))
+  return Boolean(
+    f.marca || f.modelo || f.tipo || terminosDeTexto(f.texto).length || hayValor(f.precioMin) || hayValor(f.precioMax)
+  )
 }
 
 /** Personas con al menos una línea de interés que encaje con la búsqueda,

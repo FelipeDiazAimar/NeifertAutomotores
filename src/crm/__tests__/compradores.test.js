@@ -101,4 +101,31 @@ describe('buscarCompradores', () => {
     expect(r).toHaveLength(1)
     expect(r[0].lineas).toHaveLength(2)
   })
+
+  describe('tolerancia a errores de escritura', () => {
+    it('marca y modelo con faltas igual encuentran', () => {
+      expect(nombres(buscarCompradores(demandas, { marca: 'toyta', modelo: 'corola' }))).toContain('Ana')
+    })
+    it('texto libre con errores de tipeo', () => {
+      const r = nombres(buscarCompradores(demandas, { texto: 'toyta corola' }))
+      expect(r).toContain('Ana')
+      expect(r).not.toContain('Beto') // Hilux no es Corolla
+    })
+    it('texto libre parcial: "hil" encuentra Hilux', () => {
+      expect(nombres(buscarCompradores(demandas, { texto: 'hil' }))).toEqual(['Beto'])
+    })
+    it('texto libre también encuentra por nombre del cliente', () => {
+      const r = buscarCompradores(demandas, { texto: 'betto' })
+      expect(nombres(r)).toEqual(['Beto'])
+      expect(r[0].lineas[0].coincide).toContain('nombre')
+    })
+    it('todas las palabras tienen que aparecer', () => {
+      expect(buscarCompradores(demandas, { texto: 'toyota zzzzz' })).toEqual([])
+    })
+    it('combina con el rango de precio', () => {
+      const r = nombres(buscarCompradores(demandas, { texto: 'toyota', precioMin: 35000000, precioMax: 45000000 }))
+      expect(r).toContain('Beto')
+      expect(r).not.toContain('Ana')
+    })
+  })
 })

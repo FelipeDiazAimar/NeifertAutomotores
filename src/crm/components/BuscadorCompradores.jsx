@@ -17,7 +17,7 @@ import { waContactoLink, statusVariant } from '@/crm/lib/formatCliente'
 import { TIPOS_BASE, MONEDAS, unirOpciones, formatValor } from '@/lib/leadVehiculo'
 import { formatMiles, parseMiles } from '@/lib/numberMask'
 
-const VACIO = { marca: '', modelo: '', tipo: '', precioMin: '', precioMax: '', moneda: 'ARS' }
+const VACIO = { texto: '', marca: '', modelo: '', tipo: '', precioMin: '', precioMax: '', moneda: 'ARS' }
 const PASO = 30
 // Al elegir un auto del stock se busca en su precio ± este margen.
 const MARGEN_STOCK = 0.15
@@ -31,6 +31,8 @@ const ETIQUETA = {
   precio: 'precio',
   presupuesto: 'presupuesto',
   sin_valor: 'sin valor',
+  texto: 'texto',
+  nombre: 'nombre',
 }
 
 function lineaDemanda(d) {
@@ -146,6 +148,7 @@ export default function BuscadorCompradores() {
     if (!v) return
     const precio = Number(v.precio_contado)
     setF({
+      texto: '',
       marca: v.marca ?? '',
       modelo: v.modelo ?? '',
       tipo: v.tipo ?? '',
@@ -172,7 +175,20 @@ export default function BuscadorCompradores() {
         intereses cargados en cada cliente.
       </p>
 
-      <GlassCard className="p-4">
+      {/* z-20: la lista desplegable de los selectores tiene que quedar por encima de los resultados. */}
+      <GlassCard className="relative z-20 p-4">
+        <div className="mb-3">
+          <Input
+            label="Búsqueda libre"
+            icon={Search}
+            value={f.texto}
+            onChange={(e) => set('texto')(e.target.value)}
+            placeholder="Ej. toyta corola, hilux 2020, juan perez…"
+          />
+          <p className="mt-1 text-[11px] text-ink-3">
+            Escribí marca, modelo, año o nombre del cliente: encuentra aunque haya errores de tipeo.
+          </p>
+        </div>
         <div className="mb-3">
           <Combobox
             label="Elegir un auto del stock (opcional)"
