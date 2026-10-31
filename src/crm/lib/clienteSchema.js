@@ -9,7 +9,8 @@ const numOpc = (min) =>
   )
 const textoOpc = z.preprocess((v) => (v === '' || v == null ? undefined : v), z.string().optional())
 
-export const clienteSchema = z.object({
+export const clienteSchema = z
+  .object({
   nombre: z.string().trim().min(1, 'El nombre es obligatorio'),
   telefono: textoOpc,
   localidad: textoOpc,
@@ -30,4 +31,20 @@ export const clienteSchema = z.object({
   ),
   notas: textoOpc,
   interes_cero_km: z.boolean().optional(),
-})
+  // Tarea / alerta opcionales que se crean junto con el cliente (solo en el alta).
+  tarea_titulo: textoOpc,
+  tarea_fecha: textoOpc,
+  tarea_hora: textoOpc,
+  tarea_prioridad: textoOpc,
+  alerta_titulo: textoOpc,
+  alerta_fecha: textoOpc,
+  alerta_hora: textoOpc,
+  })
+  .superRefine((d, ctx) => {
+    const falta = (path, message) => ctx.addIssue({ code: 'custom', path: [path], message })
+    if (d.tarea_titulo && !d.tarea_fecha) falta('tarea_fecha', 'Elegí la fecha de la tarea')
+    if (d.alerta_titulo) {
+      if (!d.alerta_fecha) falta('alerta_fecha', 'Elegí la fecha de la alerta')
+      if (!d.alerta_hora) falta('alerta_hora', 'Elegí la hora de la alerta')
+    }
+  })

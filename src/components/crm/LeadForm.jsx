@@ -3,7 +3,8 @@ import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
 import { format } from 'date-fns'
-import { User, Phone, Mail, Tag, Plus, Car, ArrowLeftRight, ChevronDown } from 'lucide-react'
+import { toast } from 'sonner'
+import { User, Phone, Mail, Tag, Plus, Car, ArrowLeftRight, ChevronDown, CheckSquare, Bell } from 'lucide-react'
 import Input from '@/components/common/Input'
 import Select from '@/components/common/Select'
 import DatePicker from '@/components/common/DatePicker'
@@ -13,6 +14,13 @@ import LeadVehiculos from '@/components/crm/LeadVehiculos'
 import { resumenIntereses } from '@/services/leads.service'
 import { LEAD_SOURCES } from '@/lib/constants'
 import { useCreateLead } from '@/hooks/useLeads'
+import { isSupabaseConfigured } from '@/services/supabaseClient'
+import { useTareaMutations } from '@/crm/hooks/useTareas'
+import { useAlertaMutations } from '@/crm/hooks/useAlertas'
+import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
+import { useCrmUsuarios } from '@/crm/hooks/useCrmUsuarios'
+import { TareaCampos, AlertaCampos } from '@/components/crm/LeadSeguimiento'
+import { tareaVacia, alertaVacia, validarSeguimiento, usuariosAsignables } from '@/lib/leadSeguimiento'
 
 // Mismas opciones/etiquetas que el filtro por origen y la columna "Origen"
 // del listado — un solo lugar (LEAD_SOURCES) para no desalinear nombres.
@@ -62,6 +70,11 @@ const schema = z.object({
 
 export default function LeadForm() {
   const { mutateAsync, isPending } = useCreateLead()
+  const { crear: crearTarea } = useTareaMutations()
+  const { crear: crearAlerta } = useAlertaMutations()
+  const { id: miId } = useCrmPerfil()
+  const { data: usuarios = [] } = useCrmUsuarios()
+  const asignables = usuariosAsignables(usuarios, miId)
   const {
     register,
     handleSubmit,
@@ -79,6 +92,11 @@ export default function LeadForm() {
   const [entrega, setEntrega] = useState([])
   const [verIntereses, setVerIntereses] = useState(false)
   const [verEntrega, setVerEntrega] = useState(false)
+  // Una tarea y una alerta opcionales, que quedan vinculadas al lead nuevo.
+  const [tarea, setTarea] = useState(tareaVacia)
+  const [alerta, setAlerta] = useState(alertaVacia)
+  const [verTarea, setVerTarea] = useState(false)
+  const [verAlerta, setVerAlerta] = useState(false)
 
   const limpiar = () => {
     reset({ source: 'Web', contact_date: todayStr() })
@@ -86,10 +104,21 @@ export default function LeadForm() {
     setEntrega([])
     setVerIntereses(false)
     setVerEntrega(false)
+    setTarea(tareaVacia())
+    setAlerta(alertaVacia())
+    setVerTarea(false)
+    setVerAlerta(false)
   }
 
   const onSubmit = async (values) => {
-    await mutateAsync({
+    const hayTarea = Boolean(tarea.titulo.trim())
+    const hayAlerta = Boolean(alerta.titulo.trim())
+    const error = validarSeguimiento(tarea, alerta)
+    if (error) {
+      toast.error(error)
+      return
+    }
+    const lead = await mutateAsync({
       ...values,
       email: values.email || null,
       vehiculos_interes: intereses,
@@ -98,6 +127,36 @@ export default function LeadForm() {
       // del listado y la tabla sigan funcionando.
       vehicle_interest: resumenIntereses(intereses) || null,
     })
+    // El lead ya existe: si la tarea o la alerta fallan, el hook avisa y se sigue.
+    if ((hayTarea || hayAlerta) && isSupabaseConfigured) {
+      if (!miId) {
+        toast.error('Tu usuario no tiene perfil de CRM: no se pudo cargar la tarea/alerta.')
+      } else {
+        if (hayTarea) {
+          await crearTarea
+            .mutateAsync({
+              titulo: tarea.titulo.trim(),
+              fecha: tarea.fecha,
+              hora: tarea.hora || null,
+              prioridad: tarea.prioridad,
+              asignado_a: tarea.asignado_a || miId,
+              prospecto_id: lead.id,
+            })
+            .catch(() => {})
+        }
+        if (hayAlerta) {
+          await crearAlerta
+            .mutateAsync({
+              titulo: alerta.titulo.trim(),
+              fecha: alerta.fecha,
+              hora: alerta.hora,
+              asignado_a: alerta.asignado_a || miId,
+              prospecto_id: lead.id,
+            })
+            .catch(() => {})
+        }
+      }
+    }
     limpiar()
   }
 
@@ -186,6 +245,20 @@ export default function LeadForm() {
             cantidad={entrega.length}
             onToggle={() => setVerEntrega((v) => !v)}
           />
+          <CampoDesplegable
+            label="Tarea"
+            icon={CheckSquare}
+            abierto={verTarea}
+            cantidad={tarea.titulo.trim() ? 1 : 0}
+            onToggle={() => setVerTarea((v) => !v)}
+          />
+          <CampoDesplegable
+            label="Alerta"
+            icon={Bell}
+            abierto={verAlerta}
+            cantidad={alerta.titulo.trim() ? 1 : 0}
+            onToggle={() => setVerAlerta((v) => !v)}
+          />
         </div>
 
         <div className="space-y-4">
@@ -247,6 +320,8 @@ export default function LeadForm() {
             />
           </div>
           )}
+          {verTarea && <TareaCampos value={tarea} onChange={setTarea} usuarios={asignables} miId={miId} />}
+          {verAlerta && <AlertaCampos value={alerta} onChange={setAlerta} usuarios={asignables} miId={miId} />}
         </div>
 
         <Input

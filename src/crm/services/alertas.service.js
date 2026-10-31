@@ -16,6 +16,18 @@ export async function listar({ filtros = {}, incluirHechas = false } = {}) {
   return data ?? []
 }
 
+/** Alertas vinculadas a un lead (public.prospectos), pendientes primero. */
+export async function listarPorProspecto(prospectoId) {
+  const { data, error } = await db()
+    .from('alertas')
+    .select('*')
+    .eq('prospecto_id', prospectoId)
+    .order('hecha', { ascending: true })
+    .order('fecha', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function contarPendientes(usuarioId) {
   const { count, error } = await db()
     .from('alertas')

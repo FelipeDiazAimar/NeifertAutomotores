@@ -7,6 +7,14 @@ export function useAlertas(opts) {
   return useQuery({ queryKey: ['crm', 'alertas', opts], queryFn: () => svc.listar(opts) })
 }
 
+export function useAlertasDeProspecto(prospectoId) {
+  return useQuery({
+    queryKey: ['crm', 'alertas', 'prospecto', prospectoId],
+    queryFn: () => svc.listarPorProspecto(prospectoId),
+    enabled: Boolean(prospectoId),
+  })
+}
+
 export function useAlertasPendientes() {
   const { id } = useCrmPerfil()
   return useQuery({

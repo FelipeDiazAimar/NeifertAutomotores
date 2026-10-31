@@ -20,12 +20,27 @@ function Seccion({ titulo, children }) {
   )
 }
 
-export default function ClienteForm({ inicial, onGuardar, guardando }) {
+const hoy = () => new Date().toISOString().slice(0, 10)
+const PRIORIDADES = [
+  { id: 'baja', label: 'Baja' },
+  { id: 'normal', label: 'Normal' },
+  { id: 'alta', label: 'Alta' },
+]
+
+/** `conSeguimiento`: en el alta suma una tarea y una alerta opcionales que
+ *  quedan vinculadas al cliente nuevo. */
+export default function ClienteForm({ inicial, onGuardar, guardando, conSeguimiento = false }) {
   const {
     register, handleSubmit, control, formState: { errors },
   } = useForm({
     resolver: zodResolver(clienteSchema),
-    defaultValues: { interes_cero_km: false, ...inicial },
+    defaultValues: {
+      interes_cero_km: false,
+      ...(conSeguimiento && {
+        tarea_fecha: hoy(), tarea_prioridad: 'normal', alerta_fecha: hoy(),
+      }),
+      ...inicial,
+    },
   })
 
   return (
@@ -72,6 +87,32 @@ export default function ClienteForm({ inicial, onGuardar, guardando }) {
           <Input as="textarea" {...register('notas')} />
         </div>
       </Seccion>
+
+      {conSeguimiento && (
+        <>
+          <Seccion titulo="Tarea (opcional)">
+            <div className="sm:col-span-2">
+              <Input label="Título" {...register('tarea_titulo')} />
+            </div>
+            <Input label="Vence" type="date" {...register('tarea_fecha')} error={errors.tarea_fecha?.message} />
+            <Input label="Hora" type="time" {...register('tarea_hora')} />
+            <Controller
+              control={control} name="tarea_prioridad"
+              render={({ field }) => (
+                <Select label="Prioridad" options={PRIORIDADES} value={field.value ?? 'normal'} onChange={field.onChange} />
+              )}
+            />
+          </Seccion>
+
+          <Seccion titulo="Alerta (opcional)">
+            <div className="sm:col-span-2">
+              <Input label="Título" {...register('alerta_titulo')} />
+            </div>
+            <Input label="Fecha" type="date" {...register('alerta_fecha')} error={errors.alerta_fecha?.message} />
+            <Input label="Hora" type="time" {...register('alerta_hora')} error={errors.alerta_hora?.message} />
+          </Seccion>
+        </>
+      )}
 
       <div className="flex justify-end">
         <Button type="submit" disabled={guardando}>

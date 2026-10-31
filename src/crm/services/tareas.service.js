@@ -24,6 +24,19 @@ export async function listar({ filtros = {}, incluirHechas = false, incluirArchi
   return data ?? []
 }
 
+/** Tareas vinculadas a un lead (public.prospectos), pendientes primero. */
+export async function listarPorProspecto(prospectoId) {
+  const { data, error } = await db()
+    .from('tareas')
+    .select('*')
+    .eq('prospecto_id', prospectoId)
+    .is('archivado_en', null)
+    .order('done', { ascending: true })
+    .order('fecha', { ascending: true })
+  if (error) throw error
+  return data ?? []
+}
+
 export async function contarPendientesHoy(usuarioId) {
   const { count, error } = await db()
     .from('tareas')

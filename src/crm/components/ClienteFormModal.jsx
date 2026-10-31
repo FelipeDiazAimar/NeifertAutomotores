@@ -1,14 +1,21 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useLenis } from 'lenis/react'
 import { X } from 'lucide-react'
 import { useClienteMutations } from '@/crm/hooks/useClientes'
+import { useTareaMutations } from '@/crm/hooks/useTareas'
+import { useAlertaMutations } from '@/crm/hooks/useAlertas'
+import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import ClienteForm from '@/crm/components/ClienteForm'
 
 /** Alta de cliente como overlay (mismo patrón que VehiculoFormModal). */
 export default function ClienteFormModal({ open, onClose, onCreado }) {
   const { crear } = useClienteMutations()
+  const { crear: crearTarea } = useTareaMutations()
+  const { crear: crearAlerta } = useAlertaMutations()
+  const { id: miId } = useCrmPerfil()
+  const [guardando, setGuardando] = useState(false)
   const lenis = useLenis()
 
   useEffect(() => {
@@ -30,6 +37,41 @@ export default function ClienteFormModal({ open, onClose, onCreado }) {
       document.removeEventListener('keydown', onKey)
     }
   }, [open, onClose, lenis])
+
+  // Alta del cliente + su tarea/alerta opcionales, ya vinculadas. Si una de
+  // las dos falla el cliente ya existe: el hook muestra el error y se sigue.
+  async function guardar(data) {
+    const {
+      tarea_titulo, tarea_fecha, tarea_hora, tarea_prioridad,
+      alerta_titulo, alerta_fecha, alerta_hora, ...cliente
+    } = data
+    setGuardando(true)
+    try {
+      const fila = await crear.mutateAsync(cliente)
+      if (tarea_titulo) {
+        await crearTarea
+          .mutateAsync({
+            titulo: tarea_titulo, fecha: tarea_fecha, hora: tarea_hora || null,
+            prioridad: tarea_prioridad || 'normal', asignado_a: miId, cliente_id: fila.id,
+          })
+          .catch(() => {})
+      }
+      if (alerta_titulo) {
+        await crearAlerta
+          .mutateAsync({
+            titulo: alerta_titulo, fecha: alerta_fecha, hora: alerta_hora,
+            asignado_a: miId, cliente_id: fila.id,
+          })
+          .catch(() => {})
+      }
+      onClose()
+      onCreado?.(fila)
+    } catch {
+      // el error ya lo muestra el toast de la mutación
+    } finally {
+      setGuardando(false)
+    }
+  }
 
   return createPortal(
     <AnimatePresence>
@@ -63,17 +105,7 @@ export default function ClienteFormModal({ open, onClose, onCreado }) {
                   <X size={18} />
                 </button>
               </div>
-              <ClienteForm
-                guardando={crear.isPending}
-                onGuardar={(data) =>
-                  crear.mutate(data, {
-                    onSuccess: (fila) => {
-                      onClose()
-                      onCreado?.(fila)
-                    },
-                  })
-                }
-              />
+              <ClienteForm conSeguimiento guardando={guardando} onGuardar={guardar} />
             </motion.div>
           </div>
         </motion.div>

@@ -23,6 +23,7 @@ import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import LeadStatusBadge from '@/components/crm/LeadStatusBadge'
 import LeadVehiculos from '@/components/crm/LeadVehiculos'
+import SeguimientoLead from '@/components/crm/LeadSeguimiento'
 import Select from '@/components/common/Select'
 import { formatDateTime } from '@/lib/formatters'
 import { resumenIntereses } from '@/services/leads.service'
@@ -292,6 +293,7 @@ export default function LeadDetailPage() {
             )}
           </div>
         </GlassCard>
+        <SeguimientoLead prospectoId={id} />
       </motion.div>
     </div>
   )

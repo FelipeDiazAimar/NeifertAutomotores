@@ -10,6 +10,14 @@ export function useTareas(opts) {
   })
 }
 
+export function useTareasDeProspecto(prospectoId) {
+  return useQuery({
+    queryKey: ['crm', 'tareas', 'prospecto', prospectoId],
+    queryFn: () => svc.listarPorProspecto(prospectoId),
+    enabled: Boolean(prospectoId),
+  })
+}
+
 export function useTareasPendientesHoy() {
   const { id } = useCrmPerfil()
   return useQuery({
