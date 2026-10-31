@@ -24,7 +24,7 @@ const nfMonto = new Intl.NumberFormat('es-AR')
 
 function ChipCount({ tono, n, label }) {
   return (
-    <span className="inline-flex items-center gap-1 rounded-full bg-ink/5 px-2 py-0.5 text-xs text-ink-2">
+    <span className="bg-ink/5 text-ink-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs">
       <span className={cn('h-1.5 w-1.5 rounded-full', tono)} />
       {n} {label}
     </span>
@@ -75,16 +75,18 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
           </Button>
         )}
         {tieneUno && (
-          <p className="text-xs text-ink-3">Un peritaje por vehículo — tocá la tarjeta para verlo o editarlo.</p>
+          <p className="text-ink-3 text-xs">
+            Un peritaje por vehículo — tocá la tarjeta para verlo o editarlo.
+          </p>
         )}
       </div>
 
       {duplicados && (
         <GlassCard className="border-amber/40 p-4">
-          <p className="font-semibold text-ink">
+          <p className="text-ink font-semibold">
             Este vehículo tiene {peritajes.length} peritajes
           </p>
-          <p className="mt-1 text-sm text-ink-2">
+          <p className="text-ink-2 mt-1 text-sm">
             Ahora se permite uno solo por vehículo. Revisá cada uno y elegí cuál conservar
             {esAdmin ? '' : ' — solo un admin puede eliminar'}.
           </p>
@@ -97,7 +99,7 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
         </div>
       ) : peritajes.length === 0 ? (
         <GlassCard className="p-8 text-center">
-          <p className="text-sm text-ink-3">Este vehículo todavía no tiene peritajes.</p>
+          <p className="text-ink-3 text-sm">Este vehículo todavía no tiene peritajes.</p>
         </GlassCard>
       ) : (
         <ul className="space-y-2">
@@ -105,28 +107,30 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
             const quien = p.peritador?.nombre || p.peritado_por_nombre
             const est = estadoPeritaje(p)
             return (
-                <li key={p.id} className="space-y-2">
-                  <GlassCard
-                    as="button"
-                    onClick={() => abrirVer(p.id)}
-                    className="flex w-full items-center gap-4 p-4 text-left transition-colors hover:bg-surface"
-                  >
+              <li key={p.id} className="space-y-2">
+                <GlassCard
+                  as="button"
+                  onClick={() => abrirVer(p.id)}
+                  className="hover:bg-surface flex w-full items-center gap-4 p-4 text-left transition-colors"
+                >
                   <div className="min-w-0 flex-1 space-y-2">
                     <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                      <span className="font-semibold text-ink">{fmtFecha(p.fecha)}</span>
+                      <span className="text-ink font-semibold">{fmtFecha(p.fecha)}</span>
                       <span
                         className={cn(
                           'rounded-full px-2 py-0.5 text-[11px] font-semibold',
                           est === 'completo' && 'bg-success/15 text-success',
                           est === 'en_proceso' && 'bg-amber/15 text-amber',
-                          est === 'sin_iniciar' && 'bg-ink/10 text-ink-3',
+                          est === 'sin_iniciar' && 'bg-ink/10 text-ink-3'
                         )}
                       >
                         {PERITAJE_ESTADO_LABEL[est]}
                       </span>
-                      {quien && <span className="text-xs text-ink-3">· {quien}</span>}
+                      {quien && <span className="text-ink-3 text-xs">· {quien}</span>}
                       {p.costo_total ? (
-                        <span className="text-xs text-ink-3">· $ {nfMonto.format(p.costo_total)}</span>
+                        <span className="text-ink-3 text-xs">
+                          · $ {nfMonto.format(p.costo_total)}
+                        </span>
                       ) : null}
                     </div>
                     <div className="flex flex-wrap gap-1.5">
@@ -134,35 +138,44 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
                       <ChipCount tono="bg-amber" n={p.items_obs} label="obs." />
                       <ChipCount tono="bg-neifert" n={p.items_falta} label="faltas" />
                     </div>
-                    <EstadoStrip ok={p.items_ok} obs={p.items_obs} falta={p.items_falta} />
+                    <EstadoStrip
+                      ok={p.items_ok}
+                      obs={p.items_obs}
+                      falta={p.items_falta}
+                    />
                   </div>
-                    <ChevronRight size={18} className="shrink-0 text-ink-3" />
-                  </GlassCard>
-                  {duplicados && esAdmin && (
-                    <div className="flex flex-wrap gap-2 pl-1">
-                      <Button
-                        variant="glass"
-                        size="sm"
-                        onClick={() => setConfirmar({ tipo: 'conservar', id: p.id })}
-                      >
-                        Conservar este
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => setConfirmar({ tipo: 'eliminar', id: p.id })}
-                      >
-                        Eliminar
-                      </Button>
-                    </div>
-                  )}
-                </li>
+                  <ChevronRight size={18} className="text-ink-3 shrink-0" />
+                </GlassCard>
+                {duplicados && esAdmin && (
+                  <div className="flex flex-wrap gap-2 pl-1">
+                    <Button
+                      variant="glass"
+                      size="sm"
+                      onClick={() => setConfirmar({ tipo: 'conservar', id: p.id })}
+                    >
+                      Conservar este
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => setConfirmar({ tipo: 'eliminar', id: p.id })}
+                    >
+                      Eliminar
+                    </Button>
+                  </div>
+                )}
+              </li>
             )
           })}
         </ul>
       )}
 
-      <Modal open={nuevo} onClose={() => setNuevo(false)} title="Nuevo peritaje" size="xl">
+      <Modal
+        open={nuevo}
+        onClose={() => setNuevo(false)}
+        title="Nuevo peritaje"
+        size="xl"
+      >
         <PeritajeForm
           guardando={crear.isPending}
           onGuardar={(data) => crear.mutate(data, { onSuccess: () => setNuevo(false) })}
@@ -171,7 +184,10 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
 
       <Modal
         open={Boolean(verId)}
-        onClose={() => { setVerId(null); setEditando(false) }}
+        onClose={() => {
+          setVerId(null)
+          setEditando(false)
+        }}
         title={editando ? 'Editar peritaje' : 'Peritaje'}
         size="xl"
       >
@@ -179,7 +195,12 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
           <PeritajeForm
             inicial={seleccionado}
             guardando={actualizar.isPending}
-            onGuardar={(data) => actualizar.mutate({ id: verId, data }, { onSuccess: () => setEditando(false) })}
+            onGuardar={(data) =>
+              actualizar.mutate(
+                { id: verId, data },
+                { onSuccess: () => setEditando(false) }
+              )
+            }
           />
         ) : seleccionado ? (
           <div className="space-y-4">
@@ -198,9 +219,13 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
       <Modal
         open={Boolean(confirmar)}
         onClose={() => setConfirmar(null)}
-        title={confirmar?.tipo === 'conservar' ? 'Conservar este peritaje' : 'Eliminar peritaje'}
+        title={
+          confirmar?.tipo === 'conservar'
+            ? 'Conservar este peritaje'
+            : 'Eliminar peritaje'
+        }
       >
-        <p className="text-sm text-ink-2">
+        <p className="text-ink-2 text-sm">
           {confirmar?.tipo === 'conservar'
             ? `Se conserva este peritaje y se eliminan los otros ${peritajes.length - 1}. Esta acción no se puede deshacer.`
             : 'Se elimina este peritaje definitivamente. Esta acción no se puede deshacer.'}
@@ -216,7 +241,7 @@ function PeritajePanel({ vehiculoId, vehiculo, esAdmin }) {
       </Modal>
 
       <GlassCard className="p-5">
-        <h3 className="mb-4 font-display text-sm font-bold text-ink">Documentación</h3>
+        <h3 className="font-display text-ink mb-4 text-sm font-bold">Documentación</h3>
         <FotoMultiSlot
           label="Foto del seguro"
           slot="seguro"
@@ -239,10 +264,14 @@ export default function VehiculoDetallePage() {
   const { esAdmin } = useCrmPerfil()
 
   const tab = TABS_VALIDOS.includes(params.get('tab')) ? params.get('tab') : 'resumen'
-  const setTab = (t) => setParams((p) => {
-    t === 'resumen' ? p.delete('tab') : p.set('tab', t)
-    return p
-  }, { replace: true })
+  const setTab = (t) =>
+    setParams(
+      (p) => {
+        t === 'resumen' ? p.delete('tab') : p.set('tab', t)
+        return p
+      },
+      { replace: true }
+    )
 
   if (isLoading) {
     return (
@@ -255,10 +284,13 @@ export default function VehiculoDetallePage() {
 
   return (
     <div className="space-y-4">
-      <button onClick={() => navigate('/crm/vehiculos')} className="flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
+      <button
+        onClick={() => navigate('/crm/vehiculos')}
+        className="text-ink-3 hover:text-ink flex items-center gap-1 text-sm"
+      >
         <ArrowLeft size={16} /> Vehículos
       </button>
-      <h1 className="font-display text-2xl font-bold text-ink">
+      <h1 className="font-display text-ink text-2xl font-bold">
         {v.marca} {v.modelo}
       </h1>
 
@@ -273,9 +305,11 @@ export default function VehiculoDetallePage() {
         <TabsContent value="resumen" className="pt-4">
           <FichaVehiculo
             vehiculo={v}
-            puedeEliminar={esAdmin}
+            puedeEliminar
             onCambiarEstado={(e) => cambiarEstado.mutate({ id, de: v.estado, a: e })}
-            onEliminar={() => eliminar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })}
+            onEliminar={() =>
+              eliminar.mutate(id, { onSuccess: () => navigate('/crm/vehiculos') })
+            }
           />
         </TabsContent>
 

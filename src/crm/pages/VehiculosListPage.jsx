@@ -1,5 +1,12 @@
 import { useEffect, useState } from 'react'
-import { Plus, Search, SlidersHorizontal, Download, ListChecks, ChevronDown } from 'lucide-react'
+import {
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Download,
+  ListChecks,
+  ChevronDown,
+} from 'lucide-react'
 import { toast } from 'sonner'
 import Button from '@/components/common/Button'
 import Modal from '@/components/common/Modal'
@@ -13,9 +20,12 @@ import {
   DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
-import { useVehiculos, useConteoVehiculos, useVehiculoMutations } from '@/crm/hooks/useVehiculos'
+import {
+  useVehiculos,
+  useConteoVehiculos,
+  useVehiculoMutations,
+} from '@/crm/hooks/useVehiculos'
 import { useVehiculosBulk } from '@/crm/hooks/useVehiculosBulk'
-import { useCrmPerfil } from '@/crm/hooks/useCrmPerfil'
 import { useSeleccionVehiculos } from '@/crm/store/useSeleccionVehiculos'
 import { listarTodoStock } from '@/crm/services/vehiculos.service'
 import { generarStockDocx, nombreArchivoStock, LOGO_ANCHO_PX } from '@/crm/lib/stockDocx'
@@ -34,14 +44,24 @@ import { cn } from '@/lib/cn'
 const PAGE_SIZE = 20
 
 const ESTADOS_MASIVOS = ['disponible', 'reservado', 'vendido', 'baja']
-const ESTADO_LABEL = { disponible: 'Disponible', reservado: 'Reservado', vendido: 'Vendido', baja: 'Baja' }
+const ESTADO_LABEL = {
+  disponible: 'Disponible',
+  reservado: 'Reservado',
+  vendido: 'Vendido',
+  baja: 'Baja',
+}
 
-const ACCION_TITULO = { estado: 'Cambiar estado en masa', es_nuevo: 'Marcar como nuevos', es_0km: 'Marcar como 0 km' }
+const ACCION_TITULO = {
+  estado: 'Cambiar estado en masa',
+  es_nuevo: 'Marcar como nuevos',
+  es_0km: 'Marcar como 0 km',
+}
 const ACCION_CONFIRMAR = { estado: 'Cambiar', es_nuevo: 'Marcar', es_0km: 'Marcar' }
 
 export default function VehiculosListPage() {
   const esDesktop = useIsDesktop()
-  const { busqueda, filtros, orden, pagina, setBusqueda, setPagina } = useVehiculosFiltros()
+  const { busqueda, filtros, orden, pagina, setBusqueda, setPagina } =
+    useVehiculosFiltros()
   const filtrosActivos = useVehiculosFiltros((s) => s.contarFiltrosActivos())
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -49,7 +69,6 @@ export default function VehiculosListPage() {
   const [descargando, setDescargando] = useState(false)
   const { cambiarEstado, actualizar } = useVehiculoMutations()
   const viewMode = useViewModeStore((s) => s.viewMode)
-  const { esAdmin } = useCrmPerfil()
   const modoSeleccion = useSeleccionVehiculos((s) => s.modoSeleccion)
   const ids = useSeleccionVehiculos((s) => s.ids)
   const setModoSeleccion = useSeleccionVehiculos((s) => s.setModoSeleccion)
@@ -61,7 +80,9 @@ export default function VehiculosListPage() {
   const [confirmarEliminar, setConfirmarEliminar] = useState(false)
   const [confirmarAccion, setConfirmarAccion] = useState(null)
   const bulkPendiente =
-    cambiarEstadoMasivo.isPending || actualizarMasivo.isPending || eliminarMasivo.isPending
+    cambiarEstadoMasivo.isPending ||
+    actualizarMasivo.isPending ||
+    eliminarMasivo.isPending
 
   /** Ejecuta la acción masiva ya confirmada en el modal. */
   function ejecutarAccionMasiva() {
@@ -79,7 +100,7 @@ export default function VehiculosListPage() {
           })),
           a: confirmarAccion.valor,
         },
-        { onSuccess: listo },
+        { onSuccess: listo }
       )
     } else if (confirmarAccion.tipo === 'es_nuevo') {
       actualizarMasivo.mutate({ ids, data: { es_nuevo: true } }, { onSuccess: listo })
@@ -95,8 +116,7 @@ export default function VehiculosListPage() {
       return `Se cambiará el estado de ${cant} a "${ESTADO_LABEL[confirmarAccion.valor]}".`
     if (confirmarAccion?.tipo === 'es_nuevo')
       return `Se marcarán ${cant} como nuevos (badge Nuevo en la ficha).`
-    if (confirmarAccion?.tipo === 'es_0km')
-      return `Se marcarán ${cant} como 0 km.`
+    if (confirmarAccion?.tipo === 'es_0km') return `Se marcarán ${cant} como 0 km.`
     return ''
   }
 
@@ -109,14 +129,25 @@ export default function VehiculosListPage() {
   useCrmRealtime('vehiculos', ['crm', 'vehiculos'])
 
   const opts = {
-    busqueda, filtros, orden, pagina, pageSize: PAGE_SIZE,
+    busqueda,
+    filtros,
+    orden,
+    pagina,
+    pageSize: PAGE_SIZE,
   }
   const { data, isLoading } = useVehiculos(opts)
   const filas = data?.filas ?? []
   const total = data?.total ?? 0
   const totalPaginas = Math.max(1, Math.ceil(total / PAGE_SIZE))
   const { data: conteo } = useConteoVehiculos({ busqueda, filtros })
-  const c = conteo ?? { disponible: 0, reservado: 0, vendido: 0, baja: 0, sinPeritar: 0, sinGestoria: 0 }
+  const c = conteo ?? {
+    disponible: 0,
+    reservado: 0,
+    vendido: 0,
+    baja: 0,
+    sinPeritar: 0,
+    sinGestoria: 0,
+  }
 
   /** Descarga la planilla DOCX del stock con los filtros/búsqueda actuales,
    *  con las mismas columnas de la planilla en papel + logo y fecha. */
@@ -163,25 +194,26 @@ export default function VehiculosListPage() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold text-ink">Vehículos</h1>
-          <p className="flex flex-wrap gap-x-3 gap-y-0.5 text-sm text-ink-3">
+          <h1 className="font-display text-ink text-2xl font-bold">Vehículos</h1>
+          <p className="text-ink-3 flex flex-wrap gap-x-3 gap-y-0.5 text-sm">
             <span>
-              <span className="font-bold text-success">{c.disponible}</span> disponibles
+              <span className="text-success font-bold">{c.disponible}</span> disponibles
             </span>
             <span>
-              <span className="font-bold text-amber">{c.reservado}</span> reservados
+              <span className="text-amber font-bold">{c.reservado}</span> reservados
             </span>
             <span>
-              <span className="font-bold text-ink">{c.vendido}</span> vendidos
+              <span className="text-ink font-bold">{c.vendido}</span> vendidos
             </span>
             <span>
-              <span className="font-bold text-neifert">{c.baja}</span> en baja
+              <span className="text-neifert font-bold">{c.baja}</span> en baja
             </span>
             <span>
-              <span className="font-bold text-ink">{c.sinPeritar ?? 0}</span> sin peritar
+              <span className="text-ink font-bold">{c.sinPeritar ?? 0}</span> sin peritar
             </span>
             <span>
-              <span className="font-bold text-ink">{c.sinGestoria ?? 0}</span> sin gestoría
+              <span className="text-ink font-bold">{c.sinGestoria ?? 0}</span> sin
+              gestoría
             </span>
           </p>
         </div>
@@ -194,7 +226,12 @@ export default function VehiculosListPage() {
           >
             {modoSeleccion ? 'Listo' : 'Seleccionar'}
           </Button>
-          <Button variant="glass" icon={Download} onClick={descargarStock} disabled={descargando}>
+          <Button
+            variant="glass"
+            icon={Download}
+            onClick={descargarStock}
+            disabled={descargando}
+          >
             {descargando ? 'Generando…' : 'Descargar stock'}
           </Button>
           <Button icon={Plus} onClick={() => setAbrirNuevo(true)}>
@@ -205,12 +242,12 @@ export default function VehiculosListPage() {
 
       <div className="flex items-center gap-2">
         <div className="glass field-glass flex h-12 flex-1 items-center gap-2.5 rounded-2xl px-3.5">
-          <Search size={17} className="shrink-0 text-ink-3" />
+          <Search size={17} className="text-ink-3 shrink-0" />
           <input
             value={texto}
             onChange={(e) => setTexto(e.target.value)}
             placeholder="Buscar por marca, modelo, patente o dueño…"
-            className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
+            className="text-ink placeholder:text-ink-3 w-full bg-transparent text-sm outline-none"
           />
         </div>
         <ViewModeToggle className="h-12" />
@@ -220,13 +257,15 @@ export default function VehiculosListPage() {
           aria-expanded={mostrarFiltros}
           className={cn(
             'glass flex h-12 shrink-0 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors',
-            mostrarFiltros || filtrosActivos > 0 ? 'text-neifert' : 'text-ink-2 hover:text-ink',
+            mostrarFiltros || filtrosActivos > 0
+              ? 'text-neifert'
+              : 'text-ink-2 hover:text-ink'
           )}
         >
           <SlidersHorizontal size={16} />
           <span className="hidden sm:inline">Filtros</span>
           {filtrosActivos > 0 && (
-            <span className="grid h-5 min-w-5 place-items-center rounded-full bg-neifert px-1 text-[11px] font-bold text-white">
+            <span className="bg-neifert grid h-5 min-w-5 place-items-center rounded-full px-1 text-[11px] font-bold text-white">
               {filtrosActivos}
             </span>
           )}
@@ -241,8 +280,12 @@ export default function VehiculosListPage() {
         </div>
       ) : filas.length === 0 ? (
         <GlassCard className="p-10 text-center">
-          <p className="font-display font-bold text-ink">No hay vehículos que coincidan</p>
-          <p className="mt-1 text-sm text-ink-3">Probá quitar filtros o cargá un vehículo nuevo.</p>
+          <p className="font-display text-ink font-bold">
+            No hay vehículos que coincidan
+          </p>
+          <p className="text-ink-3 mt-1 text-sm">
+            Probá quitar filtros o cargá un vehículo nuevo.
+          </p>
           <Button icon={Plus} className="mt-4" onClick={() => setAbrirNuevo(true)}>
             Cargar vehículo
           </Button>
@@ -253,8 +296,12 @@ export default function VehiculosListPage() {
             <VehiculoGridCard
               key={v.id}
               vehiculo={v}
-              onCambiarEstado={(veh, e) => cambiarEstado.mutate({ id: veh.id, de: veh.estado, a: e })}
-              onCambiarPublicado={(veh, publicado) => actualizar.mutate({ id: veh.id, data: { publicado } })}
+              onCambiarEstado={(veh, e) =>
+                cambiarEstado.mutate({ id: veh.id, de: veh.estado, a: e })
+              }
+              onCambiarPublicado={(veh, publicado) =>
+                actualizar.mutate({ id: veh.id, data: { publicado } })
+              }
               seleccionado={ids.includes(v.id)}
               enSeleccion={modoSeleccion}
               onToggleSeleccion={(veh) => toggleId(veh.id)}
@@ -264,8 +311,12 @@ export default function VehiculosListPage() {
       ) : esDesktop ? (
         <VehiculoTable
           filas={filas}
-          onCambiarEstado={(v, e) => cambiarEstado.mutate({ id: v.id, de: v.estado, a: e })}
-          onCambiarPublicado={(v, publicado) => actualizar.mutate({ id: v.id, data: { publicado } })}
+          onCambiarEstado={(v, e) =>
+            cambiarEstado.mutate({ id: v.id, de: v.estado, a: e })
+          }
+          onCambiarPublicado={(v, publicado) =>
+            actualizar.mutate({ id: v.id, data: { publicado } })
+          }
           seleccionados={ids}
           enSeleccion={modoSeleccion}
           onToggleSeleccion={(veh) => toggleId(veh.id)}
@@ -288,10 +339,13 @@ export default function VehiculosListPage() {
 
       {modoSeleccion && ids.length > 0 && (
         <div className="fixed inset-x-0 bottom-0 z-40 flex justify-center px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] sm:bottom-4 sm:px-4">
-          <GlassCard data-testid="barra-masiva" className="w-full max-w-2xl px-3 py-2.5 sm:w-auto sm:px-4 sm:py-3">
+          <GlassCard
+            data-testid="barra-masiva"
+            className="w-full max-w-2xl px-3 py-2.5 sm:w-auto sm:px-4 sm:py-3"
+          >
             <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
               <div className="flex items-center justify-between gap-2 sm:justify-start">
-                <span className="px-1 text-sm font-bold text-ink">
+                <span className="text-ink px-1 text-sm font-bold">
                   {ids.length} seleccionado{ids.length === 1 ? '' : 's'}
                 </span>
                 <div className="flex items-center gap-2 sm:hidden">
@@ -303,7 +357,12 @@ export default function VehiculosListPage() {
                   >
                     Todos
                   </Button>
-                  <Button size="sm" variant="ghost" disabled={bulkPendiente} onClick={() => limpiar()}>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    disabled={bulkPendiente}
+                    onClick={() => limpiar()}
+                  >
                     Limpiar
                   </Button>
                 </div>
@@ -322,7 +381,7 @@ export default function VehiculosListPage() {
                   <DropdownMenuTrigger
                     aria-label="Cambiar estado en masa"
                     disabled={bulkPendiente}
-                    className="glass inline-flex h-9 w-full items-center justify-center gap-1 rounded-2xl px-4 text-xs font-semibold text-ink transition-colors hover:border-ink/30 disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
+                    className="glass text-ink hover:border-ink/30 inline-flex h-9 w-full items-center justify-center gap-1 rounded-2xl px-4 text-xs font-semibold transition-colors disabled:pointer-events-none disabled:opacity-50 sm:w-auto"
                   >
                     <span className="inline-flex items-center gap-1">
                       Estado <ChevronDown size={15} />
@@ -357,17 +416,15 @@ export default function VehiculosListPage() {
                 >
                   Es 0 km
                 </Button>
-                {esAdmin && (
-                  <Button
-                    size="sm"
-                    variant="glass"
-                    className="w-full text-neifert sm:w-auto"
-                    disabled={bulkPendiente}
-                    onClick={() => setConfirmarEliminar(true)}
-                  >
-                    Eliminar
-                  </Button>
-                )}
+                <Button
+                  size="sm"
+                  variant="glass"
+                  className="text-neifert w-full sm:w-auto"
+                  disabled={bulkPendiente}
+                  onClick={() => setConfirmarEliminar(true)}
+                >
+                  Eliminar
+                </Button>
                 <Button
                   size="sm"
                   variant="ghost"
@@ -389,15 +446,12 @@ export default function VehiculosListPage() {
         onClose={() => setConfirmarAccion(null)}
         title={confirmarAccion ? ACCION_TITULO[confirmarAccion.tipo] : ''}
       >
-        <p className="text-sm text-ink-2">{descripcionAccion()}</p>
+        <p className="text-ink-2 text-sm">{descripcionAccion()}</p>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirmarAccion(null)}>
             Cancelar
           </Button>
-          <Button
-            disabled={bulkPendiente}
-            onClick={ejecutarAccionMasiva}
-          >
+          <Button disabled={bulkPendiente} onClick={ejecutarAccionMasiva}>
             {bulkPendiente
               ? 'Aplicando…'
               : confirmarAccion
@@ -412,9 +466,9 @@ export default function VehiculosListPage() {
         onClose={() => setConfirmarEliminar(false)}
         title="Eliminar vehículos"
       >
-        <p className="text-sm text-ink-2">
-          Se eliminarán {ids.length} vehículo{ids.length === 1 ? '' : 's'}. Esta acción no se
-          puede deshacer.
+        <p className="text-ink-2 text-sm">
+          Se eliminarán {ids.length} vehículo{ids.length === 1 ? '' : 's'}. Esta acción no
+          se puede deshacer.
         </p>
         <div className="mt-6 flex justify-end gap-2">
           <Button variant="ghost" onClick={() => setConfirmarEliminar(false)}>

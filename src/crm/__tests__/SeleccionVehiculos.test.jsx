@@ -9,22 +9,54 @@ const adminHolder = vi.hoisted(() => ({ esAdmin: false }))
 const dataHolder = vi.hoisted(() => ({
   filas: [
     {
-      id: 'v1', marca: 'Toyota', modelo: 'Hilux', version: 'SRX', patente: 'AB123CD',
-      anio: 2020, km: 45000, moneda: 'USD', precio_contado: 32000, estado: 'disponible',
-      publicado: true, fotos: [], peritajes: [], gestoria: null,
+      id: 'v1',
+      marca: 'Toyota',
+      modelo: 'Hilux',
+      version: 'SRX',
+      patente: 'AB123CD',
+      anio: 2020,
+      km: 45000,
+      moneda: 'USD',
+      precio_contado: 32000,
+      estado: 'disponible',
+      publicado: true,
+      fotos: [],
+      peritajes: [],
+      gestoria: null,
     },
     {
-      id: 'v2', marca: 'Ford', modelo: 'Ka', version: '', patente: 'CD456EF',
-      anio: 2019, km: 60000, moneda: 'ARS', precio_contado: 9500000, estado: 'reservado',
-      publicado: true, fotos: [], peritajes: [], gestoria: null,
+      id: 'v2',
+      marca: 'Ford',
+      modelo: 'Ka',
+      version: '',
+      patente: 'CD456EF',
+      anio: 2019,
+      km: 60000,
+      moneda: 'ARS',
+      precio_contado: 9500000,
+      estado: 'reservado',
+      publicado: true,
+      fotos: [],
+      peritajes: [],
+      gestoria: null,
     },
   ],
 }))
 
 vi.mock('../hooks/useVehiculos.js', () => ({
-  useVehiculos: () => ({ data: { filas: dataHolder.filas, total: dataHolder.filas.length }, isLoading: false }),
+  useVehiculos: () => ({
+    data: { filas: dataHolder.filas, total: dataHolder.filas.length },
+    isLoading: false,
+  }),
   useConteoVehiculos: () => ({
-    data: { disponible: 1, reservado: 1, vendido: 0, baja: 0, sinPeritar: 0, sinGestoria: 0 },
+    data: {
+      disponible: 1,
+      reservado: 1,
+      vendido: 0,
+      baja: 0,
+      sinPeritar: 0,
+      sinGestoria: 0,
+    },
   }),
   useVehiculoMutations: () => ({
     crear: { mutate: vi.fn(), isPending: false },
@@ -81,7 +113,7 @@ function renderPage() {
       <MemoryRouter>
         <VehiculosListPage />
       </MemoryRouter>
-    </QueryClientProvider>,
+    </QueryClientProvider>
   )
 }
 
@@ -125,26 +157,19 @@ describe('SeleccionVehiculos en VehiculosListPage', () => {
     useSeleccionVehiculos.setState({ modoSeleccion: true, ids: ['v1'] })
     renderPage()
     expect(screen.getByText(/1 seleccionado/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Cambiar estado en masa' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Cambiar estado en masa' })
+    ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Es nuevo' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Es 0 km' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Limpiar' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: 'Todos' }).length).toBeGreaterThan(0)
   })
 
-  it('la barra muestra Eliminar si esAdmin es true', () => {
-    adminHolder.esAdmin = true
+  it('la barra muestra Eliminar para cualquier usuario con acceso', () => {
     useSeleccionVehiculos.setState({ modoSeleccion: true, ids: ['v1'] })
     renderPage()
     expect(screen.getByRole('button', { name: 'Eliminar' })).toBeInTheDocument()
-  })
-
-  it('la barra no muestra Eliminar si esAdmin es false', () => {
-    adminHolder.esAdmin = false
-    useSeleccionVehiculos.setState({ modoSeleccion: true, ids: ['v1'] })
-    renderPage()
-    expect(screen.getByText(/1 seleccionado/)).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Eliminar' })).not.toBeInTheDocument()
   })
 
   it('Es nuevo pide confirmación y recién ahí ejecuta', async () => {
@@ -156,7 +181,7 @@ describe('SeleccionVehiculos en VehiculosListPage', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Marcar' }))
     expect(bulkHolder.actualizarMasivo.mutate).toHaveBeenCalledWith(
       { ids: ['v1'], data: { es_nuevo: true } },
-      expect.anything(),
+      expect.anything()
     )
   })
 
@@ -167,7 +192,7 @@ describe('SeleccionVehiculos en VehiculosListPage', () => {
     expect(screen.getByText('Marcar como 0 km')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancelar' }))
     await waitFor(() =>
-      expect(screen.queryByText('Marcar como 0 km')).not.toBeInTheDocument(),
+      expect(screen.queryByText('Marcar como 0 km')).not.toBeInTheDocument()
     )
     expect(bulkHolder.actualizarMasivo.mutate).not.toHaveBeenCalled()
   })
@@ -188,7 +213,7 @@ describe('SeleccionVehiculos en VehiculosListPage', () => {
         ],
         a: 'vendido',
       },
-      expect.anything(),
+      expect.anything()
     )
   })
 })

@@ -67,7 +67,7 @@ export function useVehiculoMutations() {
       invalidar()
       toast.success('Vehículo eliminado.')
     },
-    onError: (e) => toast.error(e.message.includes('permission') ? 'Solo un administrador puede eliminar.' : e.message),
+    onError: (e) => toast.error(e.message),
   })
 
   return { crear, actualizar, cambiarEstado, eliminar }
