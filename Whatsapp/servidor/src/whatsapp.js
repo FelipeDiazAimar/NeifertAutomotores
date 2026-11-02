@@ -39,6 +39,9 @@ import {
   BAILEYS_LOG,
   CONSERVAR_EDICIONES,
   CONSERVAR_ELIMINADOS,
+  CATALOGO_DOC_ID,
+  CATALOGO_GRAPHQL_URL,
+  CATALOGO_TOKEN,
   CRM_URL,
   SUPABASE_SERVICE_ROLE_KEY,
   SUPABASE_URL,
@@ -2711,6 +2714,56 @@ const vistaProducto = (p) => ({
 const CATALOGO_VIEJO_MS = 6 * 3600e3
 let trayendoCatalogo = null
 
+const sinEntidades = (u) => (typeof u === 'string' ? u.replace(/&amp;/g, '&') : u)
+
+/** Una página del catálogo como la pide WhatsApp Web (HTTPS), con la forma que da Baileys. */
+async function paginaGraphql(cursor, limite = 30) {
+  const numero = String(yo?.telefono || numeroLinea() || '').replace(/\D/g, '')
+  if (!numero) throw new Error('Falta el número de la línea')
+  const res = await fetch(CATALOGO_GRAPHQL_URL, {
+    method: 'POST',
+    headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      access_token: CATALOGO_TOKEN,
+      doc_id: CATALOGO_DOC_ID,
+      lang: 'es_LA',
+      variables: { request: { product_catalog: { jid: `${numero}@c.us`, allow_shop_source: 'ALLOWSHOPSOURCE_FALSE', width: '100', height: '100', limit: String(limite), ...(cursor ? { after: cursor } : {}) } } },
+    }),
+    signal: AbortSignal.timeout(20000),
+  })
+  const cuerpo = await res.json().catch(() => null)
+  if (!res.ok || cuerpo?.errors) throw new Error(`GraphQL ${res.status}: ${JSON.stringify(cuerpo?.errors || cuerpo?.error || '').slice(0, 160)}`)
+  const cat = cuerpo?.data?.xwa_product_catalog_get_product_catalog?.product_catalog
+  if (!cat) throw new Error('GraphQL sin catálogo en la respuesta')
+  return {
+    products: (cat.products || []).map((p) => {
+      const foto = p.media?.images?.[0]
+      return {
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        price: p.price != null ? Number(p.price) : null,
+        currency: p.currency,
+        url: p.url,
+        retailerId: p.retailer_id,
+        isHidden: p.is_hidden === 'ISHIDDEN_TRUE',
+        imageUrls: { requested: sinEntidades(foto?.request_image_url), original: sinEntidades(foto?.original_image_url) },
+      }
+    }),
+    nextPageCursor: cat.paging?.after || null,
+  }
+}
+
+/** Primero por HTTPS (lo que usa WhatsApp Web); si falla, por el socket de Baileys (que hoy suele no contestar). */
+async function paginaCatalogo(cursor) {
+  try {
+    return await paginaGraphql(cursor)
+  } catch (err) {
+    log('aviso', 'El catálogo no salió por GraphQL; se prueba por el socket', err.message)
+    return conTimeout(sock.getCatalog({ limit: 10, cursor }), 20000, 'WhatsApp no contestó con la lista de vehículos del catálogo. Probá de nuevo con el botón de recargar.')
+  }
+}
+
 async function traerCatalogo() {
   asegurarConectado()
   if (typeof sock.getCatalog !== 'function') throw new Error('Esta versión de Baileys no permite leer el catálogo')
@@ -2726,7 +2779,7 @@ async function traerCatalogo() {
   for (let pagina = 0; pagina < 200; pagina++) {
     let r
     try {
-      r = await conTimeout(sock.getCatalog({ limit: 10, cursor }), cursor ? 20000 : 45000, 'WhatsApp no contestó con la lista de vehículos del catálogo. Probá de nuevo con el botón de recargar.')
+      r = await paginaCatalogo(cursor)
     } catch (err) {
       if (!productos.length) {
         // Plan B: la consulta por colecciones (otra pregunta a WhatsApp; a veces contesta cuando la lista no).

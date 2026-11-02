@@ -200,3 +200,13 @@ export const ORIGENES_CRM = [
   ...(CRM_URL && !/^(localhost|127\.0\.0\.1)$/.test(new URL(CRM_URL).hostname) ? conYSinWww(CRM_URL) : CRM_URL ? [new URL(CRM_URL).origin] : []),
   ...(SOLO_ESTA_PC ? ['http://localhost:*', 'http://127.0.0.1:*'] : []),
 ]
+
+/* ---------------- Catálogo de WhatsApp Business (GraphQL) ---------------- */
+
+// WhatsApp dejó de contestar la consulta del catálogo por socket (Baileys #2717). WhatsApp Web ya
+// lo pide por HTTPS a graph.whatsapp.com con un token público que trae en su propio código. Si
+// WhatsApp los cambia, se pisan sin tocar el código (WA_CATALOGO_TOKEN / WA_CATALOGO_DOC_ID).
+// Es un endpoint no documentado: puede cambiar o dejar de andar sin aviso.
+export const CATALOGO_GRAPHQL_URL = env.WA_CATALOGO_URL || 'https://graph.whatsapp.com/graphql/catalog'
+export const CATALOGO_TOKEN = env.WA_CATALOGO_TOKEN || 'WA|787118555984857|7bb1544a3599aa180ac9a3f7688ba243'
+export const CATALOGO_DOC_ID = env.WA_CATALOGO_DOC_ID || '30445081048424116'
