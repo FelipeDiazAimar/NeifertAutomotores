@@ -564,7 +564,9 @@ dialog.catalogo-dlg > .btn-row { padding-top: 2px; }
 .vehiculo-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .vehiculo-foto em { position: absolute; top: 6px; left: 6px; font-style: normal; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--ink); color: var(--bg); }
 .vehiculo-datos { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 4px; min-width: 0; }
-.vehiculo-datos b { font-size: 13.5px; }
+.vehiculo-datos b { font-size: 13.5px; } /* Título y detalle acotados: tarjetas parejas aunque el nombre sea larguísimo. */
+.vehiculo-datos b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; overflow-wrap: anywhere; }
+@media (max-height: 820px) { dialog.catalogo-dlg .vehiculo-foto { aspect-ratio: 16 / 10; } }
 .vehiculo-datos small { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vehiculo-datos strong { font-size: 14px; margin-top: 2px; }
 .vehiculo-enviar { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 10px 10px; padding: 6px; border-radius: 10px; background: var(--wa-soft); color: var(--wa); font-size: 13px; font-weight: 600; }

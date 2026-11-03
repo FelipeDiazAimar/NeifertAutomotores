@@ -2701,7 +2701,7 @@ const vistaProducto = (p) => ({
   descripcion: p.description || '',
   precio: p.price ? p.price / 1000 : null,
   moneda: p.currency || null,
-  imagen: p.imageUrls?.requested || p.imageUrls?.original || null,
+  imagen: p.imageUrls?.original || p.imageUrls?.requested || null,
   url: p.url || null,
   retailerId: p.retailerId || null,
 })
