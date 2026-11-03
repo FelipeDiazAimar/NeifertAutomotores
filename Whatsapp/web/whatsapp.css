@@ -538,7 +538,7 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .catalogo-todo small { font-size: 12px; color: var(--ink-3); }
 .producto-fila img, .producto-sin-foto { width: 44px; height: 44px; border-radius: 10px; object-fit: cover; flex: none; background: var(--hover); }
 .producto-sin-foto { display: grid; place-items: center; color: var(--ink-3); }
-dialog.catalogo-dlg { margin: 0; position: fixed; inset: 12px 12px 12px auto; width: min(780px, calc(100vw - 24px)); max-width: none; height: calc(100dvh - 24px); max-height: none; overflow: hidden; padding: 16px 16px 12px; }
+dialog.catalogo-dlg { container-type: inline-size; margin: 0; position: fixed; inset: 12px 12px 12px auto; width: min(clamp(520px, 52vw, 960px), calc(100vw - 24px)); max-width: none; height: calc(100dvh - 24px); max-height: none; overflow: hidden; padding: 16px 16px 12px; }
 dialog.catalogo-dlg[open] { display: flex; flex-direction: column; gap: 10px; animation: catalogo-entra 0.18s ease-out; }
 dialog.catalogo-dlg::backdrop { background: rgba(5, 5, 6, 0.35); }
 @keyframes catalogo-entra { from { transform: translateX(24px); opacity: 0; } to { transform: none; opacity: 1; } }
@@ -550,7 +550,7 @@ dialog.catalogo-dlg input[type="search"] { width: 100%; margin: 0; }
 /* Marcas en una sola fila que se desliza de costado: el único scroll vertical es el de los autos. */
 .catalogo-marcas { flex-wrap: nowrap; overflow-x: auto; overflow-y: hidden; padding-bottom: 6px; }
 .catalogo-marcas .chip { flex: none; white-space: nowrap; }
-dialog.catalogo-dlg .catalogo-grilla { list-style: none; margin: 0; padding: 2px 6px 6px 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 12px; align-content: start; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
+dialog.catalogo-dlg .catalogo-grilla { list-style: none; margin: 0; padding: 2px 6px 6px 2px; display: grid; grid-template-columns: repeat(auto-fill, minmax(clamp(150px, 26cqw, 240px), 1fr)); gap: clamp(8px, 1.8cqw, 14px); align-content: start; flex: 1 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 dialog.catalogo-dlg > .btn-row { padding-top: 2px; }
 @media (max-width: 720px) { dialog.catalogo-dlg { inset: 0; width: 100vw; height: 100dvh; border-radius: 0; } }
 .catalogo-grilla .empty { grid-column: 1 / -1; padding: 20px 8px; text-align: center; font-size: 13px; color: var(--ink-3); }
@@ -564,9 +564,10 @@ dialog.catalogo-dlg > .btn-row { padding-top: 2px; }
 .vehiculo-foto img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
 .vehiculo-foto em { position: absolute; top: 6px; left: 6px; font-style: normal; font-size: 11px; font-weight: 600; padding: 2px 8px; border-radius: 99px; background: var(--ink); color: var(--bg); }
 .vehiculo-datos { flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 8px 10px 4px; min-width: 0; }
-.vehiculo-datos b { font-size: 13.5px; } /* Título y detalle acotados: tarjetas parejas aunque el nombre sea larguísimo. */
+.vehiculo-datos b { font-size: clamp(12px, 1.9cqw, 14.5px); } /* Título y detalle acotados: tarjetas parejas aunque el nombre sea larguísimo. */
 .vehiculo-datos b { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.25; overflow-wrap: anywhere; }
 @media (max-height: 820px) { dialog.catalogo-dlg .vehiculo-foto { aspect-ratio: 16 / 10; } }
+@media (max-height: 640px) { dialog.catalogo-dlg .vehiculo-foto { aspect-ratio: 2 / 1; } }
 .vehiculo-datos small { font-size: 12px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .vehiculo-datos strong { font-size: 14px; margin-top: 2px; }
 .vehiculo-enviar { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 6px 10px 10px; padding: 6px; border-radius: 10px; background: var(--wa-soft); color: var(--wa); font-size: 13px; font-weight: 600; }
