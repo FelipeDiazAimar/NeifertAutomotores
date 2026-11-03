@@ -2701,7 +2701,8 @@ const vistaProducto = (p) => ({
   descripcion: p.description || '',
   precio: p.price ? p.price / 1000 : null,
   moneda: p.currency || null,
-  imagen: p.imageUrls?.original || p.imageUrls?.requested || null,
+  imagen: p.imageUrls?.requested || p.imageUrls?.original || null,
+  imagenOriginal: p.imageUrls?.original || p.imageUrls?.requested || null,
   url: p.url || null,
   retailerId: p.retailerId || null,
 })
@@ -2727,7 +2728,7 @@ async function paginaGraphql(cursor, limite = 30) {
       access_token: CATALOGO_TOKEN,
       doc_id: CATALOGO_DOC_ID,
       lang: 'es_LA',
-      variables: { request: { product_catalog: { jid: `${numero}@c.us`, allow_shop_source: 'ALLOWSHOPSOURCE_FALSE', width: '100', height: '100', limit: String(limite), ...(cursor ? { after: cursor } : {}) } } },
+      variables: { request: { product_catalog: { jid: `${numero}@c.us`, allow_shop_source: 'ALLOWSHOPSOURCE_FALSE', width: '400', height: '400', limit: String(limite), ...(cursor ? { after: cursor } : {}) } } },
     }),
     signal: AbortSignal.timeout(20000),
   })
@@ -2863,8 +2864,8 @@ export async function enviarProducto(chatId, productoId) {
   if (!p) throw Object.assign(new Error('Ese producto ya no está en el catálogo'), { status: 404 })
   const enlace = `https://wa.me/p/${p.id}/${numeroPropio()}`
   try {
-    if (!p.imagen) throw new Error('El producto no tiene foto')
-    const r = await fetch(p.imagen, { signal: AbortSignal.timeout(20000) })
+    if (!p.imagenOriginal && !p.imagen) throw new Error('El producto no tiene foto')
+    const r = await fetch(p.imagenOriginal || p.imagen, { signal: AbortSignal.timeout(20000) })
     if (!r.ok) throw new Error(`No se pudo bajar la foto del producto (${r.status})`)
     const foto = Buffer.from(await r.arrayBuffer())
     const contenido = {
