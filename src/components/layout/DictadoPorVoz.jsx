@@ -1,8 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Mic, MicOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { esCampoDeTexto, insertarTexto } from '@/lib/dictado'
 import { cn } from '@/lib/cn'
+
+// Vistas donde no se ofrece el dictado (WhatsApp ya tiene su propio micrófono
+// para audios y el botón se confundiría con el de enviar audio).
+const RUTAS_SIN_DICTADO = ['/crm/whatsapp']
 
 const MENSAJES_ERROR = {
   'not-allowed':
@@ -18,6 +23,8 @@ const MENSAJES_ERROR = {
  *  hizo clic. Usa el reconocimiento de voz de Chrome/Edge (necesita internet). */
 export default function DictadoPorVoz() {
   const SR = typeof window !== 'undefined' ? window.SpeechRecognition || window.webkitSpeechRecognition : null
+  const { pathname } = useLocation()
+  const oculto = RUTAS_SIN_DICTADO.some((r) => pathname === r || pathname.startsWith(r + '/'))
   const campoRef = useRef(null)
   const recRef = useRef(null)
   const quieroRef = useRef(false)
@@ -98,8 +105,13 @@ export default function DictadoPorVoz() {
 
   const alternar = useCallback(() => (quieroRef.current ? detener() : iniciar()), [detener, iniciar])
 
+  // Si se entra a una vista sin dictado con el micrófono abierto, se apaga.
   useEffect(() => {
-    if (!SR) return
+    if (oculto && quieroRef.current) detener()
+  }, [oculto, detener])
+
+  useEffect(() => {
+    if (!SR || oculto) return
     const alTeclear = (e) => {
       if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === 'h') {
         e.preventDefault()
@@ -110,7 +122,7 @@ export default function DictadoPorVoz() {
     }
     document.addEventListener('keydown', alTeclear)
     return () => document.removeEventListener('keydown', alTeclear)
-  }, [SR, alternar, detener])
+  }, [SR, oculto, alternar, detener])
 
   // Al salir del CRM se apaga el micrófono.
   useEffect(() => () => {
@@ -118,7 +130,7 @@ export default function DictadoPorVoz() {
     recRef.current?.abort?.()
   }, [])
 
-  if (!SR) return null
+  if (!SR || oculto) return null
 
   return (
     <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end gap-2">

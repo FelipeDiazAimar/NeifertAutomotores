@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { useState } from 'react'
 import { render, screen, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 
 vi.mock('sonner', () => ({ toast: { info: vi.fn(), error: vi.fn() } }))
 import { toast } from 'sonner'
@@ -27,6 +28,9 @@ const resultado = (texto, isFinal = true) => ({
   results: [Object.assign([{ transcript: texto }], { isFinal })],
 })
 
+// El componente usa la ruta actual (se oculta en WhatsApp): siempre dentro de un router.
+const conRuta = (ui, ruta = '/crm') => <MemoryRouter initialEntries={[ruta]}>{ui}</MemoryRouter>
+
 function Campo() {
   const [v, setV] = useState('')
   return <input aria-label="nombre" value={v} onChange={(e) => setV(e.target.value)} />
@@ -44,12 +48,29 @@ describe('DictadoPorVoz', () => {
 
   it('no muestra nada si el navegador no soporta reconocimiento de voz', () => {
     delete window.webkitSpeechRecognition
-    const { container } = render(<DictadoPorVoz />)
+    const { container } = render(conRuta(<DictadoPorVoz />))
     expect(container).toBeEmptyDOMElement()
   })
 
+  it('no aparece en la vista de WhatsApp (ni responde al atajo)', () => {
+    const { container } = render(
+      conRuta(
+        <>
+          <Campo />
+          <DictadoPorVoz />
+        </>,
+        '/crm/whatsapp'
+      )
+    )
+    expect(screen.queryByRole('button', { name: /dictar por voz/i })).toBeNull()
+    screen.getByLabelText('nombre').focus()
+    fireEvent.keyDown(document, { key: 'H', ctrlKey: true, shiftKey: true })
+    expect(instancias).toHaveLength(0)
+    expect(container.querySelector('button')).toBeNull()
+  })
+
   it('sin campo elegido avisa que hay que hacer clic en uno', async () => {
-    render(<DictadoPorVoz />)
+    render(conRuta(<DictadoPorVoz />))
     await userEvent.click(screen.getByRole('button', { name: /dictar por voz/i }))
     expect(toast.info).toHaveBeenCalled()
     expect(instancias).toHaveLength(0)
@@ -57,10 +78,12 @@ describe('DictadoPorVoz', () => {
 
   it('dicta en el último campo enfocado (input controlado de React)', async () => {
     render(
-      <>
-        <Campo />
-        <DictadoPorVoz />
-      </>
+      conRuta(
+        <>
+          <Campo />
+          <DictadoPorVoz />
+        </>
+      )
     )
     await userEvent.click(screen.getByLabelText('nombre'))
     await userEvent.click(screen.getByRole('button', { name: /dictar por voz/i }))
@@ -76,10 +99,12 @@ describe('DictadoPorVoz', () => {
 
   it('el atajo Ctrl+Shift+H activa y Escape detiene', async () => {
     render(
-      <>
-        <Campo />
-        <DictadoPorVoz />
-      </>
+      conRuta(
+        <>
+          <Campo />
+          <DictadoPorVoz />
+        </>
+      )
     )
     await userEvent.click(screen.getByLabelText('nombre'))
     fireEvent.keyDown(document, { key: 'H', ctrlKey: true, shiftKey: true })
@@ -91,10 +116,12 @@ describe('DictadoPorVoz', () => {
 
   it('si el navegador no tiene permiso de micrófono lo explica', async () => {
     render(
-      <>
-        <Campo />
-        <DictadoPorVoz />
-      </>
+      conRuta(
+        <>
+          <Campo />
+          <DictadoPorVoz />
+        </>
+      )
     )
     await userEvent.click(screen.getByLabelText('nombre'))
     await userEvent.click(screen.getByRole('button', { name: /dictar por voz/i }))
