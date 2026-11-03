@@ -18,24 +18,19 @@ html, body { height: 100%; overflow: hidden; }
 
 .connect { flex: 1; min-height: 0; overflow-y: auto; align-content: start; padding-bottom: 4px; }
 
-/* Todo lo que scrollea usa la misma barra fina. Sin esto, Windows dibuja la suya:
-   ancha, gris y translúcida sobre el fondo oscuro. */
-.chat-list, .messages, .connect, .info-pane, .fwd-lista, .emoji-panel, .menu-msg {
-  scrollbar-width: thin;
-  scrollbar-color: color-mix(in srgb, var(--ink) 22%, transparent) transparent;
-  overscroll-behavior: contain;
+/* Todo lo que scrollea (listas, diálogos, menús, cuadros de texto y la página) usa la misma barra
+   fina y redondeada. Sin esto, Windows dibuja la suya: ancha, gris y clara sobre el fondo oscuro. */
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--ink) 28%, transparent) transparent; }
 }
-.chat-list::-webkit-scrollbar, .messages::-webkit-scrollbar, .connect::-webkit-scrollbar,
-.info-pane::-webkit-scrollbar, .fwd-lista::-webkit-scrollbar, .emoji-panel::-webkit-scrollbar { width: 7px; }
-.chat-list::-webkit-scrollbar-track, .messages::-webkit-scrollbar-track, .connect::-webkit-scrollbar-track,
-.info-pane::-webkit-scrollbar-track, .fwd-lista::-webkit-scrollbar-track, .emoji-panel::-webkit-scrollbar-track { background: transparent; }
-.chat-list::-webkit-scrollbar-thumb, .messages::-webkit-scrollbar-thumb, .connect::-webkit-scrollbar-thumb,
-.info-pane::-webkit-scrollbar-thumb, .fwd-lista::-webkit-scrollbar-thumb, .emoji-panel::-webkit-scrollbar-thumb {
-  background: color-mix(in srgb, var(--ink) 20%, transparent);
-  border-radius: 99px;
-  border: 2px solid transparent;
-  background-clip: content-box;
-}
+.chat-list, .messages, .connect, .info-pane, .fwd-lista, .emoji-panel, .menu-msg { overscroll-behavior: contain; }
+/* Chrome/Edge: barra propia (sin flechitas, redonda, translúcida). scrollbar-width/color no se usan
+   acá porque en Chrome anulan estas reglas y dejan las flechas de Windows. */
+::-webkit-scrollbar { width: 9px; height: 9px; }
+::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--ink) 24%, transparent); border-radius: 99px; border: 2px solid transparent; background-clip: content-box; min-height: 36px; min-width: 36px; }
+::-webkit-scrollbar-thumb:hover { background: color-mix(in srgb, var(--ink) 42%, transparent); background-clip: content-box; }
 
 /* ---------- Lista de chats ---------- */
 .list-head { flex: none; }
