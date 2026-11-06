@@ -16,7 +16,10 @@ vi.mock('@/crm/services/fotos.service', () => ({
 const agregarFotos = { mutate: vi.fn() }
 vi.mock('../hooks/useGestoriaFotos.js', () => ({
   useGestoriaFotos: () => ({ data: [], isLoading: false }),
-  useGestoriaFotosMutations: () => ({ agregar: agregarFotos, borrar: { mutate: vi.fn() } }),
+  useGestoriaFotosMutations: () => ({
+    agregar: agregarFotos,
+    borrar: { mutate: vi.fn() },
+  }),
 }))
 
 const { default: GestoriaChecklist } = await import('../components/GestoriaChecklist.jsx')
@@ -25,7 +28,9 @@ describe('GestoriaChecklist', () => {
   it('togglear Formulario 08 llama guardarCampos con form08_hecho y fecha', async () => {
     guardarCampos.mutate.mockReset()
     render(<GestoriaChecklist vehiculoId="v1" />)
-    await userEvent.click(screen.getByRole('button', { name: /Formulario 08: pendiente/i }))
+    await userEvent.click(
+      screen.getByRole('button', { name: /Formulario 08: pendiente/i })
+    )
     expect(guardarCampos.mutate).toHaveBeenCalledTimes(1)
     const parche = guardarCampos.mutate.mock.calls[0][0]
     expect(parche.form08_hecho).toBe(true)
@@ -33,17 +38,26 @@ describe('GestoriaChecklist', () => {
     expect(parche.form08_por).toBe('u1')
   })
 
-  it('la sección Documentación tiene los 2 slots multi-foto sin límite y sube varias a la vez', async () => {
+  it('la sección Documentación tiene el slot Título multi-foto sin límite y sube varias a la vez', async () => {
     guardarCampos.mutate.mockReset()
     agregarFotos.mutate.mockReset()
     gestoriaData = { estado: 'sin_iniciar' }
     render(<GestoriaChecklist vehiculoId="v1" />)
     expect(screen.queryByText('Foto del seguro')).not.toBeInTheDocument()
-    expect(screen.getByText('Título — frente')).toBeInTheDocument()
-    expect(screen.getByText('Título — dorso')).toBeInTheDocument()
+    // El checklist tiene un ítem "Título" y la galería es "Fotos del título".
+    expect(screen.getByText('Fotos del título')).toBeInTheDocument()
+    expect(screen.queryByText('Título — frente')).not.toBeInTheDocument()
+    expect(screen.queryByText('Título — dorso')).not.toBeInTheDocument()
 
-    const input = screen.getByLabelText('Título — frente')
-    fireEvent.change(input, { target: { files: [new File(['x'], 'a.jpg', { type: 'image/jpeg' }), new File(['y'], 'b.jpg', { type: 'image/jpeg' })] } })
+    const input = screen.getByLabelText('Fotos del título')
+    fireEvent.change(input, {
+      target: {
+        files: [
+          new File(['x'], 'a.jpg', { type: 'image/jpeg' }),
+          new File(['y'], 'b.jpg', { type: 'image/jpeg' }),
+        ],
+      },
+    })
     await waitFor(() => expect(agregarFotos.mutate).toHaveBeenCalledTimes(2))
     expect(guardarCampos.mutate).not.toHaveBeenCalled()
   })

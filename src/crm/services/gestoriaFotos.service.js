@@ -4,7 +4,9 @@ import { subirArchivoUnico } from './fotos.service.js'
 
 const db = () => supabase.schema('crm')
 
-export const GESTORIA_FOTO_SLOTS = ['seguro', 'titulo_frente', 'titulo_dorso']
+export const GESTORIA_FOTO_SLOTS = ['seguro', 'titulo']
+// Slots viejos (titulo_frente/titulo_dorso) se migran a 'titulo' vía SQL;
+// listar() los sigue leyendo si existen, pero agregar() ya solo acepta los nuevos.
 
 /** Fotos de un slot documental (sin límite de cantidad), ordenadas. */
 export async function listar(vehiculoId, slot) {
@@ -46,5 +48,8 @@ export async function agregar(vehiculoId, slot, file) {
 export async function borrar(id, url) {
   const { error } = await db().from('gestoria_fotos').delete().eq('id', id)
   if (error) throw error
-  if (url) deleteMedia(url).catch((e) => console.warn('[gestoriaFotos] no se pudo borrar en R2', url, e.message))
+  if (url)
+    deleteMedia(url).catch((e) =>
+      console.warn('[gestoriaFotos] no se pudo borrar en R2', url, e.message)
+    )
 }

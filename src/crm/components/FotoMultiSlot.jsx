@@ -13,7 +13,7 @@ function slugify(s) {
     .replace(/^_+|_+$/g, '')
 }
 
-/** Slot documental con fotos ILIMITADAS (seguro, título frente/dorso). Misma
+/** Slot documental con fotos ILIMITADAS (seguro, título). Misma
  *  idea que FotoSlot pero guardando N fotos en crm.gestoria_fotos en vez de
  *  una única URL. Acepta varios archivos a la vez + drag & drop. Tocar una
  *  foto abre el modal de vista con descarga (nombrada con datos del auto). */
@@ -52,13 +52,18 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
 
   return (
     <div className="space-y-2">
-      <p className="text-sm font-medium text-ink">
+      <p className="text-ink text-sm font-medium">
         {label}
-        {fotos.length > 0 && <span className="ml-1.5 text-xs font-normal text-ink-3">({fotos.length})</span>}
+        {fotos.length > 0 && (
+          <span className="text-ink-3 ml-1.5 text-xs font-normal">({fotos.length})</span>
+        )}
       </p>
       <div className="flex flex-wrap gap-2">
         {fotos.map((f, i) => (
-          <div key={f.id} className="relative aspect-[4/3] w-40 overflow-hidden rounded-2xl">
+          <div
+            key={f.id}
+            className="relative aspect-[4/3] w-40 overflow-hidden rounded-2xl"
+          >
             <button
               type="button"
               onClick={() => setViendo(f)}
@@ -66,7 +71,7 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
               className="glass flex h-full w-full items-center justify-center"
             >
               {rotas.has(f.id) ? (
-                <span className="px-2 text-center text-[11px] font-medium leading-tight text-ink-3">
+                <span className="text-ink-3 px-2 text-center text-[11px] leading-tight font-medium">
                   No se pudo cargar la imagen
                 </span>
               ) : (
@@ -82,7 +87,7 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
               type="button"
               onClick={() => borrar.mutate({ id: f.id, url: f.url })}
               aria-label={`Borrar ${label} ${i + 1}`}
-              className="absolute right-2 top-2 rounded-full bg-white/90 p-1.5 text-neifert"
+              className="text-neifert absolute top-2 right-2 rounded-full bg-white/90 p-1.5"
             >
               <Trash2 size={14} />
             </button>
@@ -91,13 +96,16 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
 
         <label
           htmlFor={inputId}
-          onDragOver={(e) => { e.preventDefault(); setArrastrando(true) }}
+          onDragOver={(e) => {
+            e.preventDefault()
+            setArrastrando(true)
+          }}
           onDragLeave={() => setArrastrando(false)}
           onDrop={onDrop}
           className={cn(
-            'glass flex aspect-[4/3] w-40 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed border-ink/15 text-ink-3 transition-colors hover:border-neifert/40 hover:text-neifert',
+            'glass border-ink/15 text-ink-3 hover:border-neifert/40 hover:text-neifert flex aspect-[4/3] w-40 cursor-pointer flex-col items-center justify-center gap-1.5 rounded-2xl border-2 border-dashed transition-colors',
             arrastrando && 'border-neifert text-neifert',
-            subiendo && 'pointer-events-none opacity-80',
+            subiendo && 'pointer-events-none opacity-80'
           )}
         >
           {subiendo ? (
@@ -105,7 +113,7 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
           ) : (
             <>
               <ImagePlus size={22} />
-              <span className="px-2 text-center text-[11px] font-medium leading-tight">
+              <span className="px-2 text-center text-[11px] leading-tight font-medium">
                 Arrastrá fotos o tocá acá
               </span>
             </>
@@ -123,7 +131,7 @@ export default function FotoMultiSlot({ label, slot, vehiculoId, vehiculo = null
         onChange={onArchivo}
       />
       {isLoading && fotos.length === 0 && (
-        <p className="text-xs text-ink-3">Cargando fotos…</p>
+        <p className="text-ink-3 text-xs">Cargando fotos…</p>
       )}
 
       <FotoViewerModal
