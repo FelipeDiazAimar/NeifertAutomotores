@@ -8,13 +8,27 @@ import Combobox from '@/crm/components/Combobox'
 import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
 import { CAMPOS as CAMPOS_COMBO } from '@/crm/services/opcionesCampo.service'
 import { vehiculoSchema } from '@/crm/lib/vehiculoSchema'
+import { slugify, useSiteStore } from '@/store/useSiteStore'
 
-// Semilla para "Tipo" — se fusiona con lo que ya haya cargado.
-const TIPOS = ['Pickup', 'Sedan', 'SUV', 'Hatchback', 'Utilitario', 'Coupé', 'Familiar', 'Otro']
-const TRANS = ['manual', 'automático']
-const CATEGORIAS = ['sedan', 'suv', 'pickup', 'hatchback', 'utilitario', 'coupe', 'familiar']
-const COMBUSTIBLES = ['Nafta', 'Diésel', 'GNC', 'Híbrido', 'Eléctrico']
-const opt = (arr) => arr.map((x) => ({ id: x, label: x }))
+// Semilla para "Tipo / Categoría" — se fusiona con las categorías de
+// /admin/contenido y con lo ya cargado en la base. Un solo campo que
+// sirve para las 2 cosas: `tipo` (CRM/leads) y `categoria` (web).
+const TIPOS = [
+  'Pickup',
+  'Sedan',
+  'SUV',
+  'Hatchback',
+  'Utilitario',
+  'Coupé',
+  'Familiar',
+  'Otro',
+]
+const COMBUSTIBLES_SEED = ['Nafta', 'Diésel', 'GNC', 'Híbrido', 'Eléctrico']
+const TRANS_SEED = ['manual', 'automático']
+// Historial real: spec "propio | consignación | ..." + fixtures con
+// origen="propio", tipoConsignacion="fisica".
+const ORIGENES_SEED = ['propio', 'consignación', 'canje']
+const TIPO_CONSIG_SEED = ['fisica', 'virtual']
 
 /** Fusiona una semilla con la lista guardada, dedup sin distinguir mayúsculas. */
 const conSemilla = (lista = [], semilla = []) => {
@@ -30,7 +44,7 @@ const conSemilla = (lista = [], semilla = []) => {
 function Seccion({ titulo, children }) {
   return (
     <fieldset className="space-y-3">
-      <legend className="font-display text-sm font-bold text-ink">{titulo}</legend>
+      <legend className="font-display text-ink text-sm font-bold">{titulo}</legend>
       <div className="grid gap-3 sm:grid-cols-2">{children}</div>
     </fieldset>
   )
@@ -38,7 +52,7 @@ function Seccion({ titulo, children }) {
 
 function Check({ name, label, register }) {
   return (
-    <label className="flex items-center gap-2 text-sm text-ink-2">
+    <label className="text-ink-2 flex items-center gap-2 text-sm">
       <input type="checkbox" {...register(name)} />
       {label}
     </label>
@@ -66,59 +80,149 @@ function CampoCombo({ control, name, label, options }) {
 
 export default function VehiculoForm({ inicial, onGuardar, guardando }) {
   const { opciones, registrarNuevas } = useOpcionesCampo()
+  const categories = useSiteStore((s) => s.categories)
+  const fuelTypes = useSiteStore((s) => s.fuelTypes)
+  const transmissions = useSiteStore((s) => s.transmissions)
+  const addFuelType = useSiteStore((s) => s.addFuelType)
+  const addTransmission = useSiteStore((s) => s.addTransmission)
   const {
-    register, handleSubmit, control, formState: { errors },
+    register,
+    handleSubmit,
+    control,
+    formState: { errors },
   } = useForm({
     resolver: zodResolver(vehiculoSchema),
     defaultValues: {
-      moneda: 'ARS', consignacion: false, carpeta_completa: false,
-      carpeta_con_oficio: false, carpeta_entregada: false, tiene_iva: false,
+      moneda: 'ARS',
+      consignacion: false,
+      carpeta_completa: false,
+      carpeta_con_oficio: false,
+      carpeta_entregada: false,
+      tiene_iva: false,
       ...inicial,
+      // Backfill: si viene categoria vieja sin tipo, mostrarla como tipo.
+      tipo:
+        inicial?.tipo ||
+        categories.find((c) => c.id === inicial?.categoria)?.label ||
+        inicial?.categoria ||
+        '',
     },
   })
 
-  const opcionesTipo = conSemilla(opciones.tipo, TIPOS)
+  const opcionesTipo = conSemilla(
+    [...TIPOS, ...categories.map((c) => c.label)],
+    opciones.tipo
+  )
+  const opcionesCombustible = conSemilla(fuelTypes, [
+    ...COMBUSTIBLES_SEED,
+    ...(opciones.combustible ?? []),
+  ])
+  const opcionesTransmision = conSemilla(transmissions, [
+    ...TRANS_SEED,
+    ...(opciones.transmision ?? []),
+  ])
+  const opcionesOrigen = conSemilla(opciones.origen, ORIGENES_SEED)
+  const opcionesTipoConsig = conSemilla(opciones.tipo_consignacion, TIPO_CONSIG_SEED)
 
   // Antes de guardar, persiste los valores tipeados que no estaban en la lista.
+  // `tipo` se duplica en `categoria` (slug) para que sirva al CRM y a la web.
   const submit = (data) => {
+    const tipoLimpio = (data.tipo ?? '').trim()
+    const dataUnificada = {
+      ...data,
+      tipo: tipoLimpio || undefined,
+      categoria: tipoLimpio ? slugify(tipoLimpio) : undefined,
+    }
     const nuevas = CAMPOS_COMBO.flatMap((campo) => {
-      const v = (data[campo] ?? '').trim()
+      const v = (dataUnificada[campo] ?? '').trim()
       if (!v) return []
-      const conocidas = campo === 'tipo' ? opcionesTipo : opciones[campo] ?? []
+      const conocidas =
+        campo === 'tipo'
+          ? opcionesTipo
+          : campo === 'origen'
+            ? opcionesOrigen
+            : campo === 'tipo_consignacion'
+              ? opcionesTipoConsig
+              : (opciones[campo] ?? [])
       const yaEsta = conocidas.some((o) => o.toLowerCase() === v.toLowerCase())
       return yaEsta ? [] : [{ campo, valor: v }]
     })
     registrarNuevas(nuevas)
-    onGuardar(data)
+    // Combustible/transmisión viven en el store de contenido: si es nuevo, agregarlo.
+    const comb = (dataUnificada.combustible ?? '').trim()
+    if (comb && !opcionesCombustible.some((o) => o.toLowerCase() === comb.toLowerCase()))
+      addFuelType(comb)
+    const trans = (dataUnificada.transmision ?? '').trim()
+    if (
+      trans &&
+      !opcionesTransmision.some((o) => o.toLowerCase() === trans.toLowerCase())
+    )
+      addTransmission(trans)
+    onGuardar(dataUnificada)
   }
 
   return (
     <form onSubmit={handleSubmit(submit)} className="space-y-6">
       <Seccion titulo="Datos">
-        <CampoCombo control={control} name="marca" label="Marca" options={opciones.marca ?? []} />
-        <CampoCombo control={control} name="modelo" label="Modelo" options={opciones.modelo ?? []} />
-        <CampoCombo control={control} name="version" label="Versión" options={opciones.version ?? []} />
-        <CampoCombo control={control} name="tipo" label="Tipo" options={opcionesTipo} />
-        <Input label="Año" type="number" {...register('anio')} error={errors.anio?.message} />
-        <MilesInput control={control} name="km" label="Km" />
-        <Controller
-          control={control} name="transmision"
-          render={({ field }) => (
-            <Select label="Transmisión" options={opt(TRANS)} value={field.value ?? ''} onChange={field.onChange} />
-          )}
+        <CampoCombo
+          control={control}
+          name="marca"
+          label="Marca"
+          options={opciones.marca ?? []}
         />
-        <CampoCombo control={control} name="color" label="Color" options={opciones.color ?? []} />
+        <CampoCombo
+          control={control}
+          name="modelo"
+          label="Modelo"
+          options={opciones.modelo ?? []}
+        />
+        <CampoCombo
+          control={control}
+          name="version"
+          label="Versión"
+          options={opciones.version ?? []}
+        />
+        <CampoCombo
+          control={control}
+          name="tipo"
+          label="Tipo / Categoría"
+          options={opcionesTipo}
+        />
+        <Input
+          label="Año"
+          type="number"
+          {...register('anio')}
+          error={errors.anio?.message}
+        />
+        <MilesInput control={control} name="km" label="Km" />
+        <CampoCombo
+          control={control}
+          name="transmision"
+          label="Transmisión"
+          options={opcionesTransmision}
+        />
+        <CampoCombo
+          control={control}
+          name="color"
+          label="Color"
+          options={opciones.color ?? []}
+        />
         <Input label="Patente" {...register('patente')} />
       </Seccion>
 
       <Seccion titulo="Precio">
         <Controller
-          control={control} name="moneda"
+          control={control}
+          name="moneda"
           render={({ field }) => (
             <Select
               label="Moneda"
-              options={[{ id: 'ARS', label: 'ARS' }, { id: 'USD', label: 'USD' }]}
-              value={field.value} onChange={field.onChange}
+              options={[
+                { id: 'ARS', label: 'ARS' },
+                { id: 'USD', label: 'USD' },
+              ]}
+              value={field.value}
+              onChange={field.onChange}
             />
           )}
         />
@@ -135,22 +239,41 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
 
       <Seccion titulo="Documentación">
         <Controller
-          control={control} name="itv"
+          control={control}
+          name="itv"
           render={({ field }) => (
             <Select
               label="ITV"
-              options={[{ id: 'si', label: 'Sí' }, { id: 'no', label: 'No' }]}
-              value={field.value ?? ''} onChange={field.onChange}
+              options={[
+                { id: 'si', label: 'Sí' },
+                { id: 'no', label: 'No' },
+              ]}
+              value={field.value ?? ''}
+              onChange={field.onChange}
             />
           )}
         />
         <Input label="Vencimiento ITV" type="date" {...register('itv_venc')} />
-        <CampoCombo control={control} name="origen" label="Origen" options={opciones.origen ?? []} />
-        <CampoCombo control={control} name="tipo_consignacion" label="Tipo de consignación" options={opciones.tipo_consignacion ?? []} />
-        <div className="sm:col-span-2 flex flex-wrap gap-x-6 gap-y-2">
+        <CampoCombo
+          control={control}
+          name="origen"
+          label="Origen"
+          options={opcionesOrigen}
+        />
+        <CampoCombo
+          control={control}
+          name="tipo_consignacion"
+          label="Tipo de consignación"
+          options={opcionesTipoConsig}
+        />
+        <div className="flex flex-wrap gap-x-6 gap-y-2 sm:col-span-2">
           <Check name="consignacion" label="En consignación" register={register} />
           <Check name="carpeta_completa" label="Carpeta completa" register={register} />
-          <Check name="carpeta_con_oficio" label="Carpeta con oficio" register={register} />
+          <Check
+            name="carpeta_con_oficio"
+            label="Carpeta con oficio"
+            register={register}
+          />
           <Check name="carpeta_entregada" label="Carpeta entregada" register={register} />
           <Check name="tiene_iva" label="Tiene IVA" register={register} />
         </div>
@@ -163,20 +286,18 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
       </Seccion>
 
       <Seccion titulo="Publicación en la web">
-        <Controller
-          control={control} name="categoria"
-          render={({ field }) => (
-            <Select label="Categoría" options={opt(CATEGORIAS)} value={field.value ?? ''} onChange={field.onChange} />
-          )}
-        />
-        <Controller
-          control={control} name="combustible"
-          render={({ field }) => (
-            <Select label="Combustible" options={opt(COMBUSTIBLES)} value={field.value ?? ''} onChange={field.onChange} />
-          )}
+        <CampoCombo
+          control={control}
+          name="combustible"
+          label="Combustible"
+          options={opcionesCombustible}
         />
         <div className="sm:col-span-2">
-          <Input as="textarea" label="Descripción (para la web)" {...register('descripcion')} />
+          <Input
+            as="textarea"
+            label="Descripción (para la web)"
+            {...register('descripcion')}
+          />
         </div>
       </Seccion>
 
