@@ -178,8 +178,6 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
             />
           </div>
 
-          {v.description && <p className="text-ink-2 mt-6">{v.description}</p>}
-
           {/* Aviso cuando la unidad ya no está disponible */}
           {!available && (
             <GlassCard className="border-neifert/30 mt-6 flex items-start gap-3 p-4">
@@ -194,6 +192,10 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
                 </p>
               </div>
             </GlassCard>
+          )}
+
+          {v.description && (
+            <p className="text-ink-2 mt-6 whitespace-pre-line">{v.description}</p>
           )}
 
           <div className="mt-8 flex flex-wrap gap-3">

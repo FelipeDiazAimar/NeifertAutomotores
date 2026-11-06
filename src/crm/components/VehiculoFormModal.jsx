@@ -8,10 +8,34 @@ import VehiculoForm from '@/crm/components/VehiculoForm'
 
 // Campos que el form maneja (sin id/auditoría/estado).
 const CAMPOS = [
-  'marca', 'modelo', 'version', 'patente', 'tipo', 'anio', 'km', 'transmision', 'color',
-  'moneda', 'precio_contado', 'precio_canje', 'duenio_nombre', 'duenio_apellido',
-  'duenio_contacto', 'itv', 'itv_venc', 'consignacion', 'tipo_consignacion', 'origen',
-  'carpeta_completa', 'carpeta_con_oficio', 'carpeta_entregada', 'tiene_iva', 'nota',
+  'marca',
+  'modelo',
+  'version',
+  'patente',
+  'tipo',
+  'anio',
+  'km',
+  'transmision',
+  'color',
+  'moneda',
+  'precio_contado',
+  'precio_canje',
+  'duenio_nombre',
+  'duenio_apellido',
+  'duenio_contacto',
+  'itv',
+  'itv_venc',
+  'consignacion',
+  'tipo_consignacion',
+  'origen',
+  'carpeta_completa',
+  'carpeta_con_oficio',
+  'carpeta_entregada',
+  'tiene_iva',
+  'nota',
+  'categoria',
+  'descripcion',
+  'combustible',
 ]
 
 /** Alta o edición de vehículo como overlay: difumina y bloquea el scroll de
@@ -23,7 +47,9 @@ export default function VehiculoFormModal({ open, onClose, vehiculo = null }) {
   const lenis = useLenis()
 
   const esEdicion = Boolean(vehiculo?.id)
-  const titulo = esEdicion ? `Editar ${vehiculo.marca} ${vehiculo.modelo}` : 'Cargar vehículo'
+  const titulo = esEdicion
+    ? `Editar ${vehiculo.marca} ${vehiculo.modelo}`
+    : 'Cargar vehículo'
   const inicial = esEdicion
     ? Object.fromEntries(CAMPOS.map((k) => [k, vehiculo[k] ?? undefined]))
     : undefined
@@ -83,18 +109,18 @@ export default function VehiculoFormModal({ open, onClose, vehiculo = null }) {
               role="dialog"
               aria-modal="true"
               aria-label={titulo}
-              className="glass relative z-10 my-4 w-full max-w-3xl rounded-[20px] p-6 shadow-glass"
+              className="glass shadow-glass relative z-10 my-4 w-full max-w-3xl rounded-[20px] p-6"
               initial={{ scale: 0.96, y: 16 }}
               animate={{ scale: 1, y: 0 }}
               exit={{ scale: 0.97, y: 8 }}
               transition={{ type: 'spring', stiffness: 280, damping: 26 }}
             >
               <div className="mb-4 flex items-center justify-between">
-                <h2 className="font-display text-lg font-bold text-ink">{titulo}</h2>
+                <h2 className="font-display text-ink text-lg font-bold">{titulo}</h2>
                 <button
                   onClick={onClose}
                   aria-label="Cerrar"
-                  className="grid h-8 w-8 place-items-center rounded-full text-ink-3 transition-colors hover:bg-surface hover:text-ink"
+                  className="text-ink-3 hover:bg-surface hover:text-ink grid h-8 w-8 place-items-center rounded-full transition-colors"
                 >
                   <X size={18} />
                 </button>
@@ -105,6 +131,6 @@ export default function VehiculoFormModal({ open, onClose, vehiculo = null }) {
         </motion.div>
       )}
     </AnimatePresence>,
-    document.body,
+    document.body
   )
 }

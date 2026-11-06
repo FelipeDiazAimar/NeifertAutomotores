@@ -7,10 +7,34 @@ import VehiculoForm from '@/crm/components/VehiculoForm'
 
 // Campos que el form maneja (no metemos id/auditoría/estado en el update).
 const CAMPOS = [
-  'marca', 'modelo', 'version', 'patente', 'tipo', 'anio', 'km', 'transmision', 'color',
-  'moneda', 'precio_contado', 'precio_canje', 'duenio_nombre', 'duenio_apellido',
-  'duenio_contacto', 'itv', 'itv_venc', 'consignacion', 'tipo_consignacion', 'origen',
-  'carpeta_completa', 'carpeta_con_oficio', 'carpeta_entregada', 'tiene_iva', 'nota',
+  'marca',
+  'modelo',
+  'version',
+  'patente',
+  'tipo',
+  'anio',
+  'km',
+  'transmision',
+  'color',
+  'moneda',
+  'precio_contado',
+  'precio_canje',
+  'duenio_nombre',
+  'duenio_apellido',
+  'duenio_contacto',
+  'itv',
+  'itv_venc',
+  'consignacion',
+  'tipo_consignacion',
+  'origen',
+  'carpeta_completa',
+  'carpeta_con_oficio',
+  'carpeta_entregada',
+  'tiene_iva',
+  'nota',
+  'categoria',
+  'descripcion',
+  'combustible',
 ]
 
 export default function VehiculoEditarPage() {
@@ -32,10 +56,13 @@ export default function VehiculoEditarPage() {
 
   return (
     <div className="mx-auto max-w-3xl space-y-4">
-      <button onClick={() => navigate(`/crm/vehiculos/${id}`)} className="flex items-center gap-1 text-sm text-ink-3 hover:text-ink">
+      <button
+        onClick={() => navigate(`/crm/vehiculos/${id}`)}
+        className="text-ink-3 hover:text-ink flex items-center gap-1 text-sm"
+      >
         <ArrowLeft size={16} /> Volver
       </button>
-      <h1 className="font-display text-2xl font-bold text-ink">
+      <h1 className="font-display text-ink text-2xl font-bold">
         Editar {vehiculo.marca} {vehiculo.modelo}
       </h1>
       <GlassCard className="p-6">
@@ -43,7 +70,10 @@ export default function VehiculoEditarPage() {
           inicial={inicial}
           guardando={actualizar.isPending}
           onGuardar={(data) =>
-            actualizar.mutate({ id, data }, { onSuccess: () => navigate(`/crm/vehiculos/${id}`) })
+            actualizar.mutate(
+              { id, data },
+              { onSuccess: () => navigate(`/crm/vehiculos/${id}`) }
+            )
           }
         />
       </GlassCard>
