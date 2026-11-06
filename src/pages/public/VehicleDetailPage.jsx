@@ -1,12 +1,24 @@
 import { useEffect, useRef, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { ArrowLeft, Gauge, Fuel, Settings2, Calendar, Share2, AlertCircle } from 'lucide-react'
+import {
+  ArrowLeft,
+  Gauge,
+  Fuel,
+  Settings2,
+  Calendar,
+  Share2,
+  AlertCircle,
+} from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import { useVehicle } from '@/hooks/useVehicles'
-import { formatVehiclePrice, formatKm } from '@/lib/formatters'
+import { formatKm } from '@/lib/formatters'
 import { similarVehicleMessage, vehicleWaLink } from '@/lib/whatsapp'
-import { trackVehicleClick, trackVehicleConversion, trackShareClick } from '@/lib/vehicleClicks'
+import {
+  trackVehicleClick,
+  trackVehicleConversion,
+  trackShareClick,
+} from '@/lib/vehicleClicks'
 import { trackEvent } from '@/services/events.service'
 import { detectSource } from '@/lib/provenance'
 import { esNuevoVigente } from '@/crm/lib/formatVehiculo'
@@ -26,12 +38,14 @@ const STATUS_LABEL = { reservado: 'Reservado', vendido: 'Vendido' }
 function SpecCard({ icon: Icon, label, value }) {
   return (
     <GlassCard className="flex items-center gap-3 p-4">
-      <span className="grid h-10 w-10 place-items-center rounded-xl bg-neifert/10 text-neifert">
+      <span className="bg-neifert/10 text-neifert grid h-10 w-10 place-items-center rounded-xl">
         <Icon size={18} />
       </span>
       <div>
-        <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-3">{label}</p>
-        <p className="font-semibold text-ink">{value}</p>
+        <p className="text-ink-3 text-[10px] font-semibold tracking-wide uppercase">
+          {label}
+        </p>
+        <p className="text-ink font-semibold">{value}</p>
       </div>
     </GlassCard>
   )
@@ -81,9 +95,7 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
   const statusLabel = STATUS_LABEL[v.status] || 'No disponible'
   const gallery = v.images?.length ? v.images : [v.main_image_url]
 
-  const waMessage = available
-    ? undefined
-    : similarVehicleMessage(v, statusLabel)
+  const waMessage = available ? undefined : similarVehicleMessage(v, statusLabel)
   const waHref = vehicleWaLink(phone, v, waMessage)
 
   const onShare = () => {
@@ -100,7 +112,7 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
     <section className="mx-auto max-w-6xl px-4 py-10 md:px-8">
       <Link
         to={basePath}
-        className="inline-flex items-center gap-2 text-sm text-ink-2 transition-colors hover:text-neifert"
+        className="text-ink-2 hover:text-neifert inline-flex items-center gap-2 text-sm transition-colors"
       >
         <ArrowLeft size={16} /> Volver al catálogo
       </Link>
@@ -128,7 +140,7 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
           {v.status === 'vendido' && <SoldRibbon large />}
           {v.status === 'reservado' && <SoldRibbon large label="Reservado" tone="gray" />}
           {!available && (
-            <span className="absolute left-4 top-4 z-20 rounded-full bg-ink px-4 py-1.5 text-xs font-bold uppercase tracking-wide text-bg shadow-glass">
+            <span className="bg-ink text-bg shadow-glass absolute top-4 left-4 z-20 rounded-full px-4 py-1.5 text-xs font-bold tracking-wide uppercase">
               {statusLabel}
             </span>
           )}
@@ -140,37 +152,45 @@ export default function VehicleDetailPage({ variant = 'usados' }) {
           transition={{ duration: 0.5, delay: 0.1 }}
           className="min-w-0 flex-1"
         >
-          <p className="text-sm font-bold uppercase tracking-wider text-neifert">{v.brand}</p>
-          <h1 className="mt-1 font-display text-4xl font-extrabold text-ink">
+          <p className="text-neifert text-sm font-bold tracking-wider uppercase">
+            {v.brand}
+          </p>
+          <h1 className="font-display text-ink mt-1 text-4xl font-extrabold">
             {v.model}
             {v.version && <span className="text-ink-2"> {v.version}</span>}
           </h1>
           <p
-            className={`mt-4 font-display text-3xl font-extrabold ${
-              available ? 'text-ink' : 'text-ink-3 line-through'
+            className={`font-display mt-4 text-3xl font-extrabold ${
+              available ? 'text-ink' : 'text-ink-3'
             }`}
           >
-            {formatVehiclePrice(v)}
+            Consultar
           </p>
 
           <div className="mt-6 grid grid-cols-2 gap-3">
             <SpecCard icon={Calendar} label="Año" value={v.year} />
             <SpecCard icon={Gauge} label="Kilómetros" value={formatKm(v.km)} />
             <SpecCard icon={Fuel} label="Combustible" value={v.fuel_type} />
-            <SpecCard icon={Settings2} label="Transmisión" value={v.transmission || '—'} />
+            <SpecCard
+              icon={Settings2}
+              label="Transmisión"
+              value={v.transmission || '—'}
+            />
           </div>
 
-          {v.description && <p className="mt-6 text-ink-2">{v.description}</p>}
+          {v.description && <p className="text-ink-2 mt-6">{v.description}</p>}
 
           {/* Aviso cuando la unidad ya no está disponible */}
           {!available && (
-            <GlassCard className="mt-6 flex items-start gap-3 border-neifert/30 p-4">
-              <AlertCircle size={20} className="mt-0.5 shrink-0 text-neifert" />
+            <GlassCard className="border-neifert/30 mt-6 flex items-start gap-3 p-4">
+              <AlertCircle size={20} className="text-neifert mt-0.5 shrink-0" />
               <div>
-                <p className="font-semibold text-ink">Esta unidad ya no está disponible</p>
-                <p className="mt-1 text-sm text-ink-2">
-                  {v.status === 'vendido' ? 'Se vendió' : 'Está reservada'}. Podemos conseguirte una
-                  similar — escribinos o mirá otras opciones abajo.
+                <p className="text-ink font-semibold">
+                  Esta unidad ya no está disponible
+                </p>
+                <p className="text-ink-2 mt-1 text-sm">
+                  {v.status === 'vendido' ? 'Se vendió' : 'Está reservada'}. Podemos
+                  conseguirte una similar — escribinos o mirá otras opciones abajo.
                 </p>
               </div>
             </GlassCard>

@@ -1,4 +1,4 @@
-import { formatVehiclePrice, formatKm } from './formatters'
+import { formatKm } from './formatters'
 
 /** Limpia un telefono dejando solo digitos (formato wa.me). */
 export function cleanPhone(phone) {
@@ -25,7 +25,7 @@ export function vehicleMessage(vehicle, { origin } = {}) {
     `Hola! Vi este vehiculo en la web de Neifert Automotores y me interesa recibir mas informacion:`,
     ``,
     `Auto: ${vehicle.brand} ${vehicle.model}${vehicle.version ? ` ${vehicle.version}` : ''} (${vehicle.year})`,
-    `Precio: ${formatVehiclePrice(vehicle)}`,
+    `Precio: a consultar`,
     `Datos: ${formatKm(vehicle.km)} - ${vehicle.fuel_type}${
       vehicle.transmission ? ` - ${vehicle.transmission}` : ''
     }`,
@@ -58,7 +58,9 @@ export function similarVehicleMessage(vehicle, statusLabel) {
   const title = vehicle
     ? `${vehicle.brand} ${vehicle.model}${vehicle.version ? ` ${vehicle.version}` : ''} (${vehicle.year})`
     : 'una unidad publicada'
-  const status = statusLabel ? ` figura como ${statusLabel.toLowerCase()}` : ' no esta disponible'
+  const status = statusLabel
+    ? ` figura como ${statusLabel.toLowerCase()}`
+    : ' no esta disponible'
   return `Hola! Vi el ${title} en la web de Neifert Automotores y${status}. Me gustaria que me asesoren con opciones similares disponibles.`
 }
 
@@ -73,7 +75,7 @@ export function vehicleOfferMessage(vehicle, { origin } = {}) {
     `Tengo esta unidad disponible que puede interesarte:`,
     ``,
     `${vehicle.brand} ${vehicle.model}${vehicle.version ? ` ${vehicle.version}` : ''} (${vehicle.year})`,
-    `Precio: ${formatVehiclePrice(vehicle)}`,
+    `Precio: a consultar`,
     `Datos: ${formatKm(vehicle.km)} - ${vehicle.fuel_type}${
       vehicle.transmission ? ` - ${vehicle.transmission}` : ''
     }`,

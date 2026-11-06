@@ -44,7 +44,9 @@ const ESTADOS_PUBLICOS = ['disponible', 'reservado', 'vendido']
  *  USD para poder comparar/ordenar vehículos en distinta moneda; lo que se
  *  MUESTRA sigue siendo `price_amount` en su propia `currency`, sin tocar. */
 function mapear(v, usdRate = null) {
-  const fotos = [...(v.vehiculo_fotos ?? [])].sort((a, b) => (a.orden ?? 0) - (b.orden ?? 0))
+  const fotos = [...(v.vehiculo_fotos ?? [])].sort(
+    (a, b) => (a.orden ?? 0) - (b.orden ?? 0)
+  )
   const portada = fotos.find((f) => f.es_portada) ?? fotos[0]
   const precioUsd =
     v.precio_contado == null
@@ -92,12 +94,15 @@ function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
   if (search) {
     const numeric = /^\d{4}$/.test(search.trim())
     query = numeric
-      ? query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%,anio.eq.${search.trim()}`)
+      ? query.or(
+          `marca.ilike.%${search}%,modelo.ilike.%${search}%,anio.eq.${search.trim()}`
+        )
       : query.or(`marca.ilike.%${search}%,modelo.ilike.%${search}%`)
   }
   if (filters) {
     if (filters.fuels?.length) query = query.in('combustible', filters.fuels)
-    if (filters.transmissions?.length) query = query.in('transmision', filters.transmissions)
+    if (filters.transmissions?.length)
+      query = query.in('transmision', filters.transmissions)
     if (filters.yearMin != null) query = query.gte('anio', filters.yearMin)
     if (filters.yearMax != null) query = query.lte('anio', filters.yearMax)
     if (filters.kmMin != null) query = query.gte('km', filters.kmMin)
@@ -108,7 +113,7 @@ function aplicarFiltros(query, { search, filters, condition = 'todos' }) {
 
 export async function listarPublicos({
   category = 'todos',
-  sort = 'price-desc',
+  sort = 'year-desc',
   search = '',
   filters = null,
   condition = 'todos',
@@ -116,7 +121,11 @@ export async function listarPublicos({
   const ordenaPorPrecio = sort === 'price-asc' || sort === 'price-desc'
   const ordenaAlfabetico = sort === 'brand-asc' || sort === 'model-asc'
 
-  let query = db().from('vehiculos').select(COLUMNAS_PUBLICAS).in('estado', ESTADOS_PUBLICOS).eq('publicado', true)
+  let query = db()
+    .from('vehiculos')
+    .select(COLUMNAS_PUBLICAS)
+    .in('estado', ESTADOS_PUBLICOS)
+    .eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
   query = aplicarFiltros(query, { search, filters, condition })
   if (!ordenaPorPrecio && !ordenaAlfabetico) {
@@ -168,7 +177,10 @@ export async function listarPublicos({
  *  estadísticas del panel — requiere sesión, no se usa desde la web pública. */
 export async function listarTodos() {
   const [{ data, error }, usdRate] = await Promise.all([
-    db().from('vehiculos').select(COLUMNAS_PUBLICAS).order('creado_en', { ascending: false }),
+    db()
+      .from('vehiculos')
+      .select(COLUMNAS_PUBLICAS)
+      .order('creado_en', { ascending: false }),
     cotizacionConFallback(),
   ])
   if (error) throw error
@@ -177,7 +189,13 @@ export async function listarTodos() {
 
 export async function obtenerPublicoPorId(id) {
   const [{ data, error }, usdRate] = await Promise.all([
-    db().from('vehiculos').select(COLUMNAS_PUBLICAS).eq('id', id).in('estado', ESTADOS_PUBLICOS).eq('publicado', true).maybeSingle(),
+    db()
+      .from('vehiculos')
+      .select(COLUMNAS_PUBLICAS)
+      .eq('id', id)
+      .in('estado', ESTADOS_PUBLICOS)
+      .eq('publicado', true)
+      .maybeSingle(),
     cotizacionConFallback(),
   ])
   if (error) throw error

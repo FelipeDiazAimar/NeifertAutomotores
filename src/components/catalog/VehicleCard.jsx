@@ -1,9 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { AnimatePresence, motion } from 'framer-motion'
-import { ChevronLeft, ChevronRight, Gauge, Fuel, Settings2, Share2, Link2 } from 'lucide-react'
+import {
+  ChevronLeft,
+  ChevronRight,
+  Gauge,
+  Fuel,
+  Settings2,
+  Share2,
+  Link2,
+} from 'lucide-react'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
-import { formatVehiclePrice, formatKm } from '@/lib/formatters'
+import { formatKm } from '@/lib/formatters'
 import { vehicleWaLink } from '@/lib/whatsapp'
 import { shareOrCopy } from '@/lib/share'
 import { trackShareClick } from '@/lib/vehicleClicks'
@@ -13,14 +21,13 @@ import { useSiteStore } from '@/store/useSiteStore'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
 import { EASE } from '@/lib/animations'
 import { cn } from '@/lib/cn'
-import PriceAmount from '@/components/catalog/PriceAmount'
 import SoldRibbon from '@/components/catalog/SoldRibbon'
 import { esNuevoVigente } from '@/crm/lib/formatVehiculo'
 
 function ImgPlaceholder({ brand }) {
   return (
     <div className="grid h-full w-full place-items-center bg-gradient-to-br from-[#2a2a30] to-[#0b0b0f]">
-      <span className="font-display text-lg font-bold uppercase tracking-widest text-white/25">
+      <span className="font-display text-lg font-bold tracking-widest text-white/25 uppercase">
         {brand}
       </span>
     </div>
@@ -103,7 +110,9 @@ function CardImage({ vehicle, rounded, isHovered }) {
           onLoad={(e) => {
             const img = e.currentTarget
             const wide = img.naturalWidth / img.naturalHeight > 1.15
-            setWideImages((prev) => (prev[all[idx]] === wide ? prev : { ...prev, [all[idx]]: wide }))
+            setWideImages((prev) =>
+              prev[all[idx]] === wide ? prev : { ...prev, [all[idx]]: wide }
+            )
           }}
           initial={{ opacity: 0, scale: 1.04 }}
           animate={{ opacity: 1, scale: 1 }}
@@ -121,7 +130,7 @@ function CardImage({ vehicle, rounded, isHovered }) {
             type="button"
             aria-label="Ver imagen anterior"
             onClick={(event) => go(-1, event)}
-            className="absolute left-1.5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:grid sm:left-2 sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+            className="absolute top-1/2 left-1.5 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:left-2 sm:grid sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
             <ChevronLeft size={16} className="sm:hidden" />
             <ChevronLeft size={18} className="hidden sm:block" />
@@ -130,7 +139,7 @@ function CardImage({ vehicle, rounded, isHovered }) {
             type="button"
             aria-label="Ver imagen siguiente"
             onClick={(event) => go(1, event)}
-            className="absolute right-1.5 top-1/2 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:grid sm:right-2 sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
+            className="absolute top-1/2 right-1.5 z-10 hidden h-7 w-7 -translate-y-1/2 place-items-center rounded-full border border-white/30 bg-black/35 text-white opacity-70 backdrop-blur-sm transition hover:bg-black/55 sm:right-2 sm:grid sm:h-8 sm:w-8 md:opacity-0 md:group-hover:opacity-100 md:focus:opacity-100"
           >
             <ChevronRight size={16} className="sm:hidden" />
             <ChevronRight size={18} className="hidden sm:block" />
@@ -138,13 +147,13 @@ function CardImage({ vehicle, rounded, isHovered }) {
         </>
       )}
       {all.length > 1 && (
-        <div className="pointer-events-none absolute bottom-1.5 left-1/2 hidden -translate-x-1/2 gap-1 sm:flex sm:bottom-2">
+        <div className="pointer-events-none absolute bottom-1.5 left-1/2 hidden -translate-x-1/2 gap-1 sm:bottom-2 sm:flex">
           {all.map((_, i) => (
             <span
               key={i}
               className={cn(
                 'h-1 rounded-full transition-all sm:h-1.5',
-                i === idx ? 'w-3 bg-neifert sm:w-4' : 'w-1 bg-white/60 sm:w-1.5'
+                i === idx ? 'bg-neifert w-3 sm:w-4' : 'w-1 bg-white/60 sm:w-1.5'
               )}
             />
           ))}
@@ -156,8 +165,8 @@ function CardImage({ vehicle, rounded, isHovered }) {
 
 function Spec({ icon: Icon, children }) {
   return (
-    <span className="flex items-center gap-1 text-[11px] text-ink-2 sm:gap-1.5 sm:text-xs">
-      <Icon size={13} className="shrink-0 text-ink-3" />
+    <span className="text-ink-2 flex items-center gap-1 text-[11px] sm:gap-1.5 sm:text-xs">
+      <Icon size={13} className="text-ink-3 shrink-0" />
       {children}
     </span>
   )
@@ -223,7 +232,7 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
             animate={{ opacity: 1, y: 0, scale: 1 }}
             exit={{ opacity: 0, y: 6, scale: 0.9 }}
             transition={{ duration: 0.18, ease: EASE }}
-            className="absolute bottom-full right-0 z-20 mb-2 flex flex-col gap-1.5"
+            className="absolute right-0 bottom-full z-20 mb-2 flex flex-col gap-1.5"
           >
             <motion.a
               href={waHref}
@@ -236,7 +245,7 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
               }}
               whileTap={{ scale: 0.9 }}
               aria-label="Consultar por WhatsApp"
-              className="grid h-9 w-9 place-items-center rounded-full bg-whatsapp text-white sm:h-11 sm:w-11"
+              className="bg-whatsapp grid h-9 w-9 place-items-center rounded-full text-white sm:h-11 sm:w-11"
               style={{ boxShadow: '0 8px 18px -6px rgba(37,211,102,0.6)' }}
             >
               <WhatsAppIcon size={16} className="sm:hidden" />
@@ -247,7 +256,7 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
               onClick={copyLink}
               whileTap={{ scale: 0.9 }}
               aria-label="Copiar enlace"
-              className="grid h-9 w-9 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
+              className="glass text-ink hover:text-neifert grid h-9 w-9 place-items-center rounded-full transition-colors sm:h-11 sm:w-11"
             >
               <Link2 size={15} className="sm:hidden" />
               <Link2 size={18} className="hidden sm:block" />
@@ -264,7 +273,7 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
         whileHover={{ scale: 1.1 }}
         whileTap={{ scale: 0.95 }}
         aria-label="Compartir"
-        className="grid h-9 w-9 place-items-center rounded-full glass text-ink transition-colors hover:text-neifert sm:h-11 sm:w-11"
+        className="glass text-ink hover:text-neifert grid h-9 w-9 place-items-center rounded-full transition-colors sm:h-11 sm:w-11"
       >
         <Share2 size={15} className="sm:hidden" />
         <Share2 size={18} className="hidden sm:block" />
@@ -273,7 +282,12 @@ function ShareMenu({ vehicle, basePath = '/catalogo', className }) {
   )
 }
 
-export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catalogo', groupLabel = null }) {
+export default function VehicleCard({
+  vehicle,
+  view = 'grid',
+  basePath = '/catalogo',
+  groupLabel = null,
+}) {
   const [isCardHovered, setIsCardHovered] = useState(false)
   const isSold = (vehicle.status || 'disponible') === 'vendido'
   const isReserved = (vehicle.status || 'disponible') === 'reservado'
@@ -300,7 +314,7 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
         {...layoutProps}
         onMouseEnter={() => setIsCardHovered(true)}
         onMouseLeave={() => setIsCardHovered(false)}
-        className="group glass relative flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 shadow-glass sm:flex-row sm:gap-4 sm:p-3"
+        className="group glass shadow-glass relative flex flex-col gap-3 overflow-hidden rounded-[20px] p-2.5 sm:flex-row sm:gap-4 sm:p-3"
       >
         {isSold && <SoldRibbon />}
         {isReserved && <SoldRibbon label="Reservado" tone="gray" />}
@@ -309,16 +323,16 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
           className="relative h-36 w-full shrink-0 overflow-hidden rounded-2xl sm:h-28 sm:w-44"
         >
           <CardImage vehicle={vehicle} isHovered={isCardHovered} />
-          <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:bottom-auto sm:left-auto sm:right-2 sm:top-2 sm:px-2.5 sm:text-xs">
+          <span className="absolute bottom-2 left-2 z-10 rounded-full bg-white/85 px-2 py-0.5 text-[11px] font-semibold text-[#0b0b0f] sm:top-2 sm:right-2 sm:bottom-auto sm:left-auto sm:px-2.5 sm:text-xs">
             {vehicle.year}
           </span>
         </Link>
         <div className="flex min-w-0 flex-1 flex-col justify-between py-1">
           <Link to={`${basePath}/${vehicle.id}`}>
-            <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
+            <p className="text-neifert text-[9px] font-bold tracking-wider uppercase sm:text-[10px]">
               {vehicle.brand}
             </p>
-            <p className="truncate font-display text-base font-bold text-ink sm:text-lg">
+            <p className="font-display text-ink truncate text-base font-bold sm:text-lg">
               {vehicle.model}
               {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
             </p>
@@ -326,8 +340,8 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
           {specs}
         </div>
         <div className="flex flex-row items-end justify-between gap-3 py-1 sm:flex-col sm:gap-0">
-          <p className="font-display text-lg font-extrabold text-ink sm:text-xl">
-            <PriceAmount value={formatVehiclePrice(vehicle)} />
+          <p className="font-display text-ink text-lg font-extrabold sm:text-xl">
+            Consultar
           </p>
           <div className="flex items-center gap-1.5 sm:gap-2">
             <ShareMenu vehicle={vehicle} basePath={basePath} />
@@ -343,7 +357,7 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
       whileHover={{ y: -8 }}
       onMouseEnter={() => setIsCardHovered(true)}
       onMouseLeave={() => setIsCardHovered(false)}
-      className="group glass relative overflow-hidden rounded-[20px] shadow-glass"
+      className="group glass shadow-glass relative overflow-hidden rounded-[20px]"
     >
       {isSold && <SoldRibbon />}
       {isReserved && <SoldRibbon label="Reservado" tone="gray" />}
@@ -355,24 +369,24 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
             {vehicle.year}
           </span>
           {groupLabel && (
-            <div className="absolute left-2 top-2 z-10 flex flex-col items-start gap-1 sm:left-3 sm:top-3">
-              <span className="rounded-full bg-neifert px-2.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">
+            <div className="absolute top-2 left-2 z-10 flex flex-col items-start gap-1 sm:top-3 sm:left-3">
+              <span className="bg-neifert rounded-full px-2.5 py-0.5 text-[10px] font-bold tracking-wide text-white uppercase">
                 {groupLabel.brand} · {groupLabel.count}
               </span>
             </div>
           )}
           {/* Desktop: año arriba a la derecha; "Nuevo" debajo. */}
-          <div className="absolute right-3 top-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">
+          <div className="absolute top-3 right-3 z-10 hidden flex-col items-end gap-1.5 sm:flex">
             <span className="rounded-full bg-white/85 px-3 py-1 text-xs font-semibold text-[#0b0b0f] backdrop-blur">
               {vehicle.year}
             </span>
             {esNuevoVigente(vehicle) && (
-              <span className="rounded-full bg-neifert px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-white">
+              <span className="bg-neifert rounded-full px-3 py-1 text-[10px] font-bold tracking-wide text-white uppercase">
                 Nuevo
               </span>
             )}
             {vehicle.is_zero_km && (
-              <span className="rounded-full bg-ink px-3 py-1 text-[10px] font-bold uppercase tracking-wide text-bg">
+              <span className="bg-ink text-bg rounded-full px-3 py-1 text-[10px] font-bold tracking-wide uppercase">
                 0 km
               </span>
             )}
@@ -382,21 +396,23 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
       <div className="p-2.5 sm:p-4">
         <Link to={`${basePath}/${vehicle.id}`} className="block">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] font-bold uppercase tracking-wider text-neifert sm:text-[10px]">
+            <p className="text-neifert text-[9px] font-bold tracking-wider uppercase sm:text-[10px]">
               {vehicle.brand}
             </p>
             {esNuevoVigente(vehicle) && (
-              <span className="rounded-full bg-neifert px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-white sm:hidden">
+              <span className="bg-neifert rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide text-white uppercase sm:hidden">
                 Nuevo
               </span>
             )}
             {vehicle.is_zero_km && (
-              <span className="rounded-full bg-ink px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-bg sm:hidden">
+              <span className="bg-ink text-bg rounded-full px-2 py-0.5 text-[9px] font-bold tracking-wide uppercase sm:hidden">
                 0 km
               </span>
             )}
           </div>
-          <p className={cn('truncate font-display text-sm font-bold text-ink sm:text-lg')}>
+          <p
+            className={cn('font-display text-ink truncate text-sm font-bold sm:text-lg')}
+          >
             {vehicle.model}
             {vehicle.version && <span className="text-ink-2"> {vehicle.version}</span>}
           </p>
@@ -404,11 +420,11 @@ export default function VehicleCard({ vehicle, view = 'grid', basePath = '/catal
         <div className="mt-1.5 sm:mt-3">{specs}</div>
         <div className="mt-1.5 flex items-center justify-between gap-2 sm:mt-4 sm:flex-wrap sm:items-end">
           <div>
-            <p className="hidden text-[9px] font-semibold uppercase tracking-wide text-ink-3 sm:block">
-              Precio contado
+            <p className="text-ink-3 hidden text-[9px] font-semibold tracking-wide uppercase sm:block">
+              Precio
             </p>
-            <p className="font-display text-sm font-extrabold text-ink sm:text-xl">
-              <PriceAmount value={formatVehiclePrice(vehicle)} />
+            <p className="font-display text-ink text-sm font-extrabold sm:text-xl">
+              Consultar
             </p>
           </div>
           <ShareMenu vehicle={vehicle} basePath={basePath} />

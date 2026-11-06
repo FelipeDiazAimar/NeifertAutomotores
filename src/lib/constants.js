@@ -9,12 +9,10 @@ export const VEHICLE_CATEGORIES = [
   { id: 'pickup', label: 'Pickups' },
 ]
 
-/** Opciones de ordenamiento del catálogo. */
+/** Opciones de ordenamiento del catálogo (sin precios: son a consultar). */
 export const SORT_OPTIONS = [
   { id: 'brand-asc', label: 'Marca A-Z' },
   { id: 'model-asc', label: 'Modelo A-Z' },
-  { id: 'price-desc', label: 'Precio Mayor' },
-  { id: 'price-asc', label: 'Precio Menor' },
   { id: 'year-desc', label: 'Más nuevos' },
   { id: 'km-asc', label: 'Menos km' },
 ]
@@ -54,7 +52,13 @@ export const ARS_TO_USD_RATE = 1 / 1000
 
 export const FUEL_TYPES = ['Nafta', 'Eléctrico', 'Híbrido', 'Diésel']
 
-export const TRANSMISSIONS = ['Automática', 'Manual', 'PDK', 'M Steptronic', 'F1 Dual-Clutch']
+export const TRANSMISSIONS = [
+  'Automática',
+  'Manual',
+  'PDK',
+  'M Steptronic',
+  'F1 Dual-Clutch',
+]
 
 /** Teléfono de WhatsApp del salón (formato internacional sin + ni espacios). */
 export const WHATSAPP_PHONE = '543564562413'

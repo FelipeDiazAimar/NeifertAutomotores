@@ -12,7 +12,13 @@ import { useUiStore } from '@/store/useUiStore'
 import { useSiteStore } from '@/store/useSiteStore'
 import { cn } from '@/lib/cn'
 
-const SUGGESTIONS = ['SUV familiar', 'Eléctrico 0km', 'Deportivo premium', 'Audi 2024', 'Algo económico']
+const SUGGESTIONS = [
+  'SUV familiar',
+  'Eléctrico 0km',
+  'Deportivo premium',
+  'Audi 2024',
+  'Algo económico',
+]
 const PAGE_SIZE = 8
 
 export default function AiSearchOverlay() {
@@ -33,7 +39,7 @@ export default function AiSearchOverlay() {
 
   const { data: pool = [] } = useQuery({
     queryKey: ['vehicles', 'ai-pool'],
-    queryFn: () => listarPublicos({ category: 'todos', sort: 'price-desc' }),
+    queryFn: () => listarPublicos({ category: 'todos', sort: 'year-desc' }),
     enabled: open,
   })
 
@@ -104,130 +110,133 @@ export default function AiSearchOverlay() {
             className="relative z-10 h-full overflow-y-auto overscroll-contain"
             options={{ lerp: 0.1, smoothWheel: true }}
           >
-          <div className="mx-auto max-w-5xl px-4 py-10 md:py-16 pb-20">
-            <motion.div
-              initial={{ y: -16, opacity: 0 }}
-              animate={{ y: 0, opacity: 1 }}
-              transition={{ type: 'spring', stiffness: 240, damping: 24 }}
-            >
-              <div className="mb-3 flex items-center justify-between">
-                <span className="inline-flex items-center gap-2 rounded-full bg-neifert/15 px-3 py-1 text-xs font-semibold text-neifert">
-                  <Sparkles size={13} /> Búsqueda inteligente
-                </span>
-                <button
-                  onClick={() => setOpen(false)}
-                  aria-label="Cerrar"
-                  className="grid h-9 w-9 place-items-center rounded-full bg-white/10 text-ink backdrop-blur transition-colors hover:text-neifert"
-                >
-                  <X size={18} />
-                </button>
-              </div>
-
-              <form
-                onSubmit={(e) => {
-                  e.preventDefault()
-                  runSearch()
-                }}
-                className="glass flex items-center gap-3 rounded-2xl px-4 py-3 shadow-glass"
+            <div className="mx-auto max-w-5xl px-4 py-10 pb-20 md:py-16">
+              <motion.div
+                initial={{ y: -16, opacity: 0 }}
+                animate={{ y: 0, opacity: 1 }}
+                transition={{ type: 'spring', stiffness: 240, damping: 24 }}
               >
-                <Search size={22} className="shrink-0 text-neifert" />
-                <input
-                  autoFocus
-                  value={query}
-                  onChange={(e) => setQuery(e.target.value)}
-                  placeholder="¿Qué estás buscando? Ej: SUV híbrido 0km…"
-                  className="w-full bg-transparent text-lg text-ink outline-none placeholder:text-ink-3"
-                />
-                <button
-                  type="submit"
-                  disabled={!query.trim()}
-                  className="shrink-0 rounded-xl bg-neifert px-4 py-2 text-sm font-semibold text-white shadow-glow-red transition-opacity disabled:opacity-40"
-                >
-                  Buscar
-                </button>
-              </form>
-
-              <div className="mt-4 flex flex-wrap gap-2">
-                {SUGGESTIONS.map((s) => (
+                <div className="mb-3 flex items-center justify-between">
+                  <span className="bg-neifert/15 text-neifert inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold">
+                    <Sparkles size={13} /> Búsqueda inteligente
+                  </span>
                   <button
-                    key={s}
-                    onClick={() => runSearch(s)}
-                    className="glass rounded-full px-3 py-1.5 text-sm text-ink-2 transition-colors hover:text-neifert"
+                    onClick={() => setOpen(false)}
+                    aria-label="Cerrar"
+                    className="text-ink hover:text-neifert grid h-9 w-9 place-items-center rounded-full bg-white/10 backdrop-blur transition-colors"
                   >
-                    {s}
+                    <X size={18} />
                   </button>
-                ))}
-              </div>
-            </motion.div>
-
-            {hasQuery && (
-              <div className="mt-8">
-                <div className="mb-4 flex items-center justify-between">
-                  <p className="text-sm text-ink-2">
-                    {results.length > 0
-                      ? `${results.length} ${results.length === 1 ? 'recomendación' : 'recomendaciones'} para vos`
-                      : 'Sin coincidencias'}
-                  </p>
-                  <div className="glass flex items-center gap-1 rounded-xl p-1">
-                    {[
-                      ['grid', LayoutGrid],
-                      ['list', List],
-                    ].map(([mode, Icon]) => (
-                      <button
-                        key={mode}
-                        onClick={() => setView(mode)}
-                        aria-label={`Vista ${mode}`}
-                        className={cn(
-                          'grid h-8 w-8 place-items-center rounded-lg transition-colors',
-                          view === mode ? 'bg-neifert text-white' : 'text-ink-3 hover:text-ink'
-                        )}
-                      >
-                        <Icon size={16} />
-                      </button>
-                    ))}
-                  </div>
                 </div>
 
-                {results.length > 0 ? (
-                  <>
-                    <motion.div
-                      layout
-                      className={cn(
-                        view === 'grid'
-                          ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3'
-                          : 'flex flex-col gap-3'
-                      )}
-                    >
-                      {shown.map((v) => (
-                        <VehicleCard key={v.id} vehicle={v} view={view} />
-                      ))}
-                    </motion.div>
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault()
+                    runSearch()
+                  }}
+                  className="glass shadow-glass flex items-center gap-3 rounded-2xl px-4 py-3"
+                >
+                  <Search size={22} className="text-neifert shrink-0" />
+                  <input
+                    autoFocus
+                    value={query}
+                    onChange={(e) => setQuery(e.target.value)}
+                    placeholder="¿Qué estás buscando? Ej: SUV híbrido 0km…"
+                    className="text-ink placeholder:text-ink-3 w-full bg-transparent text-lg outline-none"
+                  />
+                  <button
+                    type="submit"
+                    disabled={!query.trim()}
+                    className="bg-neifert shadow-glow-red shrink-0 rounded-xl px-4 py-2 text-sm font-semibold text-white transition-opacity disabled:opacity-40"
+                  >
+                    Buscar
+                  </button>
+                </form>
 
-                    <div className="mt-8 text-center">
-                      <p className="text-sm text-ink-3">
-                        Mostrando {shown.length} de {results.length} recomendaciones
-                      </p>
-                      {visible < results.length && (
-                        <Button
-                          variant="glass"
-                          className="mt-4"
-                          onClick={() => setVisible((v) => v + PAGE_SIZE)}
-                        >
-                          Cargar más recomendaciones
-                        </Button>
-                      )}
-                    </div>
-                  </>
-                ) : (
-                  <div className="glass grid place-items-center rounded-[20px] py-16 text-center">
-                    <p className="text-ink-2">
-                      No encontramos vehículos para “{query}”. Probá con otra marca, tipo o año.
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => runSearch(s)}
+                      className="glass text-ink-2 hover:text-neifert rounded-full px-3 py-1.5 text-sm transition-colors"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </motion.div>
+
+              {hasQuery && (
+                <div className="mt-8">
+                  <div className="mb-4 flex items-center justify-between">
+                    <p className="text-ink-2 text-sm">
+                      {results.length > 0
+                        ? `${results.length} ${results.length === 1 ? 'recomendación' : 'recomendaciones'} para vos`
+                        : 'Sin coincidencias'}
                     </p>
+                    <div className="glass flex items-center gap-1 rounded-xl p-1">
+                      {[
+                        ['grid', LayoutGrid],
+                        ['list', List],
+                      ].map(([mode, Icon]) => (
+                        <button
+                          key={mode}
+                          onClick={() => setView(mode)}
+                          aria-label={`Vista ${mode}`}
+                          className={cn(
+                            'grid h-8 w-8 place-items-center rounded-lg transition-colors',
+                            view === mode
+                              ? 'bg-neifert text-white'
+                              : 'text-ink-3 hover:text-ink'
+                          )}
+                        >
+                          <Icon size={16} />
+                        </button>
+                      ))}
+                    </div>
                   </div>
-                )}
-              </div>
-            )}
-          </div>
+
+                  {results.length > 0 ? (
+                    <>
+                      <motion.div
+                        layout
+                        className={cn(
+                          view === 'grid'
+                            ? 'grid gap-4 sm:grid-cols-2 lg:grid-cols-3'
+                            : 'flex flex-col gap-3'
+                        )}
+                      >
+                        {shown.map((v) => (
+                          <VehicleCard key={v.id} vehicle={v} view={view} />
+                        ))}
+                      </motion.div>
+
+                      <div className="mt-8 text-center">
+                        <p className="text-ink-3 text-sm">
+                          Mostrando {shown.length} de {results.length} recomendaciones
+                        </p>
+                        {visible < results.length && (
+                          <Button
+                            variant="glass"
+                            className="mt-4"
+                            onClick={() => setVisible((v) => v + PAGE_SIZE)}
+                          >
+                            Cargar más recomendaciones
+                          </Button>
+                        )}
+                      </div>
+                    </>
+                  ) : (
+                    <div className="glass grid place-items-center rounded-[20px] py-16 text-center">
+                      <p className="text-ink-2">
+                        No encontramos vehículos para “{query}”. Probá con otra marca,
+                        tipo o año.
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </ReactLenis>
         </motion.div>
       )}

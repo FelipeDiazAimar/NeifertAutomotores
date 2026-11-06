@@ -1,18 +1,22 @@
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { listarPublicos } from '@/crm/services/vehiculosPublico.service'
-import { formatVehiclePrice, formatKm } from '@/lib/formatters'
+import { formatKm } from '@/lib/formatters'
 import SoldRibbon from '@/components/catalog/SoldRibbon'
 
 /** Carrusel horizontal con desplazamiento lento de autos de la misma
- *  categoría, ordenados por precio. Pausa al pasar el mouse.
+ *  categoría, ordenados por año. Pausa al pasar el mouse.
  *  `condition` limita los relacionados a la misma sección (usados / 0km). */
-export default function RelatedVehicles({ current, condition = 'todos', basePath = '/catalogo' }) {
+export default function RelatedVehicles({
+  current,
+  condition = 'todos',
+  basePath = '/catalogo',
+}) {
   const category = current?.category
 
   const { data: list = [] } = useQuery({
     queryKey: ['vehicles', 'related', category, condition],
-    queryFn: () => listarPublicos({ category, sort: 'price-asc', condition }),
+    queryFn: () => listarPublicos({ category, sort: 'year-desc', condition }),
     enabled: Boolean(category),
   })
 
@@ -27,14 +31,17 @@ export default function RelatedVehicles({ current, condition = 'todos', basePath
     <div className="mt-16">
       <div className="mb-5 flex items-end justify-between">
         <div>
-          <p className="text-xs font-bold uppercase tracking-wider text-neifert">
+          <p className="text-neifert text-xs font-bold tracking-wider uppercase">
             También te puede interesar
           </p>
-          <h2 className="mt-1 font-display text-2xl font-extrabold text-ink">
+          <h2 className="font-display text-ink mt-1 text-2xl font-extrabold">
             Más de la misma categoría
           </h2>
         </div>
-        <Link to={basePath} className="text-sm font-semibold text-neifert hover:underline">
+        <Link
+          to={basePath}
+          className="text-neifert text-sm font-semibold hover:underline"
+        >
           Ver catálogo
         </Link>
       </div>
@@ -48,10 +55,12 @@ export default function RelatedVehicles({ current, condition = 'todos', basePath
             <Link
               key={`${v.id}-${i}`}
               to={`${basePath}/${v.id}`}
-              className="group/card glass relative w-64 shrink-0 overflow-hidden rounded-[18px] shadow-glass"
+              className="group/card glass shadow-glass relative w-64 shrink-0 overflow-hidden rounded-[18px]"
             >
               {(v.status || 'disponible') === 'vendido' && <SoldRibbon />}
-              {(v.status || 'disponible') === 'reservado' && <SoldRibbon label="Reservado" tone="gray" />}
+              {(v.status || 'disponible') === 'reservado' && (
+                <SoldRibbon label="Reservado" tone="gray" />
+              )}
               <div className="relative aspect-[4/3] overflow-hidden">
                 {v.main_image_url || v.images?.[0] ? (
                   <img
@@ -65,20 +74,20 @@ export default function RelatedVehicles({ current, condition = 'todos', basePath
                     {v.brand}
                   </div>
                 )}
-                <span className="absolute left-2.5 top-2.5 rounded-full bg-white/85 px-2.5 py-0.5 text-xs font-semibold text-[#0b0b0f]">
+                <span className="absolute top-2.5 left-2.5 rounded-full bg-white/85 px-2.5 py-0.5 text-xs font-semibold text-[#0b0b0f]">
                   {v.year}
                 </span>
               </div>
               <div className="p-3.5">
-                <p className="text-[10px] font-bold uppercase tracking-wider text-neifert">
+                <p className="text-neifert text-[10px] font-bold tracking-wider uppercase">
                   {v.brand}
                 </p>
-                <p className="truncate font-display font-bold text-ink">{v.model}</p>
+                <p className="font-display text-ink truncate font-bold">{v.model}</p>
                 <div className="mt-1.5 flex items-center justify-between">
-                  <p className="font-display text-lg font-extrabold text-ink">
-                    {formatVehiclePrice(v)}
+                  <p className="font-display text-ink text-lg font-extrabold">
+                    Consultar
                   </p>
-                  <span className="text-xs text-ink-3">{formatKm(v.km)}</span>
+                  <span className="text-ink-3 text-xs">{formatKm(v.km)}</span>
                 </div>
               </div>
             </Link>
