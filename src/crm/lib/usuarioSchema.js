@@ -5,6 +5,7 @@ export const crearUsuarioSchema = z.object({
   nombre: z.string().trim().min(2, 'Ingresá el nombre'),
   rol: z.enum(['admin', 'dueno', 'vendedor']),
   password: z.string().min(8, 'Mínimo 8 caracteres'),
+  telefono: z.string().trim().max(30, 'Máximo 30 caracteres').optional(),
 })
 
 export const resetPasswordSchema = z

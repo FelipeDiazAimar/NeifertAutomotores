@@ -24,6 +24,9 @@ function tocaAvisar(fecha, hora, ahora) {
  *  15-30 min — el cron nativo de Vercel (Hobby) solo corre 1 vez/día,
  *  no sirve para esta precisión.
  *
+ *  WhatsApp NO se manda acá: lo manda el servidor de WhatsApp
+ *  (Whatsapp/servidor/src/alertas.js) leyendo `crm.alertas`.
+ *
  *  GET|POST /api/crm/check-alertas
  *  Authorization: Bearer <CRON_SECRET>
  */
@@ -67,7 +70,7 @@ export async function handleCheckAlertas(
     (async () => {
       const { data, error } = await db()
         .from('alertas')
-        .select('*, asignado:usuarios!alertas_asignado_a_fkey(email)')
+        .select('*, asignado:usuarios!alertas_asignado_a_fkey(email,telefono)')
         .eq('hecha', false)
         .or('notificado_push.eq.false,notificado_email.eq.false')
       if (error) throw error
@@ -151,7 +154,7 @@ export async function handleCheckAlertas(
     // Si no se entregó nada por ningún canal y la alerta estaba intacta,
     // avisar el motivo en vez de marcarla en silencio: sin suscripción push
     // ni email del asignado no hay a dónde enviar.
-    if (!entregoAlgo && !a.notificado_push && !a.notificado_email) {
+    if (!entregoAlgo && !a.notificado_push && !a.notificado_email && !a.asignado?.telefono) {
       errores.push(
         `alerta ${a.id}: el asignado no tiene suscripción push ni email — no se envió nada`
       )

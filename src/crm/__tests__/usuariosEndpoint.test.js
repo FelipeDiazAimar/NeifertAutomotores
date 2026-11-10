@@ -98,6 +98,15 @@ describe('handleUsuarios', () => {
     )
   })
 
+  it('crear: telefono recortado a 30 chars, vacío -> null', async () => {
+    const mk = (telefono) => ({ method: 'POST', headers: { authorization: 'Bearer x' }, body: { accion: 'crear', usuario: 'a', nombre: 'a', rol: 'vendedor', password: 'x', telefono } })
+    for (const [entrada, esperado] of [['  3564 562413  ', '3564 562413'], ['   ', null], ['1'.repeat(40), '1'.repeat(30)]]) {
+      const admin = fakeAdmin()
+      await handleUsuarios(mk(entrada), mockRes(), { env, deps: deps(fakeAnon(), admin) })
+      expect(admin._upsert).toHaveBeenCalledWith(expect.objectContaining({ telefono: esperado }), expect.anything())
+    }
+  })
+
   it('crear: 409 si el usuario ya existe', async () => {
     const res = mockRes()
     await handleUsuarios(

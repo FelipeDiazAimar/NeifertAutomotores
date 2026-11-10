@@ -45,11 +45,11 @@ export default function UsuarioFormModal({ open, onClose }) {
     register, handleSubmit, control, reset, formState: { errors },
   } = useForm({
     resolver: zodResolver(crearUsuarioSchema),
-    defaultValues: { usuario: '', nombre: '', rol: 'vendedor', password: '' },
+    defaultValues: { usuario: '', nombre: '', rol: 'vendedor', password: '', telefono: '' },
   })
 
   useEffect(() => {
-    if (open) reset({ usuario: '', nombre: '', rol: 'vendedor', password: '' })
+    if (open) reset({ usuario: '', nombre: '', rol: 'vendedor', password: '', telefono: '' })
   }, [open, reset])
 
   function submit(data) {
@@ -96,6 +96,7 @@ export default function UsuarioFormModal({ open, onClose }) {
                   )}
                 />
                 <Input label="Contraseña" type="text" {...register('password')} error={errors.password?.message} />
+                <Input label="WhatsApp (para alertas)" placeholder="Ej: 3564 562413" {...register('telefono')} error={errors.telefono?.message} />
                 <p className="text-xs text-ink-3">
                   El usuario ingresa con ese nombre y contraseña, igual que en el CRM viejo.
                 </p>

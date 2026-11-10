@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import {
+  ALERTAS_CRM,
   CONSERVAR_EDICIONES,
   DATA_DIR,
   CONSERVAR_ELIMINADOS,
@@ -21,7 +22,8 @@ import {
   WEB_DIR,
 } from './src/config.js'
 import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
-import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual } from './src/auth.js'
+import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual, sinUsuario } from './src/auth.js'
+import { vigilarAlertas } from './src/alertas.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
@@ -483,6 +485,16 @@ const servidor = app.listen(PUERTO, HOST, () => {
     .then((e) => e && log('info', 'Espacio en R2', `${(e.usado / 1024 ** 3).toFixed(2)} GB usados de un tope de ${(e.limite / 1024 ** 3).toFixed(0)} GB (WA_R2_LIMITE_GB)`))
     .catch((err) => log('aviso', 'No se pudo revisar el espacio de R2', err.message))
     .finally(() => wa.iniciar().catch((err) => log('error', 'No se pudo iniciar WhatsApp', err.message)))
+  // Alertas del CRM por WhatsApp: solo el servidor de producción (base en Supabase).
+  if (ALERTAS_CRM && crm.CRM_CONFIGURADO && almacen.modo === 'supabase') {
+    vigilarAlertas({
+      rest: crm.rest,
+      abrirChat: (tel) => sinUsuario(() => wa.abrirChat(tel)),
+      enviarTexto: (jid, texto) => sinUsuario(() => wa.enviarTexto(jid, texto)),
+      conectado: () => wa.estadoConexion(null).conexion === 'conectado',
+      log,
+    })
+  }
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
 })

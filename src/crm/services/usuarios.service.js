@@ -6,7 +6,7 @@ const db = () => supabase.schema('crm')
 export async function listar() {
   const { data, error } = await db()
     .from('usuarios')
-    .select('id, usuario, nombre, rol, activo, vistas_override, email, creado_en')
+    .select('id, usuario, nombre, rol, activo, vistas_override, email, telefono, creado_en')
     .order('nombre', { ascending: true })
   if (error) throw error
   return data ?? []
@@ -71,8 +71,8 @@ export function desuscribirPush(endpoint) {
 }
 
 /** Alta de usuario (crea el auth user + fila en crm.usuarios). */
-export function crearUsuario({ usuario, nombre, rol, password }) {
-  return llamarEndpoint({ accion: 'crear', usuario, nombre, rol, password })
+export function crearUsuario({ usuario, nombre, rol, password, telefono }) {
+  return llamarEndpoint({ accion: 'crear', usuario, nombre, rol, password, telefono })
 }
 
 /** Reset de contraseña de un usuario existente. */

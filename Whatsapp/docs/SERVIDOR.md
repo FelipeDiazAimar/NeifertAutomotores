@@ -141,6 +141,7 @@ esté definido en el entorno tiene prioridad.
 | `SUPABASE_ANON_KEY` | (el de la raíz) | Para verificar el token del usuario |
 | `SUPABASE_SERVICE_ROLE_KEY` | (el de la raíz) | Para leer `crm.usuarios`. **Solo servidor** |
 | `CRM_URL` | — | Dirección del CRM: el único sitio que puede embeber el panel, y adónde manda "Ir al CRM" a quien entra sin sesión |
+| `WA_ALERTAS_CRM` | `1` | Manda por WhatsApp las alertas del CRM al teléfono del usuario asignado (`crm.usuarios.telefono`), a su fecha y hora. Solo con la base en Supabase. `0` lo apaga (`src/alertas.js`) |
 | `WHATSAPP_ROLES` / `_LINEA` / `_LECTURA` | `admin,dueno,vendedor` / `admin,dueno` / — | Permisos por rol (ver "Quién tiene permiso") |
 | `WA_DETRAS_DE_PROXY` | `off` | `on` con Cloudflare Tunnel o nginx: toma de ahí el https y la IP |
 | `WA_BACKUP_CLAVE` | — | Cifra el respaldo de la sesión y los `.env` en R2 (ver OPERACION.md) |
