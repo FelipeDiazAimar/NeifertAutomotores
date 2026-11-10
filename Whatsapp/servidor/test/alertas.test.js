@@ -33,17 +33,23 @@ function deps(rest, { falla = false } = {}) {
 }
 
 describe('alertas del CRM por WhatsApp', () => {
-  it('tocaAvisar usa hora de Argentina y el margen de 45 min', () => {
+  it('tocaAvisar usa hora de Argentina y se pone al día hasta 24 h', () => {
     expect(tocaAvisar('2026-11-10', '10:05', AHORA)).toBe(true)
     expect(tocaAvisar('2026-11-10', '10:30', AHORA)).toBe(false) // todavía no
-    expect(tocaAvisar('2026-11-10', '09:00', AHORA)).toBe(false) // pasó el margen
+    expect(tocaAvisar('2026-11-09', '11:00', AHORA)).toBe(true) // PC apagada desde ayer
+    expect(tocaAvisar('2026-11-09', '09:00', AHORA)).toBe(false) // más de 24 h: ya no sirve
+  })
+
+  it('la atrasada avisa que llega tarde', () => {
+    expect(textoAlerta(alerta(1), AHORA)).not.toContain('Llega tarde')
+    expect(textoAlerta(alerta(1, { hora: '08:00' }), AHORA)).toContain('Llega tarde')
   })
 
   it('manda al teléfono normalizado del asignado y la marca', async () => {
     const { rest, patches } = crmFalso([alerta(1), alerta(2, { hora: '11:00' })])
     const d = deps(rest)
     expect(await revisarAlertas(d)).toBe(1)
-    expect(d.enviados).toEqual([{ jid: '5493564562413@s.whatsapp.net', texto: textoAlerta(alerta(1)) }])
+    expect(d.enviados).toEqual([{ jid: '5493564562413@s.whatsapp.net', texto: textoAlerta(alerta(1), AHORA) }])
     expect(patches).toEqual([{ ruta: 'alertas?id=eq.1&notificado_whatsapp=eq.false', cuerpo: { notificado_whatsapp: true } }])
     expect(d.enviados[0].texto).toContain('10/11/2026')
   })

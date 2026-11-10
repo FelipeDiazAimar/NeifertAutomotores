@@ -10,14 +10,18 @@
  */
 import { normalizarAR } from './telefono.js'
 
-// Mismo margen que el cron: si la PC estuvo apagada más que esto, el aviso ya no sirve.
+// A tiempo: hasta 45 min tarde (como el cron del mail). Si la PC estuvo apagada, al volver
+// se ponen al día las de hasta 24 h, avisando que llegan tarde; más viejas ya no sirven.
 const MARGEN_MS = 45 * 60 * 1000
+const ATRASO_MAX_MS = 24 * 3600e3
 const CADA_MS = 60 * 1000
 
 // fecha/hora se cargan en hora de Argentina (UTC-3, sin horario de verano).
-export function tocaAvisar(fecha, hora, ahora) {
-  const objetivo = new Date(`${fecha}T${hora}:00-03:00`)
-  return ahora >= objetivo && ahora - objetivo <= MARGEN_MS
+const objetivoDe = (fecha, hora) => new Date(`${fecha}T${hora}:00-03:00`)
+
+export function tocaAvisar(fecha, hora, ahora, margen = ATRASO_MAX_MS) {
+  const objetivo = objetivoDe(fecha, hora)
+  return ahora >= objetivo && ahora - objetivo <= margen
 }
 
 // Los empleados son de Argentina: "3564 15 562413" (12 dígitos, sin 0) normalizarAR lo toma
@@ -27,8 +31,14 @@ export function telefonoEmpleado(telefono) {
   return normalizarAR(d.length === 12 && !d.startsWith('54') ? `0${d}` : d)
 }
 
-export function textoAlerta(a) {
-  return [`🔔 *Alerta: ${a.titulo}*`, a.descripcion, `Para el ${a.fecha.split('-').reverse().join('/')} a las ${a.hora} hs.`]
+export function textoAlerta(a, ahora = new Date()) {
+  const atrasada = ahora - objetivoDe(a.fecha, a.hora) > MARGEN_MS
+  return [
+    `🔔 *Alerta: ${a.titulo}*`,
+    a.descripcion,
+    `Para el ${a.fecha.split('-').reverse().join('/')} a las ${a.hora} hs.`,
+    atrasada && '_Llega tarde: el WhatsApp de la concesionaria estuvo apagado._',
+  ]
     .filter(Boolean)
     .join('\n\n')
 }
@@ -39,7 +49,7 @@ export function textoAlerta(a) {
  */
 export async function revisarAlertas({ rest, abrirChat, enviarTexto, conectado, log, ahora = new Date() }) {
   if (!conectado()) return 0
-  // Desde ayer alcanza: con el margen de 45 min, las más viejas ya no se mandan nunca.
+  // 27 h antes en UTC = 24 h antes en hora argentina: lo justo para el atraso máximo.
   const ayer = new Date(ahora.getTime() - 27 * 3600e3).toISOString().slice(0, 10)
   const alertas = await rest(
     `alertas?select=id,titulo,descripcion,fecha,hora,asignado:usuarios!alertas_asignado_a_fkey(telefono)` +
@@ -56,7 +66,7 @@ export async function revisarAlertas({ rest, abrirChat, enviarTexto, conectado, 
     const telefono = telefonoEmpleado(a.asignado?.telefono)
     if (!telefono) continue // sin teléfono cargado: queda marcada, no hay a dónde mandar
     try {
-      await enviarTexto(await abrirChat(telefono), textoAlerta(a))
+      await enviarTexto(await abrirChat(telefono), textoAlerta(a, ahora))
       enviadas++
     } catch (err) {
       log('aviso', `No se pudo mandar por WhatsApp la alerta ${a.id}`, err.message)
