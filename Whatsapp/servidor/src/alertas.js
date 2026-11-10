@@ -20,6 +20,13 @@ export function tocaAvisar(fecha, hora, ahora) {
   return ahora >= objetivo && ahora - objetivo <= MARGEN_MS
 }
 
+// Los empleados son de Argentina: "3564 15 562413" (12 dígitos, sin 0) normalizarAR lo toma
+// por extranjero; con el 0 adelante sí lo reconoce.
+export function telefonoEmpleado(telefono) {
+  const d = String(telefono ?? '').replace(/\D/g, '')
+  return normalizarAR(d.length === 12 && !d.startsWith('54') ? `0${d}` : d)
+}
+
 export function textoAlerta(a) {
   return [`🔔 *Alerta: ${a.titulo}*`, a.descripcion, `Para el ${a.fecha.split('-').reverse().join('/')} a las ${a.hora} hs.`]
     .filter(Boolean)
@@ -46,7 +53,7 @@ export async function revisarAlertas({ rest, abrirChat, enviarTexto, conectado, 
       cuerpo: { notificado_whatsapp: true },
     })
     if (!tomada?.length) continue // la tomó otro
-    const telefono = normalizarAR(a.asignado?.telefono)
+    const telefono = telefonoEmpleado(a.asignado?.telefono)
     if (!telefono) continue // sin teléfono cargado: queda marcada, no hay a dónde mandar
     try {
       await enviarTexto(await abrirChat(telefono), textoAlerta(a))

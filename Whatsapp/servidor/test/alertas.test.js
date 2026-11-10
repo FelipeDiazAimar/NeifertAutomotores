@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { revisarAlertas, textoAlerta, tocaAvisar } from '../src/alertas.js'
+import { revisarAlertas, telefonoEmpleado, textoAlerta, tocaAvisar } from '../src/alertas.js'
 
 // 10:05 en Argentina = 13:05 UTC.
 const AHORA = new Date('2026-11-10T13:10:00Z')
@@ -46,6 +46,11 @@ describe('alertas del CRM por WhatsApp', () => {
     expect(d.enviados).toEqual([{ jid: '5493564562413@s.whatsapp.net', texto: textoAlerta(alerta(1)) }])
     expect(patches).toEqual([{ ruta: 'alertas?id=eq.1&notificado_whatsapp=eq.false', cuerpo: { notificado_whatsapp: true } }])
     expect(d.enviados[0].texto).toContain('10/11/2026')
+  })
+
+  it('acepta el teléfono escrito de varias formas', () => {
+    for (const t of ['3564 15 562413', '03564 15 562413', '3564 562413', '+54 9 3564 56-2413']) expect(telefonoEmpleado(t)).toBe('5493564562413')
+    expect(telefonoEmpleado(null)).toBe('')
   })
 
   it('no manda la que ya tomó otro servidor', async () => {
