@@ -87,11 +87,28 @@ function buildShareSeries(events, { from, to }) {
 export async function fetchEventBreakdown({ from = null, to = null } = {}) {
   if (!isSupabaseConfigured) return null
 
-  let query = supabase.from('eventos_vehiculo').select('vehiculo_id, tipo, origen, creado_en')
-  if (from) query = query.gte('creado_en', new Date(from).toISOString())
-  if (to) query = query.lte('creado_en', new Date(to).toISOString())
-
-  const { data, error } = await query
+  // PostgREST corta en 1000 filas por request: paginamos (orden estable) para
+  // no quedarnos solo con los eventos más viejos cuando hay meses de datos.
+  const PAGE = 1000
+  const data = []
+  let error = null
+  for (let offset = 0; ; offset += PAGE) {
+    let query = supabase
+      .from('eventos_vehiculo')
+      .select('vehiculo_id, tipo, origen, creado_en')
+      .order('creado_en', { ascending: true })
+      .order('id', { ascending: true })
+      .range(offset, offset + PAGE - 1)
+    if (from) query = query.gte('creado_en', new Date(from).toISOString())
+    if (to) query = query.lte('creado_en', new Date(to).toISOString())
+    const res = await query
+    if (res.error) {
+      error = res.error
+      break
+    }
+    data.push(...res.data)
+    if (res.data.length < PAGE) break
+  }
   if (error) {
     console.error('[eventos_vehiculo] fetchEventBreakdown falló:', error.message)
     return {
