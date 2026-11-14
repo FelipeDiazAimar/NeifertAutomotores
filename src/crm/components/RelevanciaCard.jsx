@@ -2,6 +2,7 @@ import { useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Car } from 'lucide-react'
 import Badge from '@/components/common/Badge'
+import SoldRibbon from '@/components/catalog/SoldRibbon'
 import { estadoLabel, estadoVariant } from '@/crm/lib/formatVehiculo'
 import { formatKm, formatPrice } from '@/lib/formatters'
 import { cn } from '@/lib/cn'
@@ -111,7 +112,7 @@ export default function RelevanciaCard({
       )}
       {...props}
     >
-      <div className="relative aspect-[4/3] bg-surface">
+      <div className="relative aspect-[4/3] overflow-hidden bg-surface">
         {foto ? (
           <img src={foto} alt="" draggable={false} className="h-full w-full object-cover" />
         ) : (
@@ -119,14 +120,11 @@ export default function RelevanciaCard({
             <Car size={28} />
           </div>
         )}
+        {v.estado === 'vendido' && <SoldRibbon label="Vendido" />}
+        {v.estado === 'reservado' && <SoldRibbon label="Reservado" tone="gray" />}
         {posicion != null && (
-          <span className="absolute left-2 top-2 grid h-7 min-w-7 place-items-center rounded-full bg-neifert px-2 text-xs font-bold text-white shadow">
+          <span className="absolute left-2 top-2 z-30 grid h-7 min-w-7 place-items-center rounded-full bg-neifert px-2 text-xs font-bold text-white shadow">
             {posicion}
-          </span>
-        )}
-        {v.estado !== 'disponible' && (
-          <span className="absolute right-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white">
-            {estadoLabel(v.estado)}
           </span>
         )}
       </div>

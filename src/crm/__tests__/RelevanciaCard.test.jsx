@@ -51,3 +51,17 @@ describe('RelevanciaCard — tooltip dentro de la pantalla', () => {
     expect(screen.getByText(/U\$S 9\.000/)).toBeTruthy()
   })
 })
+
+describe('RelevanciaCard — cinta de estado', () => {
+  const cinta = (estado) => {
+    const { unmount } = render(<RelevanciaCard vehiculo={{ ...V, estado }} posicion={1} />)
+    const out = { vendido: screen.queryByText('Vendido'), reservado: screen.queryByText('Reservado') }
+    unmount()
+    return out
+  }
+  it('vendido y reservado llevan su cinta diagonal; disponible no', () => {
+    expect(cinta('vendido')).toEqual({ vendido: expect.anything(), reservado: null })
+    expect(cinta('reservado')).toEqual({ vendido: null, reservado: expect.anything() })
+    expect(cinta('disponible')).toEqual({ vendido: null, reservado: null })
+  })
+})

@@ -36,6 +36,36 @@ import {
 } from '@/crm/lib/relevancia'
 import { cn } from '@/lib/cn'
 
+const ESTADOS = [
+  { id: 'disponible', label: 'Disponible' },
+  { id: 'reservado', label: 'Reservado' },
+  { id: 'vendido', label: 'Vendido' },
+]
+
+/** Chips de estado (multi-selección; ninguno = todos). */
+function FiltroEstado({ valor, onChange }) {
+  const toggle = (id) => onChange(valor.includes(id) ? valor.filter((e) => e !== id) : [...valor, id])
+  return (
+    <div className="mb-3 flex flex-wrap items-center gap-1.5" role="group" aria-label="Filtrar por estado">
+      <span className="text-[11px] font-semibold uppercase tracking-wide text-ink-3">Estado</span>
+      {ESTADOS.map((e) => (
+        <button
+          key={e.id}
+          type="button"
+          aria-pressed={valor.includes(e.id)}
+          onClick={() => toggle(e.id)}
+          className={cn(
+            'rounded-full px-3 py-1 text-xs font-semibold transition-colors',
+            valor.includes(e.id) ? 'bg-neifert text-white' : 'glass text-ink-2 hover:text-ink',
+          )}
+        >
+          {e.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 const TIPOS = [
   { id: 'usados', label: 'Usados', cero: false },
   { id: 'cero', label: '0 km', cero: true },
@@ -51,6 +81,8 @@ function Columna({
   vacio,
   busqueda,
   onBusqueda,
+  filtrando = false,
+  filtros,
   children,
   className,
 }) {
@@ -63,7 +95,7 @@ function Columna({
           <p className="text-xs text-ink-3">{descripcion}</p>
         </div>
         <span className="shrink-0 rounded-full bg-surface px-2.5 py-0.5 text-xs font-bold text-ink-2">
-          {busqueda.trim() ? `${visibles} de ${cantidad}` : cantidad}
+          {busqueda.trim() || filtrando ? `${visibles} de ${cantidad}` : cantidad}
         </span>
       </div>
       <div className="glass field-glass mb-3 flex h-10 items-center gap-2 rounded-2xl px-3">
@@ -76,6 +108,7 @@ function Columna({
           className="w-full bg-transparent text-sm text-ink outline-none placeholder:text-ink-3"
         />
       </div>
+      {filtros}
       <div
         ref={setNodeRef}
         data-lenis-prevent
@@ -141,8 +174,15 @@ export default function RelevanciasPage() {
   // La búsqueda solo filtra lo que se ve: el orden (y los # del ranking) siguen
   // siendo los de la lista completa. El vehículo que se arrastra no se oculta.
   const [busqueda, setBusqueda] = useState({ [COL_RANKED]: '', [COL_SIN]: '' })
+  // Filtro por estado de la columna derecha (vacío = todos).
+  const [estadosSin, setEstadosSin] = useState([])
   const visibles = (col) =>
-    cols[col].filter((id) => id === activoId || coincideBusqueda(porId.get(id) ?? {}, busqueda[col]))
+    cols[col].filter((id) => {
+      if (id === activoId) return true
+      const v = porId.get(id) ?? {}
+      if (col === COL_SIN && estadosSin.length && !estadosSin.includes(v.estado)) return false
+      return coincideBusqueda(v, busqueda[col])
+    })
   const visiblesRanked = visibles(COL_RANKED)
   const visiblesSin = visibles(COL_SIN)
 
@@ -283,6 +323,8 @@ export default function RelevanciasPage() {
               visibles={visiblesSin.length}
               busqueda={busqueda[COL_SIN]}
               onBusqueda={(t) => setBusqueda((b) => ({ ...b, [COL_SIN]: t }))}
+              filtrando={estadosSin.length > 0}
+              filtros={<FiltroEstado valor={estadosSin} onChange={setEstadosSin} />}
               vacio="Todos los vehículos tienen relevancia."
               className="lg:sticky lg:top-4"
             >

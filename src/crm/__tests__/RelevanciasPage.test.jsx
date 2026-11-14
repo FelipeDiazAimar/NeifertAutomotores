@@ -72,3 +72,41 @@ describe('RelevanciasPage', () => {
     expect(screen.getByText(/ningún vehículo coincide/i)).toBeTruthy()
   })
 })
+
+describe('RelevanciasPage — filtro por estado (columna derecha)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    listarParaRelevancia.mockResolvedValue([
+      auto('1', 'Ford', 'Ka', 2019, 1),
+      { ...auto('3', 'Fiat', 'Argo', 2022, null), estado: 'vendido' },
+      { ...auto('4', 'Honda', 'Wave', 2020, null), estado: 'reservado' },
+      auto('5', 'Audi', 'A3', 2018, null),
+    ])
+  })
+
+  it('filtra por estado solo la columna derecha y se combina con la búsqueda', async () => {
+    montar()
+    await screen.findByText('Ford Ka')
+    const grupo = screen.getByRole('group', { name: /filtrar por estado/i })
+
+    await userEvent.click(within(grupo).getByRole('button', { name: 'Vendido' }))
+    expect(screen.getByText('Fiat Argo')).toBeTruthy()
+    expect(screen.queryByText('Honda Wave')).toBeNull()
+    expect(screen.queryByText('Audi A3')).toBeNull()
+    expect(screen.getByText('Ford Ka')).toBeTruthy() // el ranking no se filtra
+    expect(screen.getByText('1 de 3')).toBeTruthy()
+
+    await userEvent.click(within(grupo).getByRole('button', { name: 'Reservado' })) // multi-selección
+    expect(screen.getByText('Honda Wave')).toBeTruthy()
+    expect(screen.getByText('2 de 3')).toBeTruthy()
+
+    await userEvent.type(screen.getByLabelText('Buscar en Sin relevancia'), 'honda')
+    expect(screen.queryByText('Fiat Argo')).toBeNull()
+    expect(screen.getByText('1 de 3')).toBeTruthy()
+
+    await userEvent.click(within(grupo).getByRole('button', { name: 'Vendido' }))
+    await userEvent.click(within(grupo).getByRole('button', { name: 'Reservado' }))
+    await userEvent.clear(screen.getByLabelText('Buscar en Sin relevancia'))
+    expect(screen.getByText('Audi A3')).toBeTruthy() // sin filtros vuelve todo
+  })
+})
