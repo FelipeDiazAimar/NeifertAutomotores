@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Archive, Download, Eye, EyeOff, FileText, RefreshCw, Upload } from 'lucide-react'
 import { cn } from '@/lib/cn'
 import { tokenActual } from '@/crm/services/usuarios.service'
@@ -288,6 +288,7 @@ const telefonoLegible = (t) => (/^549\d{10}$/.test(t || '') ? `+54 9 ${t.slice(3
 export default function WhatsappPage() {
   const theme = useUiStore((s) => s.theme)
   const navigate = useNavigate()
+  const [params, setParams] = useSearchParams()
   const iframeRef = useRef(null)
   // probando → (responde) panel | (no responde) caido
   const [servidor, setServidor] = useState('probando')
@@ -393,6 +394,21 @@ export default function WhatsappPage() {
   useEffect(() => {
     if (listo) enviar({ tipo: 'nf-wa:tema', tema: theme })
   }, [listo, theme, enviar])
+
+  // Desde un botón de WhatsApp del CRM (/crm/whatsapp?tel=…&texto=…): cuando el panel está
+  // listo, le pide abrir ese chat con el mensaje escrito (sin enviarlo). Se hace una sola vez.
+  const pedidoChat = useRef(null)
+  const telPedido = params.get('tel')
+  const textoPedido = params.get('texto')
+  useEffect(() => {
+    if (telPedido) pedidoChat.current = { telefono: telPedido, texto: textoPedido || '' }
+  }, [telPedido, textoPedido])
+  useEffect(() => {
+    if (!listo || !estado?.hayLinea || !pedidoChat.current) return
+    enviar({ tipo: 'nf-wa:chat', ...pedidoChat.current })
+    pedidoChat.current = null
+    setParams({}, { replace: true })
+  }, [listo, estado?.hayLinea, enviar, setParams])
 
   useEffect(() => {
     async function alMensaje(e) {

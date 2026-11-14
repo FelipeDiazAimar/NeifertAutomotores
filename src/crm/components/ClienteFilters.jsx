@@ -1,5 +1,6 @@
 import { Filter, X } from 'lucide-react'
 import Button from '@/components/common/Button'
+import DatePicker from '@/components/common/DatePicker'
 import { useClientesFiltros } from '@/crm/store/useClientesFiltros'
 import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
 import { cn } from '@/lib/cn'
@@ -38,7 +39,7 @@ export default function ClienteFilters() {
   }
 
   return (
-    <div className="glass space-y-4 rounded-[20px] p-4 shadow-glass">
+    <div className="glass relative z-20 space-y-4 rounded-[20px] p-4 shadow-glass">
       <div className="flex items-center justify-between">
         <span className="flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-ink-3">
           <Filter size={14} /> Filtros {activos > 0 && `(${activos})`}
@@ -50,7 +51,15 @@ export default function ClienteFilters() {
         )}
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-4">
+        <div>
+          <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Fecha de alta</p>
+          <div className="flex flex-col gap-2">
+            <DatePicker value={filtros.desde} onChange={(v) => setFiltro('desde', v)} placeholder="Desde…" />
+            <DatePicker value={filtros.hasta} onChange={(v) => setFiltro('hasta', v)} placeholder="Hasta…" />
+          </div>
+        </div>
+
         <div>
           <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-ink-3">Estado</p>
           <div className="flex flex-wrap gap-1.5">

@@ -8,7 +8,8 @@ import Modal from '@/components/common/Modal'
 import {
   DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem,
 } from '@/components/ui/dropdown-menu'
-import { lineaInteres, statusVariant, canalLabel } from '@/crm/lib/formatCliente'
+import { WhatsAppIcon } from '@/components/common/SocialIcons'
+import { lineaInteres, statusVariant, canalLabel, waContactoLink } from '@/crm/lib/formatCliente'
 
 const STATUS = ['activo', 'en_seguimiento', 'vendido', 'perdido']
 const nf = new Intl.NumberFormat('es-AR')
@@ -25,6 +26,7 @@ function Dato({ k, children }) {
 
 export default function FichaCliente({ cliente: c, puedeEliminar, onCambiarStatus, onArchivar, onEliminar, onRegistrarVenta }) {
   const [confirmar, setConfirmar] = useState(false)
+  const wa = waContactoLink(c)
 
   return (
     <div className="space-y-4">
@@ -32,7 +34,18 @@ export default function FichaCliente({ cliente: c, puedeEliminar, onCambiarStatu
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div>
             <h2 className="font-display text-xl font-bold text-ink">{c.nombre}</h2>
-            <p className="text-sm text-ink-3">{c.telefono || 'sin teléfono'}</p>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <p className="text-sm text-ink-3">{c.telefono || 'sin teléfono'}</p>
+              {wa && (
+                <Link
+                  to={wa}
+                  aria-label={`Escribir a ${c.nombre} por WhatsApp`}
+                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-whatsapp px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+                >
+                  <WhatsAppIcon size={14} /> WhatsApp
+                </Link>
+              )}
+            </div>
           </div>
           <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
             <div className="flex flex-wrap gap-2 sm:justify-end">
@@ -50,7 +63,7 @@ export default function FichaCliente({ cliente: c, puedeEliminar, onCambiarStatu
           </div>
         </div>
 
-        <p className="text-sm text-ink-2">{lineaInteres(c)}</p>
+        {lineaInteres(c) !== '—' && <p className="text-sm text-ink-2">{lineaInteres(c)}</p>}
 
         <dl className="grid gap-4 pt-1 sm:grid-cols-3">
           <Dato k="Localidad">{c.localidad}</Dato>

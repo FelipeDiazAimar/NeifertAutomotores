@@ -27,14 +27,12 @@ describe('CANAL_OPCIONES', () => {
 })
 
 describe('waContactoLink', () => {
-  it('arma el link api.whatsapp.com con teléfono limpio y saludo', () => {
+  it('arma la ruta del WhatsApp interno con teléfono limpio y saludo', () => {
     const url = waContactoLink({ nombre: 'Marcelo Corbalaña', telefono: '+54 3564 56-5884' })
-    expect(url.startsWith('https://api.whatsapp.com/send/?')).toBe(true)
-    const params = new URL(url).searchParams
-    expect(params.get('phone')).toBe('543564565884')
-    expect(params.get('type')).toBe('phone_number')
-    expect(params.get('app_absent')).toBe('0')
-    expect(params.get('text')).toBe('Hola Marcelo Corbalaña! Te contactamos desde NEIFERT Automotores. ¿Cómo estás?')
+    expect(url.startsWith('/crm/whatsapp?')).toBe(true)
+    const params = new URL(url, 'http://x').searchParams
+    expect(params.get('tel')).toBe('543564565884')
+    expect(params.get('texto')).toBe('Hola Marcelo Corbalaña! Te contactamos desde NEIFERT Automotores. ¿Cómo estás?')
   })
 
   it('sin teléfono → null', () => {

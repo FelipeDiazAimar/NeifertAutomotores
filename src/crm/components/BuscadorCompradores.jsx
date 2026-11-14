@@ -64,15 +64,13 @@ function Tarjeta({ persona: p, lineas }) {
         </div>
         {esInactivo(p) && <Badge variant={statusVariant(p.estado)}>{STATUS_LABEL[p.estado] ?? p.estado}</Badge>}
         {wa && (
-          <a
-            href={wa}
-            target="_blank"
-            rel="noopener noreferrer"
+          <Link
+            to={wa}
             aria-label={`Contactar a ${p.nombre} por WhatsApp`}
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl bg-whatsapp text-white transition-opacity hover:opacity-90"
           >
             <WhatsAppIcon size={16} />
-          </a>
+          </Link>
         )}
       </div>
       <ul className="mt-3 space-y-1.5 border-t border-line pt-3">

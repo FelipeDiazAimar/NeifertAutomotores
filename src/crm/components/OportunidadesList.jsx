@@ -108,16 +108,14 @@ export default function OportunidadesList({ items = [] }) {
                     <CompatBar score={score} bucket={bucket} />
                     <div className="flex shrink-0 items-center gap-2">
                       {wa && (
-                        <a
-                          href={wa}
-                          target="_blank"
-                          rel="noopener noreferrer"
+                        <Link
+                          to={wa}
                           aria-label={`Contactar a ${c.nombre} por WhatsApp`}
                           title={`Contactar a ${c.nombre} por WhatsApp`}
                           className="inline-flex h-9 w-9 items-center justify-center rounded-2xl bg-whatsapp text-white transition-opacity hover:opacity-90"
                         >
                           <WhatsAppIcon size={16} />
-                        </a>
+                        </Link>
                       )}
                       <Button
                         size="sm"

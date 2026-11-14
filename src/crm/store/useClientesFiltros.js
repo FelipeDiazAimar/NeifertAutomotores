@@ -6,6 +6,8 @@ export const FILTROS_VACIOS = {
   conAutoEntrega: false,
   interesCeroKm: false,
   incluirArchivados: false,
+  desde: '', // yyyy-MM-dd, sobre la fecha de alta (creado_en)
+  hasta: '',
 }
 
 const ORDEN_INICIAL = { campo: 'creado_en', dir: 'desc' }
@@ -30,6 +32,7 @@ export const useClientesFiltros = create((set) => ({
     if (f.conAutoEntrega) n++
     if (f.interesCeroKm) n++
     if (f.incluirArchivados) n++
+    if (f.desde || f.hasta) n++
     return n
   },
 }))

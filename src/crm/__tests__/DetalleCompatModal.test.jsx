@@ -1,7 +1,10 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render as rtlRender, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
 import DetalleCompatModal from '../components/DetalleCompatModal.jsx'
+
+const render = (ui) => rtlRender(<MemoryRouter>{ui}</MemoryRouter>)
 
 const resultado = {
   score: 55,
@@ -43,8 +46,8 @@ describe('DetalleCompatModal', () => {
       />,
     )
     const link = screen.getByRole('link', { name: /whatsapp/i })
-    expect(link).toHaveAttribute('href', expect.stringContaining('https://api.whatsapp.com/send/?'))
-    expect(link).toHaveAttribute('href', expect.stringContaining('phone=3564551122'))
+    expect(link).toHaveAttribute('href', expect.stringContaining('/crm/whatsapp?'))
+    expect(link).toHaveAttribute('href', expect.stringContaining("tel=3564551122"))
   })
 
   it('sin teléfono no muestra WhatsApp', () => {

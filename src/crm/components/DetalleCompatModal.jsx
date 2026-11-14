@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import { Check, X } from 'lucide-react'
 import Modal from '@/components/common/Modal'
 import Button from '@/components/common/Button'
@@ -59,14 +60,12 @@ export default function DetalleCompatModal({ open, onClose, cliente, vehiculo, r
 
         <div className="flex justify-end gap-2 pt-1">
           {wa && (
-            <a
-              href={wa}
-              target="_blank"
-              rel="noopener noreferrer"
+            <Link
+              to={wa}
               className="inline-flex h-11 items-center gap-2 rounded-2xl bg-whatsapp px-5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             >
               <WhatsAppIcon size={16} /> WhatsApp
-            </a>
+            </Link>
           )}
           <Button variant="glass" onClick={onClose}>
             Cerrar

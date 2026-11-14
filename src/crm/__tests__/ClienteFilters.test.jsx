@@ -16,6 +16,15 @@ describe('ClienteFilters', () => {
     expect(useClientesFiltros.getState().filtros.status).toContain('activo')
   })
 
+  it('el rango de fechas cuenta como un filtro activo y Limpiar lo borra', () => {
+    const s = useClientesFiltros.getState()
+    s.setFiltro('desde', '2026-01-01')
+    s.setFiltro('hasta', '2026-02-01')
+    expect(useClientesFiltros.getState().contarFiltrosActivos()).toBe(1)
+    useClientesFiltros.getState().resetFiltros()
+    expect(useClientesFiltros.getState().filtros.desde).toBe('')
+  })
+
   it('Limpiar resetea', async () => {
     useClientesFiltros.getState().setFiltro('conAutoEntrega', true)
     render(<ClienteFilters />)

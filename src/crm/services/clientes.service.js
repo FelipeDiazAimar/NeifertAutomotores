@@ -26,6 +26,9 @@ export async function listar({
   if (filtros.canal?.length) q = q.in('canal', filtros.canal)
   if (filtros.conAutoEntrega) q = q.eq('tiene_auto_entrega', true)
   if (filtros.interesCeroKm) q = q.eq('interes_cero_km', true)
+  // Rango por fecha de alta; "hasta" es inclusivo (hasta el fin de ese día, hora local).
+  if (filtros.desde) q = q.gte('creado_en', new Date(`${filtros.desde}T00:00:00`).toISOString())
+  if (filtros.hasta) q = q.lte('creado_en', new Date(`${filtros.hasta}T23:59:59.999`).toISOString())
 
   q = q.order(orden.campo, { ascending: orden.dir === 'asc' })
   const from = (pagina - 1) * pageSize

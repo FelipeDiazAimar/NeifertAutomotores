@@ -36,8 +36,8 @@ describe('OportunidadesList', () => {
     }
     wrap(<OportunidadesList items={[conTel]} />)
     const link = screen.getByRole('link', { name: /whatsapp/i })
-    expect(link).toHaveAttribute('href', expect.stringContaining('https://api.whatsapp.com/send/?'))
-    expect(link).toHaveAttribute('href', expect.stringContaining('phone=3564551122'))
+    expect(link).toHaveAttribute('href', expect.stringContaining('/crm/whatsapp?'))
+    expect(link).toHaveAttribute('href', expect.stringContaining("tel=3564551122"))
   })
 
   it('sin teléfono no hay botón de WhatsApp', () => {
