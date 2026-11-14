@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import {
   Plus,
   Search,
   SlidersHorizontal,
   Download,
   ListChecks,
+  ListOrdered,
+  ArrowUpDown,
+  Check,
   ChevronDown,
 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -18,6 +22,7 @@ import {
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
 } from '@/components/ui/dropdown-menu'
 import { useIsDesktop } from '@/hooks/useMediaQuery'
 import {
@@ -32,6 +37,7 @@ import { generarStockDocx, nombreArchivoStock, LOGO_ANCHO_PX } from '@/crm/lib/s
 import logoLight from '@/assets/images/logo-light.png'
 import { useCrmRealtime } from '@/crm/hooks/useCrmRealtime'
 import { useVehiculosFiltros } from '@/crm/store/useVehiculosFiltros'
+import { ORDENES_VEHICULOS, idDeOrden } from '@/crm/lib/ordenVehiculos'
 import { useViewModeStore } from '@/crm/store/useViewModeStore'
 import VehiculoFilters from '@/crm/components/VehiculoFilters'
 import VehiculoTable from '@/crm/components/VehiculoTable'
@@ -60,8 +66,10 @@ const ACCION_CONFIRMAR = { estado: 'Cambiar', es_nuevo: 'Marcar', es_0km: 'Marca
 
 export default function VehiculosListPage() {
   const esDesktop = useIsDesktop()
-  const { busqueda, filtros, orden, pagina, setBusqueda, setPagina } =
+  const navigate = useNavigate()
+  const { busqueda, filtros, orden, pagina, setBusqueda, setPagina, setOrden } =
     useVehiculosFiltros()
+  const ordenActual = idDeOrden(orden)
   const filtrosActivos = useVehiculosFiltros((s) => s.contarFiltrosActivos())
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
@@ -270,6 +278,31 @@ export default function VehiculosListPage() {
             </span>
           )}
         </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            aria-label="Ordenar"
+            className={cn(
+              'glass flex h-12 shrink-0 items-center gap-2 rounded-2xl px-4 text-sm font-semibold transition-colors',
+              ordenActual !== 'brand-asc' ? 'text-neifert' : 'text-ink-2 hover:text-ink'
+            )}
+          >
+            <ArrowUpDown size={16} />
+            <span className="hidden sm:inline">Ordenar</span>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="crm-root">
+            {ORDENES_VEHICULOS.map((o) => (
+              <DropdownMenuItem key={o.id} onClick={() => setOrden(o.orden)}>
+                <span className="flex-1">{o.label}</span>
+                {ordenActual === o.id && <Check size={14} />}
+              </DropdownMenuItem>
+            ))}
+            <DropdownMenuSeparator />
+            <DropdownMenuItem onClick={() => navigate('/crm/relevancias')}>
+              <ListOrdered size={14} />
+              Establecer relevancias
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
 
       {mostrarFiltros && <VehiculoFilters />}

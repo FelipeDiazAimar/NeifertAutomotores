@@ -8,7 +8,7 @@ const db = () => supabase.schema('crm')
  *  patente, nota, consignación, carpetas, IVA). */
 const COLUMNAS_PUBLICAS = `id, marca, modelo, version, color, anio, moneda, precio_contado,
   km, combustible, transmision, categoria, es_nuevo, es_nuevo_en, es_0km, descripcion, estado,
-  creado_en, vehiculo_fotos ( url, es_portada, orden )`
+  creado_en, orden_relevancia, vehiculo_fotos ( url, es_portada, orden )`
 
 // year-desc/km-asc ordenan en el server. price-asc/price-desc y los
 // alfabéticos (brand-asc/model-asc) se resuelven aparte (ver
@@ -79,6 +79,7 @@ function mapear(v, usdRate = null) {
     images: fotos.map((f) => f.url),
     view_count: 0,
     created_at: v.creado_en,
+    relevance: v.orden_relevancia ?? null,
   }
 }
 
@@ -128,7 +129,14 @@ export async function listarPublicos({
     .eq('publicado', true)
   if (category !== 'todos') query = query.eq('categoria', category)
   query = aplicarFiltros(query, { search, filters, condition })
-  if (!ordenaPorPrecio && !ordenaAlfabetico) {
+  if (sort === 'relevance') {
+    // Ranking manual del CRM (1 = primero); los que no tienen relevancia van
+    // después, del año más nuevo al más viejo. Los vendidos conservan su lugar.
+    query = query
+      .order('orden_relevancia', { ascending: true, nullsFirst: false })
+      .order('anio', { ascending: false, nullsFirst: false })
+      .order('creado_en', { ascending: false })
+  } else if (!ordenaPorPrecio && !ordenaAlfabetico) {
     const [col, asc] = SORT_MAP[sort] || SORT_MAP['year-desc']
     query = query.order(col, { ascending: asc })
   }

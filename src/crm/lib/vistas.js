@@ -23,6 +23,8 @@ export const ROL_LABEL = { admin: 'Admin', dueno: 'Dueño', vendedor: 'Vendedor'
  *  cambiar-password, cualquier otra). */
 export function vistaDeRuta(pathname) {
   if (pathname === '/crm' || pathname === '/crm/') return 'panel'
+  // Establecer relevancias cuelga de Vehículos: quien ve Vehículos puede usarla.
+  if (pathname === '/crm/relevancias') return 'vehiculos'
   for (const v of VISTAS) {
     if (v.key === 'panel') continue
     if (pathname === v.ruta || pathname.startsWith(v.ruta + '/')) return v.key

@@ -25,6 +25,7 @@ const CrmLoginPage = lazy(() => import('@/crm/pages/CrmLoginPage'))
 const VehiculosListPage = lazy(() => import('@/crm/pages/VehiculosListPage'))
 const VehiculoDetallePage = lazy(() => import('@/crm/pages/VehiculoDetallePage'))
 const VehiculoEditarPage = lazy(() => import('@/crm/pages/VehiculoEditarPage'))
+const RelevanciasPage = lazy(() => import('@/crm/pages/RelevanciasPage'))
 const PresupuestosPage = lazy(() => import('@/crm/pages/PresupuestosPage'))
 const ClientesListPage = lazy(() => import('@/crm/pages/ClientesListPage'))
 const ClienteDetallePage = lazy(() => import('@/crm/pages/ClienteDetallePage'))
@@ -79,6 +80,7 @@ export default function AppRouter() {
             <Route path="/crm/vehiculos" element={<VehiculosListPage />} />
             <Route path="/crm/vehiculos/:id" element={<VehiculoDetallePage />} />
             <Route path="/crm/vehiculos/:id/editar" element={<VehiculoEditarPage />} />
+            <Route path="/crm/relevancias" element={<RelevanciasPage />} />
             <Route path="/crm/presupuestos" element={<PresupuestosPage />} />
             <Route path="/crm/whatsapp" element={<WhatsappMarcador />} />
             <Route path="/crm/cambiar-password" element={<CambiarPasswordPage />} />

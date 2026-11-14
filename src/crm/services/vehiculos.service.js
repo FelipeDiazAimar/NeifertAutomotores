@@ -36,8 +36,16 @@ export async function listar({
   if (filtros.precioMin != null && filtros.precioMin !== '') q = q.gte('precio_contado', Number(filtros.precioMin))
   if (filtros.precioMax != null && filtros.precioMax !== '') q = q.lte('precio_contado', Number(filtros.precioMax))
 
-  q = q
-    .order(orden.campo, { ascending: orden.dir === 'asc' })
+  if (orden.campo === 'orden_relevancia') {
+    // Usados y 0 km tienen rankings separados: primero uno y después el otro;
+    // dentro de cada uno, por posición (sin relevancia al final, año desc).
+    q = q
+      .order('es_0km', { ascending: true })
+      .order('orden_relevancia', { ascending: true, nullsFirst: false })
+      .order('anio', { ascending: false, nullsFirst: false })
+  } else {
+    q = q.order(orden.campo, { ascending: orden.dir === 'asc' })
+  }
   // Desempates estables: marca A-Z y luego modelo A-Z, para que la lista
   // quede agrupada por marca aunque haya marcas iguales.
   if (orden.campo !== 'marca') q = q.order('marca', { ascending: true })
@@ -167,4 +175,38 @@ export async function cambiarEstado(id, estadoAnterior, estado, autorId) {
 export async function eliminar(id) {
   const { error } = await db().from('vehiculos').delete().eq('id', id)
   if (error) throw error
+}
+
+// Estados que se ven en el catálogo público (con publicado = true).
+const ESTADOS_EN_CATALOGO = ['disponible', 'reservado', 'vendido']
+
+/** Vehículos visibles en el catálogo de usados (`cero` = false) o de 0 km
+ *  (`cero` = true), con lo necesario para distinguirlos y su posición actual
+ *  de relevancia. Es la fuente de /crm/relevancias. */
+export async function listarParaRelevancia({ cero = false } = {}) {
+  let q = db()
+    .from('vehiculos')
+    .select(
+      'id, marca, modelo, version, anio, km, color, estado, moneda, precio_contado, patente, duenio_nombre, duenio_apellido, orden_relevancia, es_0km, fotos:vehiculo_fotos(url,es_portada,orden)',
+    )
+    .eq('publicado', true)
+    .in('estado', ESTADOS_EN_CATALOGO)
+  q = cero ? q.eq('es_0km', true) : q.or('es_0km.is.false,es_0km.is.null')
+  const { data, error } = await q
+    .order('orden_relevancia', { ascending: true, nullsFirst: false })
+    .order('anio', { ascending: false, nullsFirst: false })
+  if (error) throw error
+  return data ?? []
+}
+
+/** Guarda posiciones de relevancia: [{ id, orden_relevancia }] (null = sin
+ *  relevancia). Recibe solo las que cambiaron. */
+export async function guardarRelevancias(cambios) {
+  const resultados = await Promise.all(
+    cambios.map(({ id, orden_relevancia }) =>
+      db().from('vehiculos').update({ orden_relevancia }).eq('id', id),
+    ),
+  )
+  const fallo = resultados.find((r) => r.error)
+  if (fallo) throw fallo.error
 }
