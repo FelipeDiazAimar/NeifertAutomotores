@@ -77,6 +77,9 @@ drop policy if exists push_subs_delete on crm.push_subscriptions;
 create policy push_subs_delete on crm.push_subscriptions for delete using (crm.es_usuario());
 
 alter table crm.usuarios add column if not exists email text;
+-- WhatsApp: teléfono del usuario y flag de aviso enviado por el servidor de WhatsApp.
+alter table crm.usuarios add column if not exists telefono text;
+alter table crm.alertas add column if not exists notificado_whatsapp boolean not null default false;
 
 grant select, insert, update, delete on all tables in schema crm to authenticated;
 grant all privileges on all tables in schema crm to service_role;

@@ -24,7 +24,7 @@ const CAMPOS = 'id,nombre,telefono,localidad,status,canal,archivado_en'
 
 const error = (mensaje, status = 400) => Object.assign(new Error(mensaje), { status })
 
-async function rest(ruta, { metodo = 'GET', cuerpo } = {}) {
+export async function rest(ruta, { metodo = 'GET', cuerpo } = {}) {
   if (!CRM_CONFIGURADO) throw error('El CRM no está configurado en el servidor (SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY).', 503)
   const headers = {
     apikey: SUPABASE_SERVICE_ROLE_KEY,

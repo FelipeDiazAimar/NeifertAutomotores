@@ -30,6 +30,27 @@ function CampoEmail({ valorInicial, onGuardar }) {
   )
 }
 
+/** Teléfono de WhatsApp (para las alertas) — mismo criterio que el email. */
+function CampoTelefono({ valorInicial, onGuardar }) {
+  const [valor, setValor] = useState(valorInicial ?? '')
+  const inputId = useId()
+  return (
+    <div className="w-56">
+      <label htmlFor={inputId} className="mb-1.5 block text-xs font-semibold uppercase tracking-wide text-ink-3">WhatsApp (para alertas)</label>
+      <input
+        id={inputId}
+        type="tel"
+        maxLength={30}
+        value={valor}
+        onChange={(e) => setValor(e.target.value)}
+        onBlur={() => { if (valor.trim() !== (valorInicial ?? '')) onGuardar(valor.trim() || null) }}
+        placeholder="Ej: 3564 562413"
+        className="glass field-glass h-9 w-full rounded-xl px-3 text-sm text-ink outline-none"
+      />
+    </div>
+  )
+}
+
 /** Acordeón de un usuario del CRM. `onCambiar(id, parche)` guarda al toque;
  *  `onResetPassword(usuario)` abre el modal de contraseña. */
 export default function UsuarioRow({ usuario: u, rolesMap, onCambiar, onResetPassword }) {
@@ -60,6 +81,7 @@ export default function UsuarioRow({ usuario: u, rolesMap, onCambiar, onResetPas
             />
           </div>
           <CampoEmail valorInicial={u.email} onGuardar={(email) => onCambiar(u.id, { email })} />
+          <CampoTelefono valorInicial={u.telefono} onGuardar={(telefono) => onCambiar(u.id, { telefono })} />
           <button
             type="button"
             role="switch"

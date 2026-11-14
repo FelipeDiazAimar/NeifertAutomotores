@@ -12,7 +12,7 @@ import { handleWhatsappLectura } from '../../src/server/whatsappLectura.js'
  *
  *  POST /api/crm/usuarios
  *  Authorization: Bearer <access token del usuario logueado>
- *  body: { accion: 'crear',          usuario, nombre, rol, password }
+ *  body: { accion: 'crear',          usuario, nombre, rol, password, telefono? }
  *      | { accion: 'reset_password', id, password }
  *      | { accion: 'push_subscribe', endpoint, p256dh, auth }
  *      | { accion: 'guardar_mi_email', email }
@@ -153,6 +153,7 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
 
     if (body.accion === 'crear') {
       const { usuario, nombre, rol, password } = body
+      const telefono = String(body.telefono ?? '').trim().slice(0, 30) || null
       if (!usuario || !nombre || !rol || !password) {
         return res
           .status(400)
@@ -191,6 +192,7 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
             rol,
             activo: true,
             id_legacy: legacyU?.id ?? null,
+            telefono,
           },
           { onConflict: 'id' }
         )

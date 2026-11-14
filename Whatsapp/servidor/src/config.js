@@ -136,6 +136,8 @@ export const SUPABASE_ANON_KEY = env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON
 export const SUPABASE_SERVICE_ROLE_KEY = env.SUPABASE_SERVICE_ROLE_KEY || ''
 // Adónde mandar al que entra sin sesión.
 export const CRM_URL = (env.CRM_URL || '').replace(/\/+$/, '')
+// Mandar por WhatsApp las alertas del CRM a su asignado (src/alertas.js). WA_ALERTAS_CRM=0 lo apaga.
+export const ALERTAS_CRM = encendido(env.WA_ALERTAS_CRM, true)
 
 // Quién puede hacer qué (roles del CRM: admin, dueno, vendedor):
 //   WHATSAPP_ROLES        entran a la bandeja y escriben
