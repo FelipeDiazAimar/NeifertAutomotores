@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import DatePicker from '@/components/common/DatePicker'
 import { ChevronDown } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
@@ -102,7 +103,7 @@ export default function PeritajeForm({ inicial, onGuardar, guardando }) {
       </div>
 
       <div className="grid gap-3 sm:grid-cols-3">
-        <Input label="Fecha" type="date" value={fecha} onChange={(e) => setFecha(e.target.value)} />
+        <DatePicker label="Fecha" value={fecha} onChange={setFecha} />
         <Select
           label="Peritado por"
           options={usuarios.map((u) => ({ id: u.id, label: u.nombre }))}

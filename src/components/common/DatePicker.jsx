@@ -24,7 +24,7 @@ const WEEKDAYS = ['L', 'M', 'M', 'J', 'V', 'S', 'D']
  *  lenguaje visual que el resto del sitio — el nativo lo dibuja el sistema
  *  operativo y no se puede estilizar de forma consistente. value/onChange
  *  son strings "yyyy-MM-dd" (o '' vacío). */
-export default function DatePicker({ label, value, onChange, placeholder = 'Elegir fecha…' }) {
+export default function DatePicker({ label, value, onChange, placeholder = 'Elegir fecha…', compact = false, error }) {
   const [open, setOpen] = useState(false)
   const selected = value ? parseISO(value) : null
   const [cursor, setCursor] = useState(selected || new Date())
@@ -58,13 +58,16 @@ export default function DatePicker({ label, value, onChange, placeholder = 'Eleg
       )}
       <button
         type="button"
+        aria-label={label || placeholder}
         onClick={() => {
           setCursor(selected || new Date())
           setOpen((o) => !o)
         }}
         className={cn(
-          'glass field-glass flex h-12 w-full items-center gap-2.5 rounded-2xl px-3.5 text-left text-sm transition-colors',
-          open && 'border-neifert'
+          'glass field-glass flex w-full items-center gap-2.5 rounded-2xl text-left text-sm transition-colors',
+          compact ? 'h-9 px-3' : 'h-12 px-3.5',
+          open && 'border-neifert',
+          error && 'border-neifert'
         )}
       >
         <Calendar size={17} className="shrink-0 text-ink-3" />
@@ -86,6 +89,8 @@ export default function DatePicker({ label, value, onChange, placeholder = 'Eleg
           </span>
         )}
       </button>
+
+      {error && <p className="mt-1 text-xs text-neifert">{error}</p>}
 
       <AnimatePresence>
         {open && (

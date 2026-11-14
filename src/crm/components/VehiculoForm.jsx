@@ -1,4 +1,5 @@
 import { useForm, Controller } from 'react-hook-form'
+import DateField from '@/components/common/DateField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
@@ -253,7 +254,7 @@ export default function VehiculoForm({ inicial, onGuardar, guardando }) {
             />
           )}
         />
-        <Input label="Vencimiento ITV" type="date" {...register('itv_venc')} />
+        <DateField control={control} name="itv_venc" label="Vencimiento ITV" />
         <CampoCombo
           control={control}
           name="origen"

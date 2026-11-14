@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -54,6 +54,15 @@ function renderModal(props = {}) {
   )
 }
 
+/** Elige 'HH:mm' en el TimePicker: abre el selector y toca la hora y el minuto. */
+async function elegirHora(boton, valor) {
+  const [h, m] = valor.split(':')
+  await userEvent.click(boton)
+  const col = (n) => document.querySelector(`[data-col="${n}"]`)
+  await userEvent.click(within(col('Hora')).getByText(h))
+  await userEvent.click(within(col('Min')).getByText(m))
+}
+
 describe('AlertaFormModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -86,9 +95,7 @@ describe('AlertaFormModal', () => {
         notificado_email: true,
       },
     })
-    const hora = screen.getByLabelText('Hora')
-    await userEvent.clear(hora)
-    await userEvent.type(hora, '11:00')
+    await elegirHora(screen.getByLabelText('Hora'), '11:00')
     await userEvent.click(screen.getByRole('button', { name: /guardar/i }))
     await waitFor(() => expect(actualizar).toHaveBeenCalled())
     expect(actualizar.mock.calls[0][0]).toBe(7)

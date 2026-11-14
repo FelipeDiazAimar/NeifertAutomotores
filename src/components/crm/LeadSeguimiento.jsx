@@ -1,4 +1,6 @@
 import { Bell, CheckSquare } from 'lucide-react'
+import DatePicker from '@/components/common/DatePicker'
+import TimePicker from '@/components/common/TimePicker'
 import Input from '@/components/common/Input'
 import Select from '@/components/common/Select'
 import GlassCard from '@/components/common/GlassCard'
@@ -59,8 +61,8 @@ export function TareaCampos({ value, onChange, usuarios, miId }) {
             onChange={set('titulo')}
           />
         </div>
-        <Input label="Vence" type="date" value={value.fecha} onChange={set('fecha')} />
-        <Input label="Hora" type="time" value={value.hora} onChange={set('hora')} />
+        <DatePicker label="Vence" value={value.fecha} onChange={(v) => onChange({ ...value, fecha: v })} />
+        <TimePicker label="Hora" value={value.hora} onChange={(v) => onChange({ ...value, hora: v })} />
         <div className="md:col-span-2">
           <Select
             label="Prioridad"
@@ -101,8 +103,8 @@ export function AlertaCampos({ value, onChange, usuarios, miId }) {
             onChange={set('titulo')}
           />
         </div>
-        <Input label="Fecha" type="date" value={value.fecha} onChange={set('fecha')} />
-        <Input label="Hora" type="time" value={value.hora} onChange={set('hora')} />
+        <DatePicker label="Fecha" value={value.fecha} onChange={(v) => onChange({ ...value, fecha: v })} />
+        <TimePicker label="Hora" value={value.hora} onChange={(v) => onChange({ ...value, hora: v })} />
         <div className="md:col-span-2">
           <Select
             label="Asignado a"

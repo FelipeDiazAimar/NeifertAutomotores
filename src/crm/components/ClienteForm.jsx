@@ -6,6 +6,8 @@ import MilesInput from '@/components/common/MilesInput'
 import Select from '@/components/common/Select'
 import { clienteSchema } from '@/crm/lib/clienteSchema'
 import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
+import DateField from '@/components/common/DateField'
+import TimeField from '@/components/common/TimeField'
 
 const TIPOS = ['Pickup', 'Sedan', 'SUV', 'Hatchback', 'Utilitario', 'Coupé', 'Familiar', 'Otro']
 const TRANS = ['manual', 'automático']
@@ -49,7 +51,7 @@ export default function ClienteForm({ inicial, onGuardar, guardando, conSeguimie
         <Input label="Nombre" {...register('nombre')} error={errors.nombre?.message} />
         <Input label="Teléfono" {...register('telefono')} />
         <Input label="Localidad" {...register('localidad')} />
-        <Input label="Cumpleaños" type="date" {...register('fecha_cumple')} />
+        <DateField control={control} name="fecha_cumple" label="Cumpleaños" />
         <Controller
           control={control} name="canal"
           render={({ field }) => (
@@ -94,8 +96,8 @@ export default function ClienteForm({ inicial, onGuardar, guardando, conSeguimie
             <div className="sm:col-span-2">
               <Input label="Título" {...register('tarea_titulo')} />
             </div>
-            <Input label="Vence" type="date" {...register('tarea_fecha')} error={errors.tarea_fecha?.message} />
-            <Input label="Hora" type="time" {...register('tarea_hora')} />
+            <DateField control={control} name="tarea_fecha" label="Vence" error={errors.tarea_fecha?.message} />
+            <TimeField control={control} name="tarea_hora" label="Hora" />
             <Controller
               control={control} name="tarea_prioridad"
               render={({ field }) => (
@@ -108,8 +110,8 @@ export default function ClienteForm({ inicial, onGuardar, guardando, conSeguimie
             <div className="sm:col-span-2">
               <Input label="Título" {...register('alerta_titulo')} />
             </div>
-            <Input label="Fecha" type="date" {...register('alerta_fecha')} error={errors.alerta_fecha?.message} />
-            <Input label="Hora" type="time" {...register('alerta_hora')} error={errors.alerta_hora?.message} />
+            <DateField control={control} name="alerta_fecha" label="Fecha" error={errors.alerta_fecha?.message} />
+            <TimeField control={control} name="alerta_hora" label="Hora" error={errors.alerta_hora?.message} />
           </Seccion>
         </>
       )}

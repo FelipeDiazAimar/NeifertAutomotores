@@ -1,8 +1,17 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import ClienteForm from '../components/ClienteForm.jsx'
+
+/** Elige 'HH:mm' en el TimePicker: abre el selector y toca la hora y el minuto. */
+async function elegirHora(boton, valor) {
+  const [h, m] = valor.split(':')
+  await userEvent.click(boton)
+  const col = (n) => document.querySelector(`[data-col="${n}"]`)
+  await userEvent.click(within(col('Hora')).getByText(h))
+  await userEvent.click(within(col('Min')).getByText(m))
+}
 
 describe('ClienteForm', () => {
   it('envía los valores editados', async () => {
@@ -38,7 +47,7 @@ describe('ClienteForm', () => {
     await userEvent.type(titulos[0], 'Llamar')
     await userEvent.type(titulos[1], 'Mostrar el auto')
     const horas = screen.getAllByLabelText('Hora')
-    await userEvent.type(horas[1], '10:30')
+    await elegirHora(horas[1], '10:30')
     await userEvent.click(screen.getByRole('button', { name: /guardar/i }))
     expect(onGuardar).toHaveBeenCalledTimes(1)
     expect(onGuardar.mock.calls[0][0]).toMatchObject({

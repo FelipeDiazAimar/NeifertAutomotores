@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
@@ -40,6 +40,15 @@ async function cargarDatosBasicos() {
   await userEvent.type(screen.getByLabelText('Teléfono'), '3492123456')
 }
 
+/** Elige 'HH:mm' en el TimePicker: abre el selector y toca la hora y el minuto. */
+async function elegirHora(boton, valor) {
+  const [h, m] = valor.split(':')
+  await userEvent.click(boton)
+  const col = (n) => document.querySelector(`[data-col="${n}"]`)
+  await userEvent.click(within(col('Hora')).getByText(h))
+  await userEvent.click(within(col('Min')).getByText(m))
+}
+
 describe('LeadForm — alta de cliente con tarea y alerta', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -58,7 +67,7 @@ describe('LeadForm — alta de cliente con tarea y alerta', () => {
     await userEvent.type(titulos[0], 'Llamar')
     await userEvent.type(titulos[1], 'Recordar presupuesto')
     const horas = screen.getAllByLabelText('Hora')
-    await userEvent.type(horas[1], '10:30')
+    await elegirHora(horas[1], '10:30')
     await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
 
     await vi.waitFor(() => expect(crearAlerta).toHaveBeenCalled())

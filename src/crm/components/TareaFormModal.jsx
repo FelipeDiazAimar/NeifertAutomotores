@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLenis } from 'lenis/react'
 import { X } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
+import DateField from '@/components/common/DateField'
+import TimeField from '@/components/common/TimeField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
@@ -137,8 +139,8 @@ export default function TareaFormModal({ open, onClose, tarea, clienteFijo, onGu
                 <Input label="Título" {...register('titulo')} error={errors.titulo?.message} />
                 <Input as="textarea" label="Descripción" {...register('descripcion')} />
                 <div className="grid grid-cols-2 gap-3">
-                  <Input label="Vence" type="date" {...register('fecha')} error={errors.fecha?.message} />
-                  <Input label="Hora" type="time" {...register('hora')} />
+                  <DateField control={control} name="fecha" label="Vence" error={errors.fecha?.message} />
+                  <TimeField control={control} name="hora" label="Hora" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <Controller

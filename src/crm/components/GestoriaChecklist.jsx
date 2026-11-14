@@ -1,4 +1,5 @@
 import { Check } from 'lucide-react'
+import DatePicker from '@/components/common/DatePicker'
 import Badge from '@/components/common/Badge'
 import Spinner from '@/components/common/Spinner'
 import GlassCard from '@/components/common/GlassCard'
@@ -69,24 +70,18 @@ export default function GestoriaChecklist({ vehiculoId, vehiculo }) {
           {ESTADO_LABEL[estado]}
         </Badge>
         <div className="flex flex-wrap items-center gap-3">
-          <label className="text-ink-3 flex flex-1 items-center gap-1.5 text-xs sm:flex-none">
+          <div className="text-ink-3 flex flex-1 items-center gap-1.5 text-xs sm:flex-none">
             Inicio
-            <input
-              type="date"
-              defaultValue={g?.fecha_inicio ?? ''}
-              onBlur={(e) => guardarFechaTop('fecha_inicio', e.target.value)}
-              className="glass field-glass text-ink h-8 min-w-0 flex-1 rounded-xl px-2 outline-none sm:flex-none"
-            />
-          </label>
-          <label className="text-ink-3 flex flex-1 items-center gap-1.5 text-xs sm:flex-none">
+            <div className="min-w-36 flex-1 sm:flex-none">
+              <DatePicker compact label="Inicio" value={g?.fecha_inicio ?? ''} onChange={(v) => guardarFechaTop('fecha_inicio', v)} />
+            </div>
+          </div>
+          <div className="text-ink-3 flex flex-1 items-center gap-1.5 text-xs sm:flex-none">
             Cierre
-            <input
-              type="date"
-              defaultValue={g?.fecha_cierre ?? ''}
-              onBlur={(e) => guardarFechaTop('fecha_cierre', e.target.value)}
-              className="glass field-glass text-ink h-8 min-w-0 flex-1 rounded-xl px-2 outline-none sm:flex-none"
-            />
-          </label>
+            <div className="min-w-36 flex-1 sm:flex-none">
+              <DatePicker compact label="Cierre" value={g?.fecha_cierre ?? ''} onChange={(v) => guardarFechaTop('fecha_cierre', v)} />
+            </div>
+          </div>
         </div>
       </div>
 

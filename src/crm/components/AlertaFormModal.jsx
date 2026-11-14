@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion'
 import { useLenis } from 'lenis/react'
 import { X } from 'lucide-react'
 import { useForm, Controller } from 'react-hook-form'
+import DateField from '@/components/common/DateField'
+import TimeField from '@/components/common/TimeField'
 import { zodResolver } from '@hookform/resolvers/zod'
 import Button from '@/components/common/Button'
 import Input from '@/components/common/Input'
@@ -280,18 +282,13 @@ export default function AlertaFormModal({
                   />
                   <Input as="textarea" label="Descripción" {...register('descripcion')} />
                   <div className="grid grid-cols-2 gap-3">
-                    <Input
+                    <DateField
+                      control={control}
+                      name="fecha"
                       label="Vence"
-                      type="date"
-                      {...register('fecha')}
                       error={errors.fecha?.message}
                     />
-                    <Input
-                      label="Hora"
-                      type="time"
-                      {...register('hora')}
-                      error={errors.hora?.message}
-                    />
+                    <TimeField control={control} name="hora" label="Hora" error={errors.hora?.message} />
                   </div>
                   <p className="text-ink-3 text-xs">
                     Te avisamos por notificación y email justo a esta hora.

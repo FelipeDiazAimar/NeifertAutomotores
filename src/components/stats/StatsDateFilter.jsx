@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { AnimatePresence, motion } from 'framer-motion'
 import { Filter, Check } from 'lucide-react'
+import DatePicker from '@/components/common/DatePicker'
+import MonthPicker from '@/components/common/MonthPicker'
 import { cn } from '@/lib/cn'
 
 const DAY = 86_400_000
@@ -117,26 +119,25 @@ export default function StatsDateFilter({ value, onChange }) {
             </div>
 
             <div className="mt-3 space-y-3 border-t border-line pt-3">
-              <label className="block">
+              <div>
                 <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-ink-3">
                   Por mes
                 </span>
-                <input type="month" value={month} onChange={(e) => applyMonth(e.target.value)} className="glass h-9 w-full rounded-lg px-2 text-sm text-ink outline-none" />
-              </label>
-              <label className="block">
+                <MonthPicker compact mode="month" value={month} onChange={applyMonth} />
+              </div>
+              <div>
                 <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-ink-3">
                   Por año
                 </span>
-                <input type="number" placeholder="2026" value={year} onChange={(e) => applyYear(e.target.value)} className="glass h-9 w-full rounded-lg px-2 text-sm text-ink outline-none placeholder:text-ink-3" />
-              </label>
+                <MonthPicker compact mode="year" value={year} onChange={applyYear} />
+              </div>
               <div>
                 <span className="mb-1 block text-[10px] font-bold uppercase tracking-wider text-ink-3">
                   Rango personalizado
                 </span>
-                <div className="flex items-center gap-2">
-                  <input type="date" value={from} onChange={(e) => { setFrom(e.target.value); applyRange(e.target.value, to) }} className="glass h-9 w-full rounded-lg px-2 text-xs text-ink outline-none" />
-                  <span className="text-ink-3">–</span>
-                  <input type="date" value={to} onChange={(e) => { setTo(e.target.value); applyRange(from, e.target.value) }} className="glass h-9 w-full rounded-lg px-2 text-xs text-ink outline-none" />
+                <div className="flex flex-col gap-2">
+                  <DatePicker compact value={from} placeholder="Desde…" onChange={(v) => { setFrom(v); applyRange(v, to) }} />
+                  <DatePicker compact value={to} placeholder="Hasta…" onChange={(v) => { setTo(v); applyRange(from, v) }} />
                 </div>
               </div>
             </div>
