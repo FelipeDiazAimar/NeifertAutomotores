@@ -32,23 +32,21 @@ export default function FichaCliente({ cliente: c, puedeEliminar, onCambiarStatu
     <div className="space-y-4">
       <GlassCard className="space-y-4 p-5">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div>
+          <div className="flex flex-wrap items-center gap-3">
             <h2 className="font-display text-xl font-bold text-ink">{c.nombre}</h2>
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-2">
-              <p className="text-sm text-ink-3">{c.telefono || 'sin teléfono'}</p>
-              {wa && (
-                <Link
-                  to={wa}
-                  aria-label={`Escribir a ${c.nombre} por WhatsApp`}
-                  className="inline-flex h-8 items-center gap-1.5 rounded-full bg-whatsapp px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
-                >
-                  <WhatsAppIcon size={14} /> WhatsApp
-                </Link>
-              )}
-            </div>
+            {wa && (
+              <Link
+                to={wa}
+                aria-label={`Escribir a ${c.nombre} por WhatsApp`}
+                className="inline-flex h-8 items-center gap-1.5 rounded-full bg-whatsapp px-3 text-xs font-semibold text-white transition-opacity hover:opacity-90"
+              >
+                <WhatsAppIcon size={14} /> WhatsApp
+              </Link>
+            )}
           </div>
           <div className="flex w-full flex-col items-start gap-2 sm:w-auto sm:items-end">
-            <div className="flex flex-wrap gap-2 sm:justify-end">
+            <div className="flex flex-wrap items-center gap-2 sm:justify-end">
+              <span className="mr-1 text-base font-semibold tabular-nums text-ink">{c.telefono || 'sin teléfono'}</span>
               <Badge variant={statusVariant(c.status)}>{c.status}</Badge>
               <Badge variant="neutral">{canalLabel(c.canal)}</Badge>
               {c.interes_cero_km && <Badge variant="amber">Interés 0 km</Badge>}
@@ -65,11 +63,13 @@ export default function FichaCliente({ cliente: c, puedeEliminar, onCambiarStatu
 
         {lineaInteres(c) !== '—' && <p className="text-sm text-ink-2">{lineaInteres(c)}</p>}
 
-        <dl className="grid gap-4 pt-1 sm:grid-cols-3">
-          <Dato k="Localidad">{c.localidad}</Dato>
-          <Dato k="Cumpleaños">{c.fecha_cumple}</Dato>
-          <Dato k="Fecha de venta">{c.fecha_venta}</Dato>
-        </dl>
+        {(c.localidad || c.fecha_cumple || c.fecha_venta) && (
+          <dl className="grid gap-4 pt-1 sm:grid-cols-3">
+            <Dato k="Localidad">{c.localidad}</Dato>
+            <Dato k="Cumpleaños">{c.fecha_cumple}</Dato>
+            <Dato k="Fecha de venta">{c.fecha_venta}</Dato>
+          </dl>
+        )}
         {c.notas && (
           <div className="border-t border-line pt-3">
             <p className="text-[11px] uppercase tracking-wide text-ink-3">Notas</p>

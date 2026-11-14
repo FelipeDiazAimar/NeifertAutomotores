@@ -20,6 +20,10 @@ export const useUiStore = create((set, get) => ({
   theme: getInitialTheme(),
   mobileNavOpen: false,
   aiSearchOpen: false,
+  // El WhatsApp se monta la primera vez que se entra y queda vivo (oculto) al navegar a otra
+  // pantalla: así no se recarga y los chats y mensajes siguen llegando en tiempo real.
+  whatsappMontado: false,
+  montarWhatsapp: () => set({ whatsappMontado: true }),
 
   setTheme: (theme) => {
     localStorage.setItem(STORAGE_KEY, theme)

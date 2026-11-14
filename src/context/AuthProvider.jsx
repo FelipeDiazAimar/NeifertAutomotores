@@ -3,6 +3,7 @@ import { supabase, isSupabaseConfigured } from '@/services/supabaseClient'
 import { obtenerMiPerfil } from '@/crm/services/crmUsuarios.service'
 import { AuthContext } from './authContext'
 import { borrarChatsGuardados } from '@/crm/lib/whatsappLectura'
+import { limpiarCacheCrm } from '@/lib/queryClient'
 
 const DEMO_KEY = 'nf-demo-session'
 
@@ -48,7 +49,10 @@ export function AuthProvider({ children }) {
     } = supabase.auth.onAuthStateChange((event, newSession) => {
       setSession(newSession)
       // Al salir no quedan en la PC los chats del WhatsApp guardados por la vista sin conexión.
-      if (event === 'SIGNED_OUT') borrarChatsGuardados()
+      if (event === 'SIGNED_OUT') {
+        borrarChatsGuardados()
+        limpiarCacheCrm() // y los datos del CRM guardados para entrar más rápido
+      }
     })
 
     return () => subscription.unsubscribe()
@@ -93,6 +97,7 @@ export function AuthProvider({ children }) {
   const signOut = useCallback(async () => {
     if (!isSupabaseConfigured) {
       localStorage.removeItem(DEMO_KEY)
+      limpiarCacheCrm()
       setSession(null)
       setProfile(null)
       return

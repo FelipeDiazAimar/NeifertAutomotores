@@ -4,6 +4,7 @@ import AppSidebar from './AppSidebar'
 import AppMobileSidebar from './AppMobileSidebar'
 import AnimatedOutlet from './AnimatedOutlet'
 import DictadoPorVoz from './DictadoPorVoz'
+import WhatsappPersistente from '@/crm/pages/WhatsappPersistente'
 import Logo from '@/components/common/Logo'
 import { useUiStore } from '@/store/useUiStore'
 import { useAvisoTareasHoy } from '@/crm/hooks/useAvisoTareasHoy'
@@ -33,6 +34,7 @@ export default function AppLayout() {
         </header>
         <main className="px-4 pb-8 pt-4 md:px-6 md:pb-8 md:pt-6">
           <AnimatedOutlet />
+          <WhatsappPersistente />
         </main>
       </div>
       <AppMobileSidebar />

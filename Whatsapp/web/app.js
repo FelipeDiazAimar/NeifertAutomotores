@@ -1543,6 +1543,9 @@ window.addEventListener('message', async (e) => {
     syncTema()
   } else if (tipo === 'nf-wa:vista' && (await delCrm(e))) {
     if (e.data.vista === 'inbox' || e.data.vista === 'connect') setView(e.data.vista)
+  } else if (tipo === 'nf-wa:chat' && (await delCrm(e))) {
+    // Un botón de WhatsApp del CRM: abre el chat con ese número y deja el mensaje escrito.
+    escribirleA(String(e.data.telefono || ''), String(e.data.texto || ''))
   } else if (tipo === 'nf-wa:actualizar' && (await delCrm(e))) {
     actualizarTodo()
   } else if (tipo === 'nf-wa:exportar' && (await delCrm(e))) {
@@ -2809,11 +2812,20 @@ async function enviarContactosElegidos() {
 }
 
 /** "Escribirle" desde un contacto recibido: abre (o crea) el chat con ese número. */
-async function escribirleA(telefono) {
+async function escribirleA(telefono, texto = '') {
   try {
     const { id } = await api('/api/chats', { method: 'POST', json: { telefono } })
+    // El mensaje queda como borrador (sin enviar) y el composer lo toma al abrir el chat.
+    if (texto) guardarBorrador(id, texto)
     setView('inbox')
-    abrirChat(id)
+    await abrirChat(id)
+    const ta = $('#msgInput')
+    if (texto && ta && state.activo === id) {
+      ta.value = texto
+      autoAlto(ta)
+      syncSendBtn()
+      ta.focus()
+    }
   } catch (err) {
     toast(err.message)
   }
