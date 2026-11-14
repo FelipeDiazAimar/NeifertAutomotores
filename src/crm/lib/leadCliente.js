@@ -26,6 +26,25 @@ export function clienteQueCoincide(lead, clientes) {
   return nombre ? clientes.find((c) => normNombre(c.nombre) === nombre) ?? null : null
 }
 
+/** Agrupa clientes que comparten teléfono (por normTel). Devuelve solo los
+ *  grupos con 2 o más: [{ clave, clientes }], el más viejo primero dentro de
+ *  cada grupo y los grupos con el alta más reciente arriba. Sin teléfono
+ *  válido no se agrupa (no hay con qué compararlos). */
+export function agruparDuplicados(clientes) {
+  const grupos = new Map()
+  for (const c of clientes) {
+    const clave = normTel(c.telefono)
+    if (!clave) continue
+    if (!grupos.has(clave)) grupos.set(clave, [])
+    grupos.get(clave).push(c)
+  }
+  const porAlta = (a, b) => new Date(a.creado_en) - new Date(b.creado_en)
+  return [...grupos.entries()]
+    .filter(([, lista]) => lista.length > 1)
+    .map(([clave, lista]) => ({ clave, clientes: [...lista].sort(porAlta) }))
+    .sort((a, b) => new Date(b.clientes.at(-1).creado_en) - new Date(a.clientes.at(-1).creado_en))
+}
+
 const CANAL_POR_ORIGEN = {
   whatsapp: 'whatsapp',
   instagram: 'instagram',

@@ -2,10 +2,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 
 const crearCliente = vi.fn()
 const crearTarea = vi.fn()
 const crearAlerta = vi.fn()
+const buscarPorTelefono = vi.fn()
+
+vi.mock('@/crm/services/clientes.service', () => ({ buscarPorTelefono: (...a) => buscarPorTelefono(...a) }))
 
 vi.mock('@/crm/hooks/useClientes', () => ({
   useClienteMutations: () => ({ crearCompleto: { mutateAsync: crearCliente, isPending: false } }),
@@ -39,13 +43,14 @@ async function cargarDatosBasicos() {
 describe('LeadForm — alta de cliente con tarea y alerta', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    buscarPorTelefono.mockResolvedValue([])
     crearCliente.mockResolvedValue({ id: 'cli-1' })
     crearTarea.mockResolvedValue({})
     crearAlerta.mockResolvedValue({})
   })
 
   it('crea la tarea y la alerta vinculadas al cliente nuevo', async () => {
-    render(<LeadForm />)
+    render(<MemoryRouter><LeadForm /></MemoryRouter>)
     await cargarDatosBasicos()
     await userEvent.click(desplegable(TAREA))
     await userEvent.click(desplegable(ALERTA))
@@ -66,7 +71,7 @@ describe('LeadForm — alta de cliente con tarea y alerta', () => {
   })
 
   it('se puede asignar la tarea a otro usuario', async () => {
-    render(<LeadForm />)
+    render(<MemoryRouter><LeadForm /></MemoryRouter>)
     await cargarDatosBasicos()
     await userEvent.click(desplegable(TAREA))
     await userEvent.type(screen.getByLabelText('Título'), 'Llamar')
@@ -79,7 +84,7 @@ describe('LeadForm — alta de cliente con tarea y alerta', () => {
   })
 
   it('crea el cliente con sus datos y el canal elegido', async () => {
-    render(<LeadForm />)
+    render(<MemoryRouter><LeadForm /></MemoryRouter>)
     await cargarDatosBasicos()
     await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
     await vi.waitFor(() => expect(crearCliente).toHaveBeenCalled())
@@ -89,7 +94,7 @@ describe('LeadForm — alta de cliente con tarea y alerta', () => {
   })
 
   it('sin título no crea ni tarea ni alerta', async () => {
-    render(<LeadForm />)
+    render(<MemoryRouter><LeadForm /></MemoryRouter>)
     await cargarDatosBasicos()
     await userEvent.click(screen.getByRole('button', { name: /registrar cliente/i }))
     await vi.waitFor(() => expect(crearCliente).toHaveBeenCalled())
@@ -98,7 +103,7 @@ describe('LeadForm — alta de cliente con tarea y alerta', () => {
   })
 
   it('una alerta sin hora frena el alta del cliente', async () => {
-    render(<LeadForm />)
+    render(<MemoryRouter><LeadForm /></MemoryRouter>)
     await cargarDatosBasicos()
     await userEvent.click(desplegable(ALERTA))
     await userEvent.type(screen.getByLabelText('Título'), 'Aviso')

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Search, SlidersHorizontal } from 'lucide-react'
+import { CopyCheck, Plus, Search, SlidersHorizontal } from 'lucide-react'
 import Button from '@/components/common/Button'
 import Spinner from '@/components/common/Spinner'
 import Pagination from '@/components/common/Pagination'
@@ -13,6 +13,8 @@ import ClienteFilters from '@/crm/components/ClienteFilters'
 import ClienteTable from '@/crm/components/ClienteTable'
 import ClienteCard from '@/crm/components/ClienteCard'
 import ClienteFormModal from '@/crm/components/ClienteFormModal'
+import DuplicadosModal from '@/crm/components/DuplicadosModal'
+import { useDuplicados } from '@/crm/hooks/useDuplicados'
 import { cn } from '@/lib/cn'
 
 const PAGE_SIZE = 20
@@ -25,6 +27,8 @@ export default function ClientesListPage() {
   const [texto, setTexto] = useState(busqueda)
   const [mostrarFiltros, setMostrarFiltros] = useState(false)
   const [abrirNuevo, setAbrirNuevo] = useState(false)
+  const [verDuplicados, setVerDuplicados] = useState(false)
+  const { grupos } = useDuplicados()
   const { cambiarStatus } = useClienteMutations()
 
   useEffect(() => {
@@ -42,9 +46,26 @@ export default function ClientesListPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="font-display text-2xl font-bold text-ink">Clientes</h1>
-        <p className="text-sm text-ink-3">{total} en cartera</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-display text-2xl font-bold text-ink">Clientes</h1>
+          <p className="text-sm text-ink-3">{total} en cartera</p>
+        </div>
+        {grupos.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setVerDuplicados(true)}
+            className="flex items-center gap-2 rounded-2xl border border-amber/40 bg-amber/10 px-3.5 py-2 text-left transition-colors hover:bg-amber/15"
+          >
+            <CopyCheck size={18} className="shrink-0 text-amber" />
+            <span>
+              <span className="block text-sm font-bold text-ink">
+                {grupos.length} {grupos.length === 1 ? 'duplicado' : 'duplicados'}
+              </span>
+              <span className="block text-xs font-semibold text-amber">Revisar</span>
+            </span>
+          </button>
+        )}
       </div>
 
       <div className="flex items-center gap-2">
@@ -107,6 +128,8 @@ export default function ClientesListPage() {
       )}
 
       <Pagination page={pagina} totalPages={totalPaginas} onChange={setPagina} />
+
+      <DuplicadosModal open={verDuplicados} onClose={() => setVerDuplicados(false)} />
 
       <ClienteFormModal
         open={abrirNuevo}

@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { useForm, Controller } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { z } from 'zod'
@@ -11,6 +12,9 @@ import DatePicker from '@/components/common/DatePicker'
 import Button from '@/components/common/Button'
 import GlassCard from '@/components/common/GlassCard'
 import LeadVehiculos from '@/components/crm/LeadVehiculos'
+import TelefonoDuplicadoModal from '@/components/crm/TelefonoDuplicadoModal'
+import { buscarPorTelefono } from '@/crm/services/clientes.service'
+import { normTel } from '@/crm/lib/leadCliente'
 import { CANAL_OPCIONES } from '@/crm/lib/formatCliente'
 import { useClienteMutations } from '@/crm/hooks/useClientes'
 import { useTareaMutations } from '@/crm/hooks/useTareas'
@@ -83,7 +87,27 @@ export default function LeadForm() {
     formState: { errors },
   } = useForm({ resolver: zodResolver(schema), defaultValues: { source: 'salon', contact_date: todayStr() } })
 
-  const emailLocal = (watch('email') || '').split('@')[0]
+  const navigate = useNavigate()
+  // Clientes que ya tienen el teléfono recién cargado (abre el modal de aviso).
+  const [duplicados, setDuplicados] = useState([])
+  // Último teléfono ya revisado: no vuelve a avisar si el usuario no lo cambió.
+  const telRevisado = useRef('')
+  const telefono = register('phone')
+
+  const revisarTelefono = async (e) => {
+    telefono.onBlur(e)
+    const valor = e.target.value
+    const clave = normTel(valor)
+    if (!clave || clave === telRevisado.current) return
+    telRevisado.current = clave
+    try {
+      setDuplicados(await buscarPorTelefono(valor))
+    } catch {
+      // Sin red o sin permisos: el aviso es una ayuda, no debe trabar la carga.
+    }
+  }
+
+  const emailLocal =(watch('email') || '').split('@')[0]
 
   // Vehículos de interés y en entrega: listas locales (puede haber varios).
   const [intereses, setIntereses] = useState([])
@@ -106,6 +130,8 @@ export default function LeadForm() {
     setAlerta(alertaVacia())
     setVerTarea(false)
     setVerAlerta(false)
+    setDuplicados([])
+    telRevisado.current = ''
   }
 
   const onSubmit = async (values) => {
@@ -190,7 +216,8 @@ export default function LeadForm() {
             icon={Phone}
             placeholder="+54 9 11 1234 5678"
             error={errors.phone?.message}
-            {...register('phone')}
+            {...telefono}
+            onBlur={revisarTelefono}
           />
           <div>
             <Input
@@ -349,6 +376,12 @@ export default function LeadForm() {
           </Button>
         </div>
       </form>
+
+      <TelefonoDuplicadoModal
+        clientes={duplicados}
+        onVerFicha={(c) => navigate(`/crm/clientes/${c.id}`)}
+        onContinuar={() => setDuplicados([])}
+      />
     </GlassCard>
   )
 }

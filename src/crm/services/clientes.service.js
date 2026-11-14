@@ -1,6 +1,6 @@
 import { supabase } from '@/services/supabaseClient'
 import { registrar } from './eventos.service.js'
-import { clienteQueCoincide, canalDeOrigen, itemAFila } from '@/crm/lib/leadCliente'
+import { clienteQueCoincide, canalDeOrigen, itemAFila, normTel } from '@/crm/lib/leadCliente'
 
 const db = () => supabase.schema('crm')
 const hoy = () => new Date().toISOString().slice(0, 10)
@@ -37,6 +37,41 @@ export async function listar({
   const { data, error, count } = await q
   if (error) throw error
   return { filas: data ?? [], total: count ?? 0 }
+}
+
+/** Clientes (incluye archivados) cuyo teléfono coincide con `tel`. En la base
+ *  el número puede estar con espacios/guiones, así que se busca con los
+ *  últimos 10 dígitos separados por comodines y se confirma con normTel. */
+export async function buscarPorTelefono(tel) {
+  const clave = normTel(tel)
+  if (!clave) return []
+  const patron = `%${clave.split('').join('%')}%`
+  const { data, error } = await db()
+    .from('clientes')
+    .select('id, nombre, telefono, status, creado_en, archivado_en')
+    .ilike('telefono', patron)
+    .limit(20)
+  if (error) throw error
+  return (data ?? []).filter((c) => normTel(c.telefono) === clave)
+}
+
+/** Todos los clientes (con cuántos intereses/autos en entrega tiene cada uno)
+ *  para detectar teléfonos repetidos. Pagina de a 1000: PostgREST corta ahí. */
+export async function listarParaDuplicados() {
+  const PAGE = 1000
+  const filas = []
+  for (let desde = 0; ; desde += PAGE) {
+    const { data, error } = await db()
+      .from('clientes')
+      .select('*, intereses:cliente_intereses(id), autos_entrega:cliente_autos_entrega(id)')
+      .order('creado_en', { ascending: true })
+      .order('id', { ascending: true })
+      .range(desde, desde + PAGE - 1)
+    if (error) throw error
+    filas.push(...data)
+    if (data.length < PAGE) break
+  }
+  return filas
 }
 
 export async function obtener(id) {

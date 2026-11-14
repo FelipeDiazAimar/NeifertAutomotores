@@ -61,3 +61,32 @@ describe('itemAFila', () => {
     expect(itemAFila({ marca: 'Fiat', trans: 'manual' }, { conTransmision: true })).toEqual({ marca: 'Fiat', trans: 'manual' })
   })
 })
+
+describe('agruparDuplicados', () => {
+  const c = (id, telefono, creado_en, nombre = 'X') => ({ id, telefono, creado_en, nombre })
+
+  it('agrupa por teléfono normalizado y descarta los únicos y los sin teléfono', async () => {
+    const { agruparDuplicados } = await import('../lib/leadCliente.js')
+    const g = agruparDuplicados([
+      c('a', '3492 12-3456', '2026-01-01'),
+      c('b', '+54 9 3492123456', '2026-02-01'),
+      c('c', '3564000000', '2026-03-01'),
+      c('d', '', '2026-03-02'),
+      c('e', null, '2026-03-03'),
+    ])
+    expect(g).toHaveLength(1)
+    expect(g[0].clientes.map((x) => x.id)).toEqual(['a', 'b'])
+  })
+
+  it('ordena cada grupo del más viejo al más nuevo y los grupos por alta reciente', async () => {
+    const { agruparDuplicados } = await import('../lib/leadCliente.js')
+    const g = agruparDuplicados([
+      c('n2', '3000000001', '2026-05-01'),
+      c('n1', '3000000001', '2026-04-01'),
+      c('m2', '3000000002', '2026-08-01'),
+      c('m1', '3000000002', '2026-07-01'),
+    ])
+    expect(g.map((x) => x.clave)).toEqual(['3000000002', '3000000001'])
+    expect(g[1].clientes.map((x) => x.id)).toEqual(['n1', 'n2'])
+  })
+})
