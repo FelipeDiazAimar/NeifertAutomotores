@@ -48,6 +48,30 @@ export function demandasDeCliente(c) {
   return out
 }
 
+/** "Ofertas" (posibles vendedores): el auto en entrega que ofreció cada cliente,
+ *  con la misma forma que una demanda para reutilizar la búsqueda. Sin
+ *  presupuesto: ese tope es de quien compra, no de quien entrega. */
+export function ofertasDeCliente(c) {
+  const persona = {
+    id: c.id,
+    nombre: c.nombre,
+    telefono: c.telefono,
+    estado: c.status,
+  }
+  return (c.autos_entrega ?? []).map((a) => ({
+    persona,
+    marca: a.marca,
+    modelo: a.modelo,
+    version: a.version,
+    tipo: a.tipo,
+    condicion: a.condicion,
+    anio: a.anio,
+    valor: a.valor,
+    moneda: a.moneda,
+    presupuesto: null,
+  }))
+}
+
 /** Clientes vendidos o perdidos: ya no son compradores activos, se listan
  *  aparte y al final. */
 export function esInactivo(persona) {

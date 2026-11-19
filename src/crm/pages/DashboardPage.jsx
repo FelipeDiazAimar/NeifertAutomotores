@@ -64,6 +64,7 @@ export default function DashboardPage() {
             {[
               ['stock', 'Por vehículo del stock'],
               ['buscar', 'Buscar compradores'],
+              ['vendedores', 'Buscar vendedores'],
             ].map(([id, label]) => (
               <button
                 key={id}
@@ -84,7 +85,7 @@ export default function DashboardPage() {
             <OportunidadesList items={oportunidades ?? []} />
           </Seccion>
         ) : (
-          <BuscadorCompradores />
+          <BuscadorCompradores key={vistaOps} modo={vistaOps === 'vendedores' ? 'vendedores' : 'compradores'} />
         )}
       </section>
     </div>

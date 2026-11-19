@@ -9,7 +9,7 @@ import GlassCard from '@/components/common/GlassCard'
 import Badge from '@/components/common/Badge'
 import { WhatsAppIcon } from '@/components/common/SocialIcons'
 import Combobox from '@/crm/components/Combobox'
-import { useDemandas } from '@/crm/hooks/useCompradores'
+import { useDemandas, useOfertas } from '@/crm/hooks/useCompradores'
 import { useOpcionesCampo } from '@/crm/hooks/useOpcionesCampo'
 import { useVehiculos } from '@/crm/hooks/useVehiculos'
 import { buscarCompradores, hayFiltros, esInactivo } from '@/crm/lib/compradores'
@@ -31,7 +31,6 @@ const ETIQUETA = {
   precio: 'precio',
   presupuesto: 'presupuesto',
   sin_valor: 'sin valor',
-  texto: 'texto',
   nombre: 'nombre',
 }
 
@@ -77,7 +76,7 @@ function Tarjeta({ persona: p, lineas }) {
         {lineas.map((d, i) => (
           <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
             <span className="text-ink-2">{lineaDemanda(d)}</span>
-            {d.coincide.map((c) => (
+            {d.coincide.filter((c) => c !== 'texto').map((c) => (
               <span
                 key={c}
                 className={
@@ -128,8 +127,35 @@ function Grupo({ titulo, detalle, items }) {
   )
 }
 
-export default function BuscadorCompradores() {
-  const { data: demandas = [], isLoading, isError } = useDemandas()
+const TEXTOS = {
+  compradores: {
+    intro:
+      'Buscá por vehículo, tipo o rango de precio y mirá a quién le puede interesar, según los intereses cargados en cada cliente.',
+    error: 'No se pudieron cargar los intereses. Probá de nuevo en un momento.',
+    lineas: 'líneas de interés cargadas',
+    vacioTitulo: 'Sin posibles compradores',
+    vacioDetalle: 'Nadie tiene cargado un interés que coincida. Probá con menos filtros o un rango más amplio.',
+    singular: 'posible comprador',
+    plural: 'posibles compradores',
+  },
+  vendedores: {
+    intro:
+      'Buscá el vehículo que necesitás por marca, modelo, tipo o rango de precio y mirá qué clientes lo ofrecieron como auto en entrega.',
+    error: 'No se pudieron cargar los autos en entrega. Probá de nuevo en un momento.',
+    lineas: 'autos en entrega cargados',
+    vacioTitulo: 'Sin posibles vendedores',
+    vacioDetalle: 'Ningún cliente ofreció un auto que coincida. Probá con menos filtros o un rango más amplio.',
+    singular: 'posible vendedor',
+    plural: 'posibles vendedores',
+  },
+}
+
+export default function BuscadorCompradores({ modo = 'compradores' }) {
+  const vendedores = modo === 'vendedores'
+  const t = TEXTOS[modo] ?? TEXTOS.compradores
+  const consultaDemandas = useDemandas({ enabled: !vendedores })
+  const consultaOfertas = useOfertas({ enabled: vendedores })
+  const { data: demandas = [], isLoading, isError } = vendedores ? consultaOfertas : consultaDemandas
   const { opciones } = useOpcionesCampo()
   const { data: stock } = useVehiculos({ filtros: { estado: ['disponible'] }, pageSize: 300 })
   const [f, setF] = useState(VACIO)
@@ -161,6 +187,7 @@ export default function BuscadorCompradores() {
     setAuto('')
   }
 
+  // `key` en el padre reinicia filtros al cambiar de modo; acá solo se cruza.
   const resultados = useMemo(() => buscarCompradores(demandas, f), [demandas, f])
   const activos = resultados.filter((r) => !esInactivo(r.persona))
   const inactivos = resultados.filter((r) => esInactivo(r.persona))
@@ -168,10 +195,7 @@ export default function BuscadorCompradores() {
 
   return (
     <div className="space-y-5">
-      <p className="text-sm text-ink-2">
-        Buscá por vehículo, tipo o rango de precio y mirá a quién le puede interesar, según los
-        intereses cargados en cada cliente.
-      </p>
+      <p className="text-sm text-ink-2">{t.intro}</p>
 
       {/* z-20: la lista desplegable de los selectores tiene que quedar por encima de los resultados. */}
       <GlassCard className="relative z-20 p-4">
@@ -234,28 +258,25 @@ export default function BuscadorCompradores() {
         </div>
       ) : isError ? (
         <GlassCard className="p-8 text-center text-sm text-ink-2">
-          No se pudieron cargar los intereses. Probá de nuevo en un momento.
+          {t.error}
         </GlassCard>
       ) : !activo ? (
         <GlassCard className="grid place-items-center gap-2 p-10 text-center">
           <Search size={22} className="text-ink-3" />
           <p className="font-display font-bold text-ink">Elegí al menos un filtro</p>
           <p className="text-sm text-ink-3">
-            Hay {demandas.length} líneas de interés cargadas para cruzar.
+            Hay {demandas.length} {t.lineas} para cruzar.
           </p>
         </GlassCard>
       ) : resultados.length === 0 ? (
         <GlassCard className="p-10 text-center">
-          <p className="font-display font-bold text-ink">Sin posibles compradores</p>
-          <p className="mt-1 text-sm text-ink-3">
-            Nadie tiene cargado un interés que coincida. Probá con menos filtros o un rango más amplio.
-          </p>
+          <p className="font-display font-bold text-ink">{t.vacioTitulo}</p>
+          <p className="mt-1 text-sm text-ink-3">{t.vacioDetalle}</p>
         </GlassCard>
       ) : (
         <div className="space-y-5">
           <p className="text-sm text-ink-2">
-            {activos.length} posible{activos.length === 1 ? '' : 's'} comprador
-            {activos.length === 1 ? '' : 'es'}
+            {activos.length} {activos.length === 1 ? t.singular : t.plural}
             {inactivos.length > 0 && ` · ${inactivos.length} no activo${inactivos.length === 1 ? '' : 's'}`}
           </p>
           <Grupo items={activos} />
