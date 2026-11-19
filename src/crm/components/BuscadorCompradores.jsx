@@ -24,16 +24,6 @@ const MARGEN_STOCK = 0.15
 
 const STATUS_LABEL = { vendido: 'Vendido', perdido: 'Perdido' }
 
-const ETIQUETA = {
-  marca: 'marca',
-  modelo: 'modelo',
-  tipo: 'tipo',
-  precio: 'precio',
-  presupuesto: 'presupuesto',
-  sin_valor: 'sin valor',
-  nombre: 'nombre',
-}
-
 function lineaDemanda(d) {
   const veh = [d.marca, d.modelo].filter(Boolean).join(' ')
   const partes = [veh || null, d.tipo, d.condicion === 'cero' ? '0 km' : null]
@@ -76,18 +66,6 @@ function Tarjeta({ persona: p, lineas }) {
         {lineas.map((d, i) => (
           <li key={i} className="flex flex-wrap items-center gap-x-2 gap-y-1 text-xs">
             <span className="text-ink-2">{lineaDemanda(d)}</span>
-            {d.coincide.filter((c) => c !== 'texto').map((c) => (
-              <span
-                key={c}
-                className={
-                  c === 'sin_valor'
-                    ? 'rounded-full bg-ink/8 px-2 py-0.5 text-[10px] font-semibold uppercase text-ink-3'
-                    : 'rounded-full bg-neifert/10 px-2 py-0.5 text-[10px] font-semibold uppercase text-neifert'
-                }
-              >
-                {ETIQUETA[c]}
-              </span>
-            ))}
           </li>
         ))}
       </ul>
