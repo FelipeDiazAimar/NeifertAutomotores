@@ -1,7 +1,7 @@
 import './entorno.js'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { upsertChat } from '../src/almacen.js'
-import { asegurarCliente, buscarClientes, clientePorTelefono, crearAlerta, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, seguimientoPorTelefono, tareaPorTelefono, vincularCliente } from '../src/crm.js'
+import { altaAutomatica, asegurarCliente, buscarClientes, clientePorTelefono, crearAlerta, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, seguimientoPorTelefono, tareaPorTelefono, vincularCliente } from '../src/crm.js'
 
 // CRM de mentira: clientes con teléfonos cargados "a mano", como en el real.
 const CLIENTES = [
@@ -24,6 +24,8 @@ beforeAll(() => {
       if (tabla === 'clientes') CLIENTES.push({ ...creada, archivado_en: null })
       return json([creada], 201)
     }
+    // Empleado con el teléfono como lo cargan: sin 0 y con 15.
+    if (tabla === 'usuarios') return json([{ telefono: '3564 15 562413' }])
     if (tabla === 'clientes') return json(CLIENTES.slice(Number(u.searchParams.get('offset')) || 0))
     return json([])
   })
@@ -154,5 +156,31 @@ describe('el bot habla con el CRM por teléfono', () => {
     }
     expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.fecha === '2026-11-24').fila).toMatchObject({ cliente_id: 'c1', asignado_a: null, creado_por: null })
     expect(enviados.at(-1).fila.datos).toMatchObject({ titulo: 'Llamar', via: 'bot' })
+  })
+})
+
+describe('alta automática de quien escribe', () => {
+  it('carga al desconocido con su nombre de WhatsApp, una sola vez', async () => {
+    const J = '5493492555111@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Lucía' })
+    const c = await altaAutomatica(J)
+    expect(c).toMatchObject({ nombre: 'Lucía', telefono: '3492555111' })
+    expect(enviados.filter((e) => e.tabla === 'eventos').at(-1).fila).toMatchObject({ tipo: 'alta', datos: { origen: 'whatsapp_automatico' }, usuario_id: null })
+    expect(await altaAutomatica(J)).toBeNull()
+  })
+
+  it('sin nombre de WhatsApp queda como "Contacto de WhatsApp"', async () => {
+    const J = '5493492555222@s.whatsapp.net'
+    upsertChat(J)
+    expect((await altaAutomatica(J)).nombre).toBe('Contacto de WhatsApp')
+  })
+
+  it('no carga clientes existentes, empleados, grupos ni chats marcados', async () => {
+    upsertChat('5493564562413@s.whatsapp.net', { pushName: 'Empleado' })
+    expect(await altaAutomatica('5493564562413@s.whatsapp.net')).toBeNull()
+    expect(await altaAutomatica('5493576412286@s.whatsapp.net')).toBeNull()
+    expect(await altaAutomatica('120363000000000001@g.us')).toBeNull()
+    upsertChat('5493492555333@s.whatsapp.net', { pushName: 'Pepe', clienteId: 'ninguno' })
+    expect(await altaAutomatica('5493492555333@s.whatsapp.net')).toBeNull()
   })
 })

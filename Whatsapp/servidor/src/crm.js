@@ -16,6 +16,7 @@
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from './config.js'
 import { buscarChat, esGrupo, nombreDe, pnDeLid, telefonoDe, upsertChat } from './almacen.js'
 import { normalizarAR } from './telefono.js'
+import { telefonoEmpleado } from './alertas.js'
 
 export const CRM_CONFIGURADO = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
 const CACHE_MS = 2 * 60 * 1000
@@ -314,4 +315,48 @@ export async function tareaPorTelefono(telefono, datos = {}, usuario) {
   const completos = { ...datos, fecha: datos.fecha || hoy }
   validarTarea(completos)
   return tareaDe(await clienteDeTelefono(telefono), completos, usuario, { via: 'bot' })
+}
+
+/* ---------------- Alta automática ---------------- */
+
+let empleados = { ts: 0, telefonos: new Set() }
+
+async function telefonosEmpleados() {
+  if (Date.now() - empleados.ts < CACHE_MS) return empleados.telefonos
+  const filas = await rest('usuarios?select=telefono&telefono=not.is.null')
+  empleados = { ts: Date.now(), telefonos: new Set(filas.map((u) => telefonoEmpleado(u.telefono)).filter(Boolean)) }
+  return empleados.telefonos
+}
+
+const enCurso = new Set()
+
+/**
+ * Quien escribe por primera vez queda cargado como cliente (preferencia
+ * "clientesAutomaticos"). No entran los grupos, los empleados del CRM, los chats que ya
+ * tienen un cliente elegido a mano o marcados como "no es cliente", ni los números que ya
+ * están en el CRM. Devuelve el cliente creado o null.
+ */
+export async function altaAutomatica(jid) {
+  if (!CRM_CONFIGURADO || esGrupo(jid) || buscarChat(jid)?.clienteId) return null
+  const telefono = telefonoDelChat(jid)
+  const normal = normalizarAR(telefono)
+  if (!normal || enCurso.has(normal)) return null
+  enCurso.add(normal)
+  try {
+    const { porTelefono } = await clientes()
+    if (porTelefono.has(normal) || (await telefonosEmpleados()).has(normal)) return null
+    const nombre = nombreDe(jid)
+    const cliente = await altaCliente(
+      {
+        // Sin nombre de WhatsApp, nombreDe devuelve el número: mejor un nombre que se note pendiente.
+        nombre: /^\+?[\d\s-]+$/.test(nombre) ? 'Contacto de WhatsApp' : nombre.slice(0, 120),
+        telefono: telefonoParaCrm(normal, telefono),
+      },
+      null,
+      'whatsapp_automatico',
+    )
+    return vistaCliente(cliente)
+  } finally {
+    enCurso.delete(normal)
+  }
 }

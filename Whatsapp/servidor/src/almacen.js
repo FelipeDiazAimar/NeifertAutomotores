@@ -72,7 +72,7 @@ mudarCarpetasViejas()
 
 for (const dir of [DATA_DIR, LINEA_DIR, MSG_DIR]) fs.mkdirSync(dir, { recursive: true })
 
-const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false }
+const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false, clientesAutomaticos: false }
 
 const estado = EN_SUPABASE ? {} : leerJson(ESTADO_FILE, {})
 function completarEstado() {
