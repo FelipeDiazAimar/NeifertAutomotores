@@ -373,6 +373,7 @@ WhatsApp) habla con el CRM por **teléfono**, no por chat. Base: `http://localho
 | `POST /cliente` | `{ "telefono", "nombre"?, "localidad"?, "interes"?, "notas"? }` → `{ "cliente": {...}, "creado": true }`. Si ya existe devuelve `creado: false` (y con `interes` deja un contacto "Interés: ..."). Teléfono inválido: 400 |
 | `POST /seguimiento` | `{ "telefono", "texto" }` → `{ "ok": true, "clienteId" }`. 404 si no es cliente |
 | `POST /tarea` | `{ "telefono", "titulo", "descripcion"?, "fecha"? (AAAA-MM-DD, por defecto hoy), "hora"? (HH:MM), "prioridad"? (baja, normal, alta) }` → `{ "ok": true, "tareaId", "clienteId" }`. 404 si no es cliente |
+| `POST /mensajes` | `{ "telefono", "nombre"?, "asistente"? ("Sofía"), "mensajes": [{ "id", "rol" (cliente, bot), "texto", "ts" (milisegundos), "derivo"? }] }` (hasta 50) → `{ "ok": true, "chatId", "nuevos" }`. Guarda la charla del asistente en el chat del cliente: el panel la muestra en un recuadro, mezclada por hora con los mensajes de la línea. No cuenta como no leído de la línea, no se le puede contestar ni reaccionar y va en un respaldo aparte (`respaldo/sofia/`). Repetir un `id` no duplica |
 
 ```sh
 curl -X POST http://localhost:3100/api/bot/cliente \

@@ -7,6 +7,7 @@
 import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
 import { vehiculosWeb } from './whatsapp.js'
+import { guardarCharla } from './sofia.js'
 
 export function rutasBot({ ruta, accion }) {
   const r = Router()
@@ -17,5 +18,6 @@ export function rutasBot({ ruta, accion }) {
   r.post('/cliente', accion('bot_cliente', (req) => asegurarCliente(req.body || {}, null), (req, res) => ({ cliente: res.cliente.id, creado: res.creado })))
   r.post('/seguimiento', accion('bot_seguimiento', (req) => seguimientoPorTelefono(req.body?.telefono, req.body?.texto, null), (req, res) => ({ cliente: res.clienteId })))
   r.post('/tarea', accion('bot_tarea', (req) => tareaPorTelefono(req.body?.telefono, req.body || {}, null), (req, res) => ({ cliente: res.clienteId, tarea: res.tareaId })))
+  r.post('/mensajes', accion('bot_mensajes', (req) => guardarCharla(req.body || {}), (req, res) => ({ chat: res.chatId, nuevos: res.nuevos })))
   return r
 }

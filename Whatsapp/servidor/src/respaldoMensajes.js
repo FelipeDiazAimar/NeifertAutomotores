@@ -33,7 +33,10 @@ const dias = (valor, porDefecto) => (Number(valor) > 0 ? Number(valor) : porDefe
 const CADA_DIAS = () => dias(process.env.WA_RESPALDO_MENSAJES_DIAS, 2)
 const AVISO_DIAS = () => dias(process.env.WA_RESPALDO_AVISO_DIAS, 3)
 
-export const claveDeDia = (dia) => `${PREFIJO}${dia}.enc`
+export const claveDeDia = (dia, prefijo = PREFIJO) => `${prefijo}${dia}.enc`
+// Las charlas de Sofía (sofia.js) van en un respaldo aparte.
+const PREFIJO_SOFIA = 'respaldo/sofia/'
+const mensajesDeSofia = (id) => listarMensajes(id, { conSofia: true }).filter((m) => m.sofia)
 // Argentina es UTC-3 todo el año (sin horario de verano), como en alertas.js.
 const enArgentina = (ahora) => new Date(ahora.getTime() - 3 * 3600e3).toISOString()
 
@@ -81,35 +84,44 @@ let corriendo = false
  * Hace un respaldo, lo verifica y borra los viejos. Devuelve el estado. Si algo falla lo
  * deja anotado (error) y lo tira. `opciones` existe para las pruebas.
  */
-export async function respaldarMensajes({ activo = respaldoActivo(), clave = BACKUP_CLAVE, chats = listarChats, mensajesDe = listarMensajes, ahora = new Date() } = {}) {
+/**
+ * Arma el .zip (mismo formato que "Exportar"), lo cifra, lo guarda en `prefijo` y lo
+ * vuelve a bajar y leer como lo haría Importar. Deja los últimos CONSERVAR.
+ */
+async function guardarVerificado(prefijo, exportados, clave, ahora) {
+  // Mismo filtro que textoDeChat: los de sistema sin texto no salen en el .txt.
+  const cuantos = exportados.reduce((n, { mensajes }) => n + mensajes.filter((m) => m.tipo !== 'sistema' || m.texto).length, 0)
+  const zip = crearZip(exportados.map(({ chat, mensajes }) => ({ nombre: nombreArchivo(chat.nombre, 'txt'), datos: textoDeChat(chat, mensajes) })))
+  const cifrado = cifrar(zip, clave)
+  const claveR2 = claveDeDia(enArgentina(ahora).slice(0, 10), prefijo)
+  await guardar(claveR2, cifrado, 'application/octet-stream')
+
+  const bajado = await leer(claveR2)
+  if (!bajado) throw new Error('No se pudo volver a leer el respaldo recién guardado')
+  const leido = contarZip(descifrar(bajado, clave))
+  if (leido.chats !== exportados.length || leido.mensajes !== cuantos) {
+    throw new Error(`La verificación no coincide (${prefijo}): se guardaron ${exportados.length} chats y ${cuantos} mensajes, se leyeron ${leido.chats} y ${leido.mensajes}`)
+  }
+
+  // Los nombres llevan la fecha: ordenan solos.
+  const viejos = (await listarArchivos(prefijo)).map((a) => a.clave).filter((c) => /\d{4}-\d{2}-\d{2}\.enc$/.test(c)).sort().reverse().slice(CONSERVAR)
+  for (const c of viejos) await borrar(c).catch(() => {})
+  return { chats: leido.chats, mensajes: leido.mensajes, bytes: cifrado.length, clave: claveR2 }
+}
+
+export async function respaldarMensajes({ activo = respaldoActivo(), clave = BACKUP_CLAVE, chats = listarChats, mensajesDe = listarMensajes, mensajesSofia = mensajesDeSofia, ahora = new Date() } = {}) {
   if (!activo) throw Object.assign(new Error('El respaldo no está activo: faltan WA_BACKUP_CLAVE o R2.'), { status: 400 })
   if (corriendo) throw Object.assign(new Error('Ya hay un respaldo de mensajes en curso.'), { status: 409 })
   corriendo = true
   const ts = ahora.toISOString()
   try {
     const lista = chats()
-    const exportados = lista.map((c) => ({ chat: c, mensajes: mensajesDe(c.id) }))
-    // Mismo filtro que textoDeChat: los de sistema sin texto no salen en el .txt.
-    const cuantos = exportados.reduce((n, { mensajes }) => n + mensajes.filter((m) => m.tipo !== 'sistema' || m.texto).length, 0)
-    const zip = crearZip(exportados.map(({ chat, mensajes }) => ({ nombre: nombreArchivo(chat.nombre, 'txt'), datos: textoDeChat(chat, mensajes) })))
-    const cifrado = cifrar(zip, clave)
-    const claveR2 = claveDeDia(enArgentina(ahora).slice(0, 10))
-    await guardar(claveR2, cifrado, 'application/octet-stream')
+    const linea = await guardarVerificado(PREFIJO, lista.map((c) => ({ chat: c, mensajes: mensajesDe(c.id) })), clave, ahora)
+    const deSofia = lista.map((c) => ({ chat: c, mensajes: mensajesSofia(c.id) })).filter((e) => e.mensajes.length)
+    const sofia = deSofia.length ? await guardarVerificado(PREFIJO_SOFIA, deSofia, clave, ahora) : null
 
-    // Prueba: se baja de nuevo, se descifra y se lee como lo haría Importar.
-    const bajado = await leer(claveR2)
-    if (!bajado) throw new Error('No se pudo volver a leer el respaldo recién guardado')
-    const leido = contarZip(descifrar(bajado, clave))
-    if (leido.chats !== lista.length || leido.mensajes !== cuantos) {
-      throw new Error(`La verificación no coincide: se guardaron ${lista.length} chats y ${cuantos} mensajes, se leyeron ${leido.chats} y ${leido.mensajes}`)
-    }
-
-    // Quedan los últimos CONSERVAR (los nombres llevan la fecha: ordenan solos).
-    const viejos = (await listarArchivos(PREFIJO)).map((a) => a.clave).filter((c) => /\d{4}-\d{2}-\d{2}\.enc$/.test(c)).sort().reverse().slice(CONSERVAR)
-    for (const c of viejos) await borrar(c).catch(() => {})
-
-    log('ok', 'Respaldo de mensajes', `${leido.chats} chats · ${leido.mensajes} mensajes · verificado`)
-    return guardarEstado({ ultimoOk: ts, ultimoIntento: ts, verificado: true, chats: leido.chats, mensajes: leido.mensajes, bytes: cifrado.length, clave: claveR2, error: null })
+    log('ok', 'Respaldo de mensajes', `${linea.chats} chats · ${linea.mensajes} mensajes · verificado${sofia ? ` · Sofía: ${sofia.chats} chats · ${sofia.mensajes} mensajes` : ''}`)
+    return guardarEstado({ ultimoOk: ts, ultimoIntento: ts, verificado: true, chats: linea.chats, mensajes: linea.mensajes, bytes: linea.bytes, clave: linea.clave, sofia, error: null })
   } catch (err) {
     guardarEstado({ ultimoIntento: ts, verificado: false, error: err.message })
     throw err

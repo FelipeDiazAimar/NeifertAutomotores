@@ -52,6 +52,13 @@ describe('respaldo de mensajes', () => {
     expect(vistaRespaldoMensajes(true)).toMatchObject({ ultimoOk: '2026-11-24T12:00:00.000Z', activo: true, corriendo: false })
   })
 
+  it('las charlas de Sofía van en un respaldo aparte', async () => {
+    const sofia = { [CHATS[0].id]: [{ id: 'sofia:a', ts: ts('2026-10-06T23:00:00'), deMi: true, tipo: 'texto', texto: 'Hola, soy Sofía', sofia: { rol: 'bot', asistente: 'Sofía' } }] }
+    const r = await respaldarMensajes({ ...base, mensajesSofia: (id) => sofia[id] || [], ahora: new Date('2026-11-25T12:00:00Z') })
+    expect(r).toMatchObject({ chats: 3, mensajes: 3, sofia: { chats: 1, mensajes: 1, clave: 'respaldo/sofia/2026-11-25.enc' } })
+    expect((await listarArchivos('respaldo/sofia/')).map((a) => a.clave)).toEqual(['respaldo/sofia/2026-11-25.enc'])
+  })
+
   it('si lo que se lee de vuelta está dañado, no cuenta como bueno', async () => {
     const original = fs.readFileSync
     // Se corrompe lo que se lee de vuelta: la verificación tiene que fallar y quedar anotado.

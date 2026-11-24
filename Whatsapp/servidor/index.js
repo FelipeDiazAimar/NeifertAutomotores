@@ -30,6 +30,7 @@ import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, inici
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
 import { rutasBot } from './src/bot.js'
+import { esDeSofia, sofiaVisto } from './src/sofia.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
@@ -199,6 +200,17 @@ app.use('/api/chats/:id', (req, res, next) => {
   if (!ocupante) return next()
   res.status(423).json({ error: `${ocupante.nombre} está atendiendo este chat: mientras tanto no se puede cambiar nada.`, ocupado: ocupante })
 })
+// Los mensajes de Sofía son de otra línea: no se les contesta, reacciona, reenvía ni borra desde acá.
+app.use('/api/chats/:id', (req, res, next) => {
+  if (req.method === 'GET') return next()
+  // Rutas /salida/:msgId/... y /media/:msgId/...: el id es el segundo tramo (puede venir codificado).
+  const enRuta = req.path.split('/')[2]
+  let decodificado = enRuta
+  try { decodificado = enRuta && decodeURIComponent(enRuta) } catch { /* queda como vino */ }
+  const ids = [decodificado, req.body?.id, req.body?.citadoId, ...(Array.isArray(req.body?.ids) ? req.body.ids : [])]
+  if (ids.some(esDeSofia)) return res.status(400).json({ error: 'Ese mensaje es de la charla con el asistente: no se puede usar desde esta línea.' })
+  next()
+})
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))
@@ -357,6 +369,7 @@ app.post('/api/chats/:id/salir', exigirLinea, accion('salir_grupo', (req) => wa.
 app.post('/api/chats/:id/borrar', exigirLinea, accion('borrar_chat', (req) => wa.borrarChat(chatId(req)), (req, r) => r))
 app.post('/api/chats/:id/marca', exigirEscritura, accion('marca', (req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null), (req) => ({ marca: req.body?.accion, valor: req.body?.valor ?? null })))
 app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
+  sofiaVisto(chatId(req))
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
