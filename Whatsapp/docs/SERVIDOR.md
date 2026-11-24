@@ -153,6 +153,7 @@ esté definido en el entorno tiene prioridad.
 | `SESION_HORAS` | `12` | Cuánto dura la sesión del panel |
 | `SESION_SECRETO` | se genera | Firma de la cookie. Si no se define se guarda en `DATA_DIR/secreto-sesion` |
 | `WHATSAPP_LOGIN` | — | `off` apaga el login (solo con `HOST=127.0.0.1`) |
+| `WA_BOT_SECRETO` | — | Secreto del bot de respuestas automáticas (ver "API del bot"). Vacío: la API no existe |
 
 Del lado del CRM (Vercel): `VITE_WHATSAPP_PANEL_URL`, la dirección del servidor.
 
@@ -347,6 +348,37 @@ Se puede correr más de una vez: actualiza lo que ya existe, no duplica.
 Volumen real medido en septiembre de 2026: unos 260 mensajes por día, 400 bytes por
 mensaje: el texto de un año entero ocupa alrededor de 38 MB. Lo que más crece son los
 archivos.
+
+---
+
+## API del bot
+
+El bot de respuestas automáticas (Sofía, otro programa en la misma PC, con su propia línea de
+WhatsApp) habla con el CRM por **teléfono**, no por chat. Base: `http://localhost:3100/api/bot`.
+
+- Cabecera `Authorization: Bearer <WA_BOT_SECRETO>` en todos los pedidos. Sin `WA_BOT_SECRETO`
+  en el `.env` la API no existe (404).
+- Cabecera `x-nf-wa: 1` en los `POST` (la exige `exigirCabecera`) y `Content-Type: application/json`.
+- Solo desde esta PC: por el túnel responde 404.
+- Los teléfonos pueden venir en cualquier formato (`3576 41-2286`, `+54 9 3576...`). Lo que
+  escribe el bot queda con `via: 'bot'` y sin usuario del CRM (`creado_por` vacío). La
+  auditoría guarda solo ids, nunca el texto.
+- Errores: `{ "error": "..." }` con 400 (datos inválidos), 404 (no es cliente), 502/503 (CRM).
+
+| Pedido | Cuerpo / respuesta |
+|---|---|
+| `GET /salud` | `{ "ok": true, "crm": true }` |
+| `GET /vehiculos` | `[{ "id", "nombre", "marca", "modelo", "anio", "km", "combustible", "transmision", "reservado", "descripcion", "precioTexto" }]` (sin `imagen`) |
+| `GET /cliente?telefono=3576412286` | `{ "cliente": { "id", "nombre", "telefono", "localidad", "status", "archivado" } }`, o `{ "cliente": null }` |
+| `POST /cliente` | `{ "telefono", "nombre"?, "localidad"?, "interes"?, "notas"? }` → `{ "cliente": {...}, "creado": true }`. Si ya existe devuelve `creado: false` (y con `interes` deja un contacto "Interés: ..."). Teléfono inválido: 400 |
+| `POST /seguimiento` | `{ "telefono", "texto" }` → `{ "ok": true, "clienteId" }`. 404 si no es cliente |
+| `POST /tarea` | `{ "telefono", "titulo", "descripcion"?, "fecha"? (AAAA-MM-DD, por defecto hoy), "hora"? (HH:MM), "prioridad"? (baja, normal, alta) }` → `{ "ok": true, "tareaId", "clienteId" }`. 404 si no es cliente |
+
+```sh
+curl -X POST http://localhost:3100/api/bot/cliente \
+  -H "Authorization: Bearer $WA_BOT_SECRETO" -H "x-nf-wa: 1" -H "Content-Type: application/json" \
+  -d '{"telefono":"3576412286","nombre":"Mauricio","interes":"Corolla 2020"}'
+```
 
 ---
 

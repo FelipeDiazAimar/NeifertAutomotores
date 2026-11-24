@@ -1,7 +1,7 @@
 import './entorno.js'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { upsertChat } from '../src/almacen.js'
-import { buscarClientes, crearAlerta, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, vincularCliente } from '../src/crm.js'
+import { asegurarCliente, buscarClientes, clientePorTelefono, crearAlerta, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, seguimientoPorTelefono, tareaPorTelefono, vincularCliente } from '../src/crm.js'
 
 // CRM de mentira: clientes con teléfonos cargados "a mano", como en el real.
 const CLIENTES = [
@@ -103,5 +103,56 @@ describe('cliente del CRM en cada chat', () => {
     await expect(crearAlerta(J, { titulo: 'Sin hora', fecha: '2026-11-25' }, USUARIO)).rejects.toThrow(/hora/)
     await expect(crearAlerta(J, { titulo: 'Sin fecha', hora: '10:30' }, USUARIO)).rejects.toThrow(/fecha/)
     await expect(crearAlerta('5490000000001@s.whatsapp.net', { titulo: 'x', fecha: '2026-11-25', hora: '10:30' }, USUARIO)).rejects.toThrow(/no está vinculado/)
+  })
+})
+
+describe('el bot habla con el CRM por teléfono', () => {
+  it('reconoce al cliente por teléfono, con cualquier formato; inválido o desconocido da null', async () => {
+    expect((await clientePorTelefono('+54 9 3576 41-2286'))).toMatchObject({ id: 'c1' })
+    expect((await clientePorTelefono('3406518585')).id).toBe('c2')
+    expect(await clientePorTelefono('3511000000')).toBeNull()
+    expect(await clientePorTelefono('abc')).toBeNull()
+  })
+
+  it('si el cliente existe lo devuelve; con interés deja un contacto del bot', async () => {
+    const antes = enviados.length
+    expect(await asegurarCliente({ telefono: '3576412286', nombre: 'Otro' }, null)).toMatchObject({ creado: false, cliente: { id: 'c1' } })
+    expect(enviados.length).toBe(antes)
+    await asegurarCliente({ telefono: '3576412286', interes: 'Corolla 2020' }, null)
+    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { entidad_id: 'c1', tipo: 'contacto', usuario_id: null, datos: { texto: 'Interés: Corolla 2020', via: 'bot' } } })
+  })
+
+  it('si no existe lo crea con los 10 dígitos, nombre por defecto y el interés en las notas', async () => {
+    const r = await asegurarCliente({ telefono: '+54 9 351 555-0101', localidad: 'Rafaela', interes: 'Gol', notas: 'Pidió financiar' }, null)
+    expect(r).toMatchObject({ creado: true, cliente: { nombre: 'Contacto de WhatsApp', telefono: '3515550101' } })
+    const alta = enviados.filter((e) => e.tabla === 'clientes').at(-1).fila
+    expect(alta).toMatchObject({ canal: 'whatsapp', status: 'activo', creado_por: null, localidad: 'Rafaela', notas: 'Pidió financiar\nInterés: Gol' })
+    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { tipo: 'alta', datos: { origen: 'bot' } } })
+    // El segundo pedido ya lo encuentra (se olvidó la caché).
+    expect((await asegurarCliente({ telefono: '3515550101' }, null)).creado).toBe(false)
+  })
+
+  it('un teléfono inválido es un error 400', async () => {
+    await expect(asegurarCliente({ telefono: 'xx' }, null)).rejects.toMatchObject({ status: 400, message: 'Teléfono inválido.' })
+  })
+
+  it('seguimiento y tarea de un teléfono que no es cliente dan 404', async () => {
+    await expect(seguimientoPorTelefono('3511000000', 'hola', null)).rejects.toMatchObject({ status: 404, message: 'Ese teléfono no es cliente del CRM.' })
+    await expect(tareaPorTelefono('3511000000', { titulo: 'x' }, null)).rejects.toMatchObject({ status: 404 })
+    await expect(seguimientoPorTelefono('3576412286', '  ', null)).rejects.toThrow(/qué se habló/)
+    await seguimientoPorTelefono('3576412286', 'Quiere visitar', null)
+    expect(enviados.at(-1).fila.datos).toEqual({ texto: 'Quiere visitar', via: 'bot' })
+  })
+
+  it('la tarea del bot sin fecha es para hoy (Argentina) y sin asignado', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-25T01:30:00Z')) // en Argentina todavía es 24
+    try {
+      await tareaPorTelefono('3576412286', { titulo: 'Llamar' }, null)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.fecha === '2026-11-24').fila).toMatchObject({ cliente_id: 'c1', asignado_a: null, creado_por: null })
+    expect(enviados.at(-1).fila.datos).toMatchObject({ titulo: 'Llamar', via: 'bot' })
   })
 })

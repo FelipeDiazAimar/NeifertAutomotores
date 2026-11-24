@@ -28,6 +28,7 @@ import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
+import { rutasBot } from './src/bot.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
@@ -155,8 +156,9 @@ app.post('/api/sesion/salir', cerrarSesion)
 // QR, sin login del CRM. Exige la clave que la app genera en cada arranque (WA_CLAVE_LOCAL)
 // y que el pedido salga de esta misma PC, no por el túnel. Para cualquier otro no existe.
 const CLAVE_LOCAL = Buffer.from(process.env.WA_CLAVE_LOCAL || '')
+const esDeEstaPc = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
 app.get('/api/local/estado', (req, res) => {
-  const deEstaPc = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
+  const deEstaPc = esDeEstaPc(req)
   const clave = Buffer.from(String(req.get('x-nf-local') || ''))
   if (!CLAVE_LOCAL.length || !deEstaPc || clave.length !== CLAVE_LOCAL.length || !crypto.timingSafeEqual(clave, CLAVE_LOCAL)) {
     return res.status(404).json({ error: 'Ruta inexistente' })
@@ -164,6 +166,20 @@ app.get('/api/local/estado', (req, res) => {
   const { conexion, desde, qr, numeroLinea: linea, rechazo, yo } = wa.estadoConexion({ linea: true })
   res.json({ conexion, desde, qr, numeroLinea: linea, rechazo, telefono: yo?.telefono || null, nombre: yo?.nombre || null })
 })
+
+// El bot de respuestas automáticas (otro programa, en esta misma PC) habla con el CRM por
+// acá: exige WA_BOT_SECRETO y que el pedido salga de esta PC, no por el túnel. Sin el
+// secreto configurado, la ruta no existe.
+const SECRETO_BOT = Buffer.from(process.env.WA_BOT_SECRETO || '')
+function exigirBot(req, res, next) {
+  const clave = Buffer.from(String(req.get('authorization') || '').replace(/^Bearer\s+/i, ''))
+  if (!SECRETO_BOT.length || !esDeEstaPc(req) || clave.length !== SECRETO_BOT.length || !crypto.timingSafeEqual(clave, SECRETO_BOT)) {
+    return res.status(404).json({ error: 'Ruta inexistente' })
+  }
+  req.usuario = null
+  next()
+}
+app.use('/api/bot', exigirBot, rutasBot({ ruta, accion }))
 
 // Todo lo demás exige haber entrado desde el CRM.
 app.use('/api', exigirSesion)
