@@ -2001,6 +2001,7 @@ function renderCrm() {
       ${EMBEBIDO ? `<button class="info-fila" data-act="crm-ver">${ic('user')}<span>Ver ficha en el CRM</span></button>` : ''}
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="seguimiento">${ic('file')}<span>Registrar seguimiento</span></button>
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="alerta">${ic('alert')}<span>Crear alerta</span></button>
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('unlink')}<span>${f.vinculo === 'manual' ? 'Cambiar el cliente' : 'No es este cliente'}</span></button>
     </div>`)
   } else {
@@ -2031,9 +2032,18 @@ function formCrm(tipo, f) {
       <label>Qué se habló<textarea name="texto" rows="3" required maxlength="2000" autofocus placeholder="Ej.: pidió precio del Corolla, le paso cotización el lunes"></textarea></label>
       ${botones('Guardar')}</form>`
   }
+  const yo = sesion.usuario?.id
+  const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
+  if (tipo === 'alerta') {
+    return `<form class="crm-form" data-crm-form="alerta">
+      <label>Alerta<input name="titulo" required maxlength="200" autofocus placeholder="Ej.: Llamar para ver si se decidió por el Gol"></label>
+      <div class="crm-par"><label>Fecha<input type="date" name="fecha" required value="${hoyISO()}"></label><label>Hora<input type="time" name="hora" required></label></div>
+      ${opciones ? `<label>Avisarle a<select name="asignadoA">${opciones}</select></label>` : ''}
+      <label>Detalle<textarea name="descripcion" rows="2" maxlength="1000"></textarea></label>
+      <p class="info-sub">Avisa por notificación, mail y WhatsApp a esa hora.</p>
+      ${botones('Crear alerta')}</form>`
+  }
   if (tipo === 'tarea') {
-    const yo = sesion.usuario?.id
-    const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
     return `<form class="crm-form" data-crm-form="tarea">
       <label>Tarea<input name="titulo" required maxlength="200" autofocus placeholder="Ej.: Llamar para coordinar la prueba de manejo"></label>
       <div class="crm-par"><label>Fecha<input type="date" name="fecha" required value="${hoyISO()}"></label><label>Hora<input type="time" name="hora"></label></div>
@@ -2067,24 +2077,24 @@ async function buscarClienteCrm(q) {
 async function abrirFormCrm(tipo) {
   crmUi.form = tipo
   crmUi.resultados = []
-  if (tipo === 'tarea' && !crmUi.usuarios) crmUi.usuarios = await api('/api/crm/usuarios').catch(() => [])
+  if ((tipo === 'tarea' || tipo === 'alerta') && !crmUi.usuarios) crmUi.usuarios = await api('/api/crm/usuarios').catch(() => [])
   renderCrm()
 }
 
-/** Guarda lo del formulario (crear cliente, seguimiento, tarea) o el vínculo elegido. */
+/** Guarda lo del formulario (crear cliente, seguimiento, tarea, alerta) o el vínculo elegido. */
 async function enviarCrm(tipo, datos, boton) {
   const chat = crmUi.chat
   const err = $('#crmBloque .crm-err')
   if (err) err.hidden = true
   if (boton) boton.disabled = true
-  const ruta = { crear: 'cliente', seguimiento: 'seguimiento', tarea: 'tarea', vincular: 'vincular' }[tipo]
+  const ruta = { crear: 'cliente', seguimiento: 'seguimiento', tarea: 'tarea', alerta: 'alerta', vincular: 'vincular' }[tipo]
   try {
     const r = await api(`/api/chats/${enc(chat)}/crm/${ruta}`, { method: 'POST', json: datos })
     if (crmUi.chat !== chat) return
     crmUi.form = null
     if (r?.configurado !== undefined) crmUi.ficha = r
     renderCrm()
-    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
+    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
   } catch (e) {
     if (err) {
       err.textContent = e.message

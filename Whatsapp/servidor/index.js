@@ -375,6 +375,7 @@ app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_client
 }, (req, r) => ({ cliente: r.cliente?.id })))
 app.post('/api/chats/:id/crm/seguimiento', exigirEscritura, accion('crm_seguimiento', (req) => crm.registrarSeguimiento(chatId(req), req.body?.texto, req.usuario), (req, r) => ({ cliente: r.clienteId })))
 app.post('/api/chats/:id/crm/tarea', exigirEscritura, accion('crm_tarea', (req) => crm.crearTarea(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, tarea: r.tareaId })))
+app.post('/api/chats/:id/crm/alerta', exigirEscritura, accion('crm_alerta', (req) => crm.crearAlerta(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, alerta: r.alertaId })))
 
 app.get('/api/chats/:id/integrantes',ruta((req) => wa.integrantesDe(chatId(req))))
 app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))

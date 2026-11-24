@@ -210,7 +210,33 @@ export async function crearTarea(jid, { titulo, descripcion, fecha, hora, priori
   return { ok: true, tareaId: tarea.id, clienteId: cliente.id }
 }
 
-/** Usuarios activos del CRM, para asignar la tarea. */
+/**
+ * Alerta en el CRM para este cliente: avisa por push, mail y WhatsApp a la fecha y hora
+ * elegidas (api/crm/check-alertas.js y alertas.js). A diferencia de la tarea, la hora es
+ * obligatoria y siempre tiene a quién avisar.
+ */
+export async function crearAlerta(jid, { titulo, descripcion, fecha, hora, asignadoA } = {}, usuario) {
+  const limpio = String(titulo || '').trim()
+  if (!limpio) throw error('La alerta necesita un título.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) throw error('Elegí la fecha de la alerta.')
+  if (!/^\d{2}:\d{2}$/.test(hora || '')) throw error('Elegí la hora de la alerta.')
+  const asignado = asignadoA || usuario?.id
+  if (!asignado) throw error('Elegí a quién avisarle.')
+  const cliente = await clienteDelChat(jid)
+  const fila = {
+    titulo: limpio.slice(0, 200),
+    descripcion: String(descripcion || '').trim() || null,
+    fecha,
+    hora,
+    asignado_a: asignado,
+    cliente_id: cliente.id,
+    creado_por: usuario?.id || null,
+  }
+  const [alerta] = await rest('alertas', { metodo: 'POST', cuerpo: fila })
+  return { ok: true, alertaId: alerta.id, clienteId: cliente.id }
+}
+
+/** Usuarios activos del CRM, para asignar la tarea o la alerta. */
 export async function usuariosCrm() {
   return rest('usuarios?select=id,nombre,usuario,rol&activo=eq.true&order=nombre.asc')
 }
