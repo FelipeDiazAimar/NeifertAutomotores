@@ -63,7 +63,9 @@ Guía para dejar andando a Sofía en la PC servidor de la concesionaria.
       - URL: `http://localhost:3100/api/bot`
       - Secreto: el mismo `WA_BOT_SECRETO`
       - Tocá **Probar conexión**: tiene que decir OK.
-   6. Si todo está bien, activá el asistente.
+   6. **Responder a:** dejá *Todos*. Si hay números a los que Sofía no tiene que contestar (los empleados, por ejemplo), usá *Todos menos estos*, con un número por línea.
+   7. **Pausa si contestás vos:** dejala activada (2 h). Si alguien contesta a mano desde el celular de Sofía, ella no se mete en ese chat durante ese tiempo.
+   8. Si todo está bien, activá el asistente.
 
 ### 3. Opcional, en el WhatsApp del CRM
 
