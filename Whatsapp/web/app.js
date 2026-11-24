@@ -3614,6 +3614,7 @@ function setView(view) {
     renderLog()
     renderPrefs()
     renderPrivacidad()
+    renderRespaldoMensajes()
   }
   renderPill()
 }
@@ -3632,6 +3633,28 @@ function renderPrivacidad() {
   ]
   $('#privacidadCard').innerHTML = `<ul class="priv">${filas.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
     <p class="card-sub">Lo define la concesionaria en la configuración del servidor. Todo lo que se hace desde el panel queda registrado con el nombre de quien lo hizo.</p>`
+}
+
+/** Respaldo programado de los mensajes (solo quien maneja la línea): último bueno, si se pudo leer de vuelta y "Respaldar ahora". */
+async function renderRespaldoMensajes() {
+  if (!puede.linea()) return
+  const el = $('#respaldoMsgCard')
+  let r
+  try {
+    r = await api('/api/respaldo/mensajes')
+  } catch (err) {
+    el.innerHTML = `<p class="path">No se pudo leer el estado del respaldo: ${esc(err.message)}</p>`
+    return
+  }
+  const fecha = r.ultimoOk ? new Date(r.ultimoOk).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+  const estado = !r.activo
+    ? 'Inactivo: falta configurar R2 y WA_BACKUP_CLAVE en el servidor.'
+    : r.error
+      ? `Error: ${r.error}`
+      : r.verificado ? 'Verificado ✓ (se pudo leer de vuelta)' : 'Todavía no hay respaldo.'
+  el.innerHTML = `<div class="toggle-row"><div>${fecha ? `Último respaldo: ${esc(fecha)}` : 'Sin respaldos todavía'}<span>${esc(estado)}${r.ultimoOk ? ` · ${fmtNum(r.chats)} chats · ${fmtNum(r.mensajes)} mensajes` : ''}</span></div>
+    <button class="btn ghost" data-act="respaldar-mensajes" ${r.activo && !r.corriendo ? '' : 'disabled'}>${ic('download')}${r.corriendo ? 'Respaldando…' : 'Respaldar ahora'}</button></div>
+    <p class="card-sub">Cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar, los administradores reciben una alerta.</p>`
 }
 
 function esOscuro() {
@@ -4127,6 +4150,17 @@ document.addEventListener('click', async (e) => {
       if (como) await exportarTodo(como, t)
       break
     }
+    case 'respaldar-mensajes':
+      t.disabled = true
+      toast('Respaldando los mensajes…', 600000)
+      try {
+        const r = await api('/api/respaldo/mensajes', { method: 'POST' })
+        toast(`Respaldo listo y verificado: ${fmtNum(r.chats)} chats, ${fmtNum(r.mensajes)} mensajes.`, 5000)
+      } catch (err) {
+        toast(`No se pudo respaldar: ${err.message}`, 8000)
+      }
+      renderRespaldoMensajes()
+      break
     case 'log-filtro':
       state.logFiltro = t.dataset.valor
       renderLog()

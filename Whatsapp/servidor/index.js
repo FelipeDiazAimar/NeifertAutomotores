@@ -24,6 +24,7 @@ import {
 import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual, sinUsuario } from './src/auth.js'
 import { vigilarAlertas } from './src/alertas.js'
+import { respaldarMensajes, vigilarRespaldoMensajes, vistaRespaldoMensajes } from './src/respaldoMensajes.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
@@ -342,6 +343,12 @@ app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) 
   const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
   res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
 }, () => ({})))
+// Respaldo programado de los mensajes (src/respaldoMensajes.js): el estado y "respaldar ahora".
+app.get('/api/respaldo/mensajes', exigirLinea, ruta(() => vistaRespaldoMensajes()))
+app.post('/api/respaldo/mensajes', exigirLinea, accion('respaldo_mensajes', async () => {
+  await respaldarMensajes()
+  return vistaRespaldoMensajes()
+}, (req, r) => ({ chats: r.chats, mensajes: r.mensajes, verificado: r.verificado })))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))
@@ -512,6 +519,8 @@ const servidor = app.listen(PUERTO, HOST, () => {
       log,
     })
   }
+  // Respaldo de los mensajes cada 2 días (con aviso a admin/dueño si se atrasa): solo con la base en Supabase.
+  if (almacen.modo === 'supabase') vigilarRespaldoMensajes()
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
 })

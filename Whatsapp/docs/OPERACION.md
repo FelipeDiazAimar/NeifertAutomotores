@@ -105,6 +105,25 @@ el respaldo**: guardarla en un gestor de contraseñas (y una copia en sobre cerr
 
 Forzar un respaldo ya (por ejemplo antes de mudar el servicio): `npm run respaldar`.
 
+### Respaldo de los mensajes (cada 2 días)
+
+Además de la sesión, el servidor respalda **todos los mensajes** (solo texto; las fotos y
+archivos ya están en R2) en `respaldo/mensajes/AAAA-MM-DD.enc`, cifrado con la misma
+`WA_BACKUP_CLAVE`. Quedan los últimos 15. Se revisa cada hora y se hace uno nuevo si el
+último bueno tiene más de `WA_RESPALDO_MENSAJES_DIAS` días (2 por defecto).
+
+- **Prueba de que se puede importar**: apenas se guarda, se baja de nuevo, se descifra y se lee
+  con el mismo código de "Importar respaldo" (sin escribir nada). Solo cuenta como bueno si
+  los chats y mensajes leídos coinciden con los exportados.
+- **Aviso si se atrasa**: pasados `WA_RESPALDO_AVISO_DIAS` días (3 por defecto) sin un respaldo
+  bueno, se crea una alerta "Respaldo de WhatsApp atrasado" para cada admin y dueño del CRM
+  (les llega por push, mail y WhatsApp), una vez cada 24 h mientras siga atrasado.
+- **Estado y respaldo manual**: pestaña Conexión → "Respaldo de mensajes" → "Respaldar ahora".
+- **Recuperar**: `npm run restaurar-mensajes` (el último) o
+  `npm run restaurar-mensajes -- --fecha=AAAA-MM-DD`. Baja, descifra y deja un
+  `Mensajes de WhatsApp Neifert AAAA-MM-DD.zip` en la carpeta actual; se carga desde el CRM con
+  "Importar respaldo" (suma lo que falta, no duplica).
+
 ### Restaurar en una PC nueva
 
 1. **Apagar la PC vieja** (o desinstalar su servicio). Si quedan las dos, error 440.
