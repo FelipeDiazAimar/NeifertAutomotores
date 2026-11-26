@@ -601,4 +601,12 @@ process.on('SIGTERM', () => cerrar())
 process.on('message', (m) => m?.tipo === 'cerrar' && cerrar({ cerrarLectura: !!m.cerrarLectura }))
 // Si la app se cerró de golpe, el servidor no queda huérfano ocupando el puerto.
 process.on('disconnect', () => cerrar())
-process.on('unhandledRejection', (err) => log('error', 'Error no controlado', err?.message || String(err)))
+// Con el código y el lugar del código donde pasó: sin eso no se sabe qué lo causó.
+const dondeFue = (err) => {
+  const m = String(err?.stack || '').match(/[\\/](src[\\/][\w.]+|index\.js):(\d+)/)
+  return m ? `${m[1].replace(/\\/g, '/')}:${m[2]}` : null
+}
+process.on('unhandledRejection', (err) => {
+  const lugar = dondeFue(err)
+  log('error', 'Error no controlado', [err?.message || String(err), err?.code, lugar && `en ${lugar}`].filter(Boolean).join(' · '))
+})
