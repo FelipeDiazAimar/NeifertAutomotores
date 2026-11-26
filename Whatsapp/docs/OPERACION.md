@@ -117,9 +117,9 @@ archivos ya están en R2) en `respaldo/mensajes/AAAA-MM-DD.enc`, cifrado con la 
   los chats y mensajes leídos coinciden con los exportados.
 - **Aviso si se atrasa**: pasados `WA_RESPALDO_AVISO_DIAS` días (3 por defecto) sin un respaldo
   bueno, se crea una alerta "Respaldo de WhatsApp atrasado" para cada admin y dueño del CRM
-  y para los de `WA_RESPALDO_AVISAR_A` (usuarios del CRM o teléfonos, separados por coma; por
-  ejemplo `bruno`). Les llega por push, mail y WhatsApp, una vez cada 24 h mientras siga atrasado.
-  A los demás vendedores no.
+  y para los empleados elegidos en el panel (Conexión → Respaldo de mensajes → "Avisar también
+  a"). Les llega por push, mail y WhatsApp, una vez cada 24 h mientras siga atrasado. A los demás
+  vendedores no.
 - **Estado y respaldo manual**: pestaña Conexión → "Respaldo de mensajes" → "Respaldar ahora".
 - **Recuperar**: `npm run restaurar-mensajes` (el último) o
   `npm run restaurar-mensajes -- --fecha=AAAA-MM-DD`. Baja, descifra y deja un

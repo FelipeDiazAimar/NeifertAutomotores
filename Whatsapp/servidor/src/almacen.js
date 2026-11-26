@@ -72,7 +72,7 @@ mudarCarpetasViejas()
 
 for (const dir of [DATA_DIR, LINEA_DIR, MSG_DIR]) fs.mkdirSync(dir, { recursive: true })
 
-const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false, clientesAutomaticos: false }
+const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false, clientesAutomaticos: false, avisarRespaldo: [] }
 
 const estado = EN_SUPABASE ? {} : leerJson(ESTADO_FILE, {})
 function completarEstado() {
@@ -157,7 +157,11 @@ export const clave = (jid) => jid.replace(/[^0-9a-z]+/gi, '_')
 export const config = () => estado.config
 export function setConfig(patch) {
   for (const k of Object.keys(CONFIG_INICIAL)) {
-    if (typeof patch[k] === 'boolean') estado.config[k] = patch[k]
+    if (typeof patch[k] === 'boolean' && typeof CONFIG_INICIAL[k] === 'boolean') estado.config[k] = patch[k]
+  }
+  // Usuarios del CRM (ids) que también reciben el aviso de respaldo atrasado.
+  if (Array.isArray(patch.avisarRespaldo)) {
+    estado.config.avisarRespaldo = [...new Set(patch.avisarRespaldo.map(String).filter((id) => /^[\w-]{1,64}$/.test(id)))].slice(0, 50)
   }
   guardarEstado()
   return estado.config

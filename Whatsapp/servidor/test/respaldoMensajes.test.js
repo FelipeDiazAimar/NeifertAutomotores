@@ -92,11 +92,10 @@ describe('respaldo de mensajes', () => {
 describe('aviso si los respaldos se atrasan', () => {
   const opciones = { ...base, configurado: true }
 
-  it('avisa a admin, dueño y a los de WA_RESPALDO_AVISAR_A (usuario o teléfono), no a otros vendedores', () => {
-    const ids = (extra) => destinatariosAviso(USUARIOS, extra).map((u) => u.id)
-    expect(ids('')).toEqual(['u-admin', 'u-dueno'])
-    expect(ids('Bruno')).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
-    expect(ids('+54 9 3564 676445')).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
+  it('avisa a admin, dueño y a los elegidos en el panel, no a otros vendedores', () => {
+    const ids = (elegidos) => destinatariosAviso(USUARIOS, elegidos).map((u) => u.id)
+    expect(ids([])).toEqual(['u-admin', 'u-dueno'])
+    expect(ids(['u-bruno'])).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
   })
 
   it('crea una alerta por admin/dueño y no repite antes de 24 h', async () => {

@@ -3726,8 +3726,40 @@ async function renderRespaldoMensajes() {
       : r.verificado ? 'Verificado ✓ (se pudo leer de vuelta)' : 'Todavía no hay respaldo.'
   el.innerHTML = `<div class="toggle-row"><div>${fecha ? `Último respaldo: ${esc(fecha)}` : 'Sin respaldos todavía'}<span>${esc(estado)}${r.ultimoOk ? ` · ${fmtNum(r.chats)} chats · ${fmtNum(r.mensajes)} mensajes` : ''}</span></div>
     <button class="btn ghost" data-act="respaldar-mensajes" ${r.activo && !r.corriendo ? '' : 'disabled'}>${ic('download')}${r.corriendo ? 'Respaldando…' : 'Respaldar ahora'}</button></div>
-    <p class="card-sub">Cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar, los administradores reciben una alerta.</p>`
+    <p class="card-sub">Cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar, se avisa a admin, dueño y a quienes marques abajo.</p>
+    <div id="avisarRespaldo"></div>`
+  renderAvisarRespaldo()
 }
+
+/** Empleados del CRM que reciben el aviso de respaldo atrasado (admin y dueño, siempre). */
+async function renderAvisarRespaldo() {
+  const el = $('#avisarRespaldo')
+  if (!el) return
+  const usuarios = await api('/api/crm/usuarios').catch(() => null)
+  if (!usuarios?.length) return (el.innerHTML = '')
+  const elegidos = new Set(state.config.avisarRespaldo || [])
+  const fila = (u) => {
+    const siempre = ['admin', 'dueno'].includes(u.rol)
+    return `<label class="check-row"><input type="checkbox" data-avisar-respaldo="${esc(u.id)}" ${siempre || elegidos.has(u.id) ? 'checked' : ''} ${siempre ? 'disabled' : ''}>
+      <span>${esc(u.nombre || u.usuario)}${siempre ? ' <small>(siempre)</small>' : ''}</span></label>`
+  }
+  el.innerHTML = `<h3 class="sub-titulo">Avisar si se atrasa</h3><div class="check-lista">${usuarios.map(fila).join('')}</div>`
+}
+
+document.addEventListener('change', async (e) => {
+  const id = e.target.dataset?.avisarRespaldo
+  if (!id) return
+  const elegidos = new Set(state.config.avisarRespaldo || [])
+  if (e.target.checked) elegidos.add(id)
+  else elegidos.delete(id)
+  try {
+    state.config = await api('/api/config', { method: 'POST', json: { avisarRespaldo: [...elegidos] } })
+    toast(e.target.checked ? 'Va a recibir el aviso si el respaldo se atrasa.' : 'Ya no recibe el aviso.')
+  } catch (err) {
+    e.target.checked = !e.target.checked
+    toast(`No se pudo guardar: ${err.message}`)
+  }
+})
 
 function esOscuro() {
   const t = document.documentElement.dataset.theme
