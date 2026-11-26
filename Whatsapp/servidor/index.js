@@ -504,9 +504,17 @@ const servidor = app.listen(PUERTO, HOST, () => {
       // Si se está apagando (se cerró la app justo al arrancar), la base ya se cerró: no es un error.
       .catch((err) => cerrando || log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
     // Este CRM (CRM_URL) muestra esta línea cuando el servidor está apagado.
-    registrarCrm()
-      .then((r) => r && log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`))
-      .catch((err) => cerrando || log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
+    const anotarCrm = (primera) =>
+      registrarCrm()
+        .then((r) => {
+          if (!r) return
+          if (r.ocupada) primera && log('aviso', 'Vista sin conexión del CRM', `${r.host} muestra la línea +${r.ocupada}, que tiene su servidor andando`)
+          else if (primera || r.antes) log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`)
+        })
+        .catch((err) => cerrando || (primera && log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message)))
+    anotarCrm(true)
+    // Cada 10 min: si otra línea se la había quedado y su servidor ya se apagó, se recupera.
+    setInterval(() => anotarCrm(false), 10 * 60e3).unref()
   }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()

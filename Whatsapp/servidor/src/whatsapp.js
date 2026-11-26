@@ -56,6 +56,7 @@ import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
 import { altaAutomatica } from './crm.js'
+import { renovarConexiones } from './nube.js'
 import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
@@ -366,6 +367,7 @@ function arrancarVigia() {
     estado: () => ({ conexion, desde: conexionDesde }),
     ultimaSenalCelular: () => meta().ultimaSenalCelular || null,
     alDespertar: () => {
+      renovarConexiones()
       if (detenido) return
       intentos = 0
       iniciar().catch((err) => log('error', 'No se pudo reconectar al despertar', err.message))
