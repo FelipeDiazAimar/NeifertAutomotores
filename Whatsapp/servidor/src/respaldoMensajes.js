@@ -24,6 +24,7 @@ import { crearZip, nombreArchivo, textoDeChat } from './exportar.js'
 import { entradasZip, leerChatTxt } from './importar.js'
 import * as crm from './crm.js'
 import { log } from './eventos.js'
+import { telefonoEmpleado } from './alertas.js'
 
 const PREFIJO = 'respaldo/mensajes/'
 const CONSERVAR = 15
@@ -131,9 +132,22 @@ export async function respaldarMensajes({ activo = respaldoActivo(), clave = BAC
 }
 
 /** Una alerta del CRM por cada admin/dueño activo (el CRM la manda por push, mail y WhatsApp). */
+/**
+ * A quién se avisa: admin y dueño, más los de WA_RESPALDO_AVISAR_A (usuarios del CRM o
+ * teléfonos, separados por coma; por ejemplo "bruno" o "3564 67-6445"). Nunca a los vendedores
+ * que no estén en esa lista.
+ */
+export function destinatariosAviso(usuarios, extra = process.env.WA_RESPALDO_AVISAR_A) {
+  const lista = String(extra || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean)
+  const telefonos = new Set(lista.map(telefonoEmpleado).filter(Boolean))
+  return usuarios.filter((u) =>
+    ['admin', 'dueno'].includes(u.rol) || lista.includes(String(u.usuario || '').toLowerCase()) || (u.telefono && telefonos.has(telefonoEmpleado(u.telefono))),
+  )
+}
+
 async function avisarAtraso(estado, ahora, rest) {
   const [fecha, hora] = [enArgentina(ahora).slice(0, 10), enArgentina(ahora).slice(11, 16)]
-  const usuarios = await rest('usuarios?select=id&activo=eq.true&rol=in.(admin,dueno)')
+  const usuarios = destinatariosAviso(await rest('usuarios?select=id,usuario,rol,telefono&activo=eq.true'))
   const ultimo = estado.ultimoOk ? new Date(estado.ultimoOk).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'nunca'
   const descripcion = `Último respaldo de mensajes bueno: ${ultimo}.${estado.error ? ` Último error: ${estado.error}` : ''}`
   // Uno que falla no frena a los demás. Si llegó a alguno, no se reintenta en una hora

@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listarArchivos } from '../src/archivos.js'
-import { claveDeDia, respaldarMensajes, revisarRespaldoMensajes, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
+import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
 
 const CLAVE = 'clave larga de prueba'
 const ts = (iso) => new Date(iso).getTime() / 1000
@@ -24,7 +24,12 @@ const MENSAJES = {
 const base = { activo: true, clave: CLAVE, chats: () => CHATS, mensajesDe: (id) => MENSAJES[id] }
 const archivoEstado = () => path.join(DIR_PRUEBA, 'lineas', 'sin-numero', 'respaldo-mensajes.json')
 
-const USUARIOS = [{ id: 'u-admin' }, { id: 'u-dueno' }]
+const USUARIOS = [
+  { id: 'u-admin', usuario: 'feli', rol: 'admin' },
+  { id: 'u-dueno', usuario: 'dueno', rol: 'dueno' },
+  { id: 'u-vend', usuario: 'nico', rol: 'vendedor', telefono: '3564 62-7834' },
+  { id: 'u-bruno', usuario: 'bruno', rol: 'vendedor', telefono: '3564 67-6445' },
+]
 let alertas
 beforeAll(() =>
   vi.stubGlobal('fetch', async (url, opts = {}) => {
@@ -86,6 +91,13 @@ describe('respaldo de mensajes', () => {
 
 describe('aviso si los respaldos se atrasan', () => {
   const opciones = { ...base, configurado: true }
+
+  it('avisa a admin, dueño y a los de WA_RESPALDO_AVISAR_A (usuario o teléfono), no a otros vendedores', () => {
+    const ids = (extra) => destinatariosAviso(USUARIOS, extra).map((u) => u.id)
+    expect(ids('')).toEqual(['u-admin', 'u-dueno'])
+    expect(ids('Bruno')).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
+    expect(ids('+54 9 3564 676445')).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
+  })
 
   it('crea una alerta por admin/dueño y no repite antes de 24 h', async () => {
     // Nunca hubo uno bueno y este falla: no hay con qué respaldar.
