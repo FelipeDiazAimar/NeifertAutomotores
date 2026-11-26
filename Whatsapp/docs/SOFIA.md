@@ -55,7 +55,7 @@ Guía para dejar andando a Sofía en la PC servidor de la concesionaria.
    Si Windows muestra un aviso: *Más información → Ejecutar de todas formas*.
 2. Entrá con la cuenta. Tiene que tener un plan con **IA**.
 3. Pestaña **Asistente IA**:
-   1. **Número:** *Vincular otro número* → escaneá el QR con el **celular de Sofía**. No uses el de la concesionaria: ese ya lo usa el servidor, y dos programas con el mismo número se desconectan entre sí.
+   1. **Número:** *Vincular otro número* → escaneá el QR con el **celular de Sofía**. Conviene que sea un número propio: WhatsApp deja vincular el bot al mismo número que el servidor (son dos dispositivos distintos), pero hoy en el CRM cada mensaje de Sofía se vería dos veces.
    2. **Negocio:** nombre "Neifert Automotores", rubro "concesionaria", tono, e información útil: horarios, dirección, formas de pago, si toman usados, etc. El catálogo de autos no hace falta cargarlo: lo trae solo del CRM.
    3. **Firma:** `Sofía · asistente virtual`. Cada respuesta sale con esa firma.
    4. **Horario de atención:** activalo con los días y horas en que atienden personas. Sofía contesta solo **fuera** de ese horario.
@@ -93,6 +93,6 @@ Guía para dejar andando a Sofía en la PC servidor de la concesionaria.
 
 ## Reglas
 
-- **El número de la concesionaria va solo en el servidor. El de Sofía, solo en el bot.**
+- **Sofía con su propio número** (recomendado; ver el paso 1 del bot). Lo que nunca se puede es tener dos servidores de WhatsApp con el mismo número, ni copiar la carpeta de la sesión a otra PC: se desconectan entre sí (error 440).
 - El secreto no se comparte por chat. Si se filtra, generá otro y cambialo en los dos lados.
 - La PC servidor no se suspende ni se apaga (ver `ESCRITORIO.md`).
