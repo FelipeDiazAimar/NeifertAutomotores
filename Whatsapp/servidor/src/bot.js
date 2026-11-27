@@ -6,7 +6,7 @@
  */
 import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
-import { datosNegocio, vehiculosWeb } from './whatsapp.js'
+import { datosNegocio, fotoGrandeVehiculoWeb, fotosDeVehiculoWeb, vehiculosWeb } from './whatsapp.js'
 import { guardarCharla } from './sofia.js'
 import { guardarReporte } from './sofiaEstado.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
@@ -26,6 +26,24 @@ export function rutasBot({ ruta, accion }) {
     const lista = (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))
     return FILTROS.some((f) => req.query[f] !== undefined) ? filtrarVehiculos(lista, req.query) : lista
   }))
+  // Las fotos de un auto: { nombre, descripcion, fotos: ['/vehiculos/<id>/foto/0', ...] } (hasta 5, rutas de este mismo API).
+  r.get('/vehiculos/:id/fotos', ruta(async (req) => {
+    const v = await fotosDeVehiculoWeb(req.params.id)
+    if (!v) throw Object.assign(new Error('No existe ese auto'), { status: 404 })
+    const fotos = v.fotos.slice(0, 5).map((_, i) => `/vehiculos/${encodeURIComponent(req.params.id)}/foto/${i}`)
+    return { nombre: v.nombre, descripcion: v.descripcion, fotos }
+  }))
+  // Una foto como JPEG (1280 px como mucho), lista para mandar por WhatsApp.
+  r.get('/vehiculos/:id/foto/:n', async (req, res) => {
+    try {
+      const jpg = await fotoGrandeVehiculoWeb(req.params.id, Number(req.params.n))
+      if (!jpg) return res.status(404).json({ error: 'No hay esa foto' })
+      res.setHeader('Cache-Control', 'private, max-age=600')
+      res.type('image/jpeg').send(jpg)
+    } catch (err) {
+      res.status(err.status || 500).json({ error: err.message })
+    }
+  })
   r.get('/cliente', ruta(async (req) => ({ cliente: await clientePorTelefono(req.query.telefono) })))
   r.post('/cliente', accion('bot_cliente', (req) => asegurarCliente(req.body || {}, null), (req, res) => ({ cliente: res.cliente.id, creado: res.creado })))
   r.post('/seguimiento', accion('bot_seguimiento', (req) => seguimientoPorTelefono(req.body?.telefono, req.body?.texto, null), (req, res) => ({ cliente: res.clienteId })))

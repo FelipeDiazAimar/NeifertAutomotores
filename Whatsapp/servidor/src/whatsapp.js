@@ -62,7 +62,7 @@ import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
-import { aNotaDeVoz, duracionOgg, formaDeOnda, miniatura } from './audio.js'
+import { aNotaDeVoz, duracionOgg, fotoJpeg, formaDeOnda, miniatura } from './audio.js'
 import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
 import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos, medirR2 } from './archivos.js'
 import * as cuota from './cuota.js'
@@ -2997,6 +2997,35 @@ export async function fotoVehiculoWeb(id) {
     }
   }
   return null
+}
+
+/** Un auto de la página con las fotos que tiene (para que el bot las mande por WhatsApp): { nombre, descripcion, fotos: [url] }. null si no existe. */
+export async function fotosDeVehiculoWeb(id) {
+  const v = (await vehiculosWebTodos()).find((x) => x.id === String(id))
+  if (!v) return null
+  const precio = precioWeb(v)
+  return { nombre: tituloWeb(v), descripcion: [tituloWeb(v), v.anio, precio].filter(Boolean).join(' · '), fotos: fotosWeb(v) }
+}
+
+const fotosGrandesCache = new Map() // `${id}|${n}` → Buffer jpg 1280 px
+
+/** La foto número n (desde 0) de un auto, como JPEG de hasta 1280 px. null si no hay o no se pudo bajar. */
+export async function fotoGrandeVehiculoWeb(id, n) {
+  const clave = `${id}|${n}`
+  if (fotosGrandesCache.has(clave)) return fotosGrandesCache.get(clave)
+  const v = await fotosDeVehiculoWeb(id)
+  const url = v?.fotos[n]
+  if (!url) return null
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) return null
+    const jpg = await fotoJpeg(Buffer.from(await r.arrayBuffer()))
+    fotosGrandesCache.set(clave, jpg)
+    if (fotosGrandesCache.size > 40) fotosGrandesCache.delete(fotosGrandesCache.keys().next().value)
+    return jpg
+  } catch {
+    return null
+  }
 }
 
 /**

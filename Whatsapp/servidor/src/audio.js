@@ -237,6 +237,14 @@ export async function formaDeOnda(audio, barras = 64) {
 }
 
 /**
+ * Una foto como JPEG de hasta `ancho` px (1280 por defecto), para mandarla por WhatsApp: las del catálogo están en WebP
+ * u otros formatos que WhatsApp no siempre acepta como imagen.
+ */
+export async function fotoJpeg(buffer, ancho = 1280) {
+  return ffmpeg(['-i', 'pipe:0', '-vf', `scale='min(${Math.trunc(ancho)},iw)':-2`, '-frames:v', '1', '-f', 'image2', '-c:v', 'mjpeg', '-q:v', '3', 'pipe:1'], buffer)
+}
+
+/**
  * Miniatura JPEG (480 px de ancho como mucho) de una foto o del primer segundo de un
  * video. Así la lista de mensajes no baja fotos de varios MB para mostrar una vista previa.
  * Los videos van por un archivo temporal: ffmpeg necesita poder saltar dentro de un mp4.
