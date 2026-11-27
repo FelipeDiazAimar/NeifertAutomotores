@@ -20,7 +20,7 @@ import { BACKUP_CLAVE, LINEA_DIR } from './config.js'
 import { respaldoActivo, cifrar, descifrar } from './respaldo.js'
 import { guardar, leer, listarArchivos, borrar } from './archivos.js'
 import { config, listarChats, listarMensajes } from './almacen.js'
-import { crearZip, nombreArchivo, textoDeChat } from './exportar.js'
+import { carpetaDeChat, crearZip, textoDeChat } from './exportar.js'
 import { entradasZip, leerChatTxt } from './importar.js'
 import * as crm from './crm.js'
 import { log } from './eventos.js'
@@ -33,6 +33,23 @@ const dias = (valor, porDefecto) => (Number(valor) > 0 ? Number(valor) : porDefe
 const CADA_DIAS = () => dias(process.env.WA_RESPALDO_MENSAJES_DIAS, 2)
 const AVISO_DIAS = () => dias(process.env.WA_RESPALDO_AVISO_DIAS, 3)
 
+/**
+ * Ruta de cada chat dentro del .zip, la misma carpeta que el export normal. Nunca se repite:
+ * si dos chats caen en la misma carpeta (dos grupos con el mismo nombre, dos "Juan"), o si es
+ * un grupo, se le suma el id del chat entre corchetes, que "Importar respaldo" reconoce.
+ */
+export function rutasDeChats(chats) {
+  const base = chats.map(carpetaDeChat)
+  const veces = base.reduce((m, c) => m.set(c.toLowerCase(), (m.get(c.toLowerCase()) || 0) + 1), new Map())
+  const usadas = new Set()
+  return chats.map((chat, i) => {
+    let carpeta = chat.esGrupo || veces.get(base[i].toLowerCase()) > 1 ? `${base[i]} [${chat.id}]` : base[i]
+    for (let n = 2; usadas.has(carpeta.toLowerCase()); n++) carpeta = `${base[i]} [${chat.id}] (${n})`
+    usadas.add(carpeta.toLowerCase())
+    return `${carpeta}/Chat de WhatsApp.txt`
+  })
+}
+
 export const claveDeDia = (dia, prefijo = PREFIJO) => `${prefijo}${dia}.enc`
 // Las charlas de Sofía (sofia.js) van en un respaldo aparte.
 const PREFIJO_SOFIA = 'respaldo/sofia/'
@@ -40,7 +57,7 @@ const mensajesDeSofia = (id) => listarMensajes(id, { conSofia: true }).filter((m
 // Argentina es UTC-3 todo el año (sin horario de verano), como en alertas.js.
 const enArgentina = (ahora) => new Date(ahora.getTime() - 3 * 3600e3).toISOString()
 
-const ESTADO_VACIO = { ultimoOk: null, ultimoIntento: null, ultimoAviso: null, verificado: false, chats: 0, mensajes: 0, bytes: 0, clave: null, error: null }
+const ESTADO_VACIO = { ultimoOk: null, ultimoIntento: null, ultimoAviso: null, verificado: false, chats: 0, mensajes: 0, bytes: 0, clave: null, sofia: null, sofiaError: null, error: null }
 
 export function estadoRespaldoMensajes() {
   try {
@@ -91,7 +108,8 @@ let corriendo = false
 async function guardarVerificado(prefijo, exportados, clave, ahora) {
   // Mismo filtro que textoDeChat: los de sistema sin texto no salen en el .txt.
   const cuantos = exportados.reduce((n, { mensajes }) => n + mensajes.filter((m) => m.tipo !== 'sistema' || m.texto).length, 0)
-  const zip = crearZip(exportados.map(({ chat, mensajes }) => ({ nombre: nombreArchivo(chat.nombre, 'txt'), datos: textoDeChat(chat, mensajes) })))
+  const rutas = rutasDeChats(exportados.map((e) => e.chat))
+  const zip = crearZip(exportados.map(({ chat, mensajes }, i) => ({ nombre: rutas[i], datos: textoDeChat(chat, mensajes) })))
   const cifrado = cifrar(zip, clave)
   const claveR2 = claveDeDia(enArgentina(ahora).slice(0, 10), prefijo)
   await guardar(claveR2, cifrado, 'application/octet-stream')
@@ -117,11 +135,19 @@ export async function respaldarMensajes({ activo = respaldoActivo(), clave = BAC
   try {
     const lista = chats()
     const linea = await guardarVerificado(PREFIJO, lista.map((c) => ({ chat: c, mensajes: mensajesDe(c.id) })), clave, ahora)
-    const deSofia = lista.map((c) => ({ chat: c, mensajes: mensajesSofia(c.id) })).filter((e) => e.mensajes.length)
-    const sofia = deSofia.length ? await guardarVerificado(PREFIJO_SOFIA, deSofia, clave, ahora) : null
+    // El de Sofía es aparte: si falla, el de la línea (lo que cuenta para el aviso de atraso) sigue siendo bueno.
+    let sofia = null
+    let sofiaError = null
+    try {
+      const deSofia = lista.map((c) => ({ chat: c, mensajes: mensajesSofia(c.id) })).filter((e) => e.mensajes.length)
+      if (deSofia.length) sofia = await guardarVerificado(PREFIJO_SOFIA, deSofia, clave, ahora)
+    } catch (err) {
+      sofiaError = err.message
+      log('aviso', 'No se pudo respaldar las charlas de Sofía', err.message)
+    }
 
     log('ok', 'Respaldo de mensajes', `${linea.chats} chats · ${linea.mensajes} mensajes · verificado${sofia ? ` · Sofía: ${sofia.chats} chats · ${sofia.mensajes} mensajes` : ''}`)
-    return guardarEstado({ ultimoOk: ts, ultimoIntento: ts, verificado: true, chats: linea.chats, mensajes: linea.mensajes, bytes: linea.bytes, clave: linea.clave, sofia, error: null })
+    return guardarEstado({ ultimoOk: ts, ultimoIntento: ts, verificado: true, chats: linea.chats, mensajes: linea.mensajes, bytes: linea.bytes, clave: linea.clave, sofia, sofiaError, error: null })
   } catch (err) {
     guardarEstado({ ultimoIntento: ts, verificado: false, error: err.message })
     throw err

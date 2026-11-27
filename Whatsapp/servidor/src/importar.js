@@ -250,6 +250,10 @@ export function nombreDesdeArchivo(nombre) {
 
 /** A qué chat guardado va cada texto: por número (lo más seguro) o por nombre. */
 function resolverChat({ carpeta, titulo, nombreArchivo }, chats) {
+  // Los respaldos programados le suman el id del chat a la carpeta cuando el nombre no alcanza ("Grupo - Ventas [123@g.us]").
+  const idEnCarpeta = /\[([^\]\s]+@[^\]\s]+)\](?: \(\d+\))?$/.exec(carpeta || '')?.[1]
+  const porId = idEnCarpeta && chats.find((c) => c.id === idEnCarpeta)
+  if (porId) return { jid: porId.id, nombre: porId.nombre, esGrupo: porId.esGrupo }
   const num = /^(\d{8,15})(?:\s|$)/.exec(carpeta || '')?.[1] || titulo?.telefono || null
   if (num) {
     const existente = chats.find((c) => digitos(c.telefono) === num)

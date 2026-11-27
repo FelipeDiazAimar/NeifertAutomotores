@@ -1,9 +1,11 @@
 import { DIR_PRUEBA } from './entorno.js'
 import fs from 'node:fs'
+import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listarArchivos } from '../src/archivos.js'
-import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
+import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, rutasDeChats, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
+import { crearZip } from '../src/exportar.js'
 
 const CLAVE = 'clave larga de prueba'
 const ts = (iso) => new Date(iso).getTime() / 1000
@@ -62,6 +64,28 @@ describe('respaldo de mensajes', () => {
     const r = await respaldarMensajes({ ...base, mensajesSofia: (id) => sofia[id] || [], ahora: new Date('2026-11-25T12:00:00Z') })
     expect(r).toMatchObject({ chats: 3, mensajes: 3, sofia: { chats: 1, mensajes: 1, clave: 'respaldo/sofia/2026-11-25.enc' } })
     expect((await listarArchivos('respaldo/sofia/')).map((a) => a.clave)).toEqual(['respaldo/sofia/2026-11-25.enc'])
+  })
+
+  it('si falla el respaldo de Sofía, el de la línea igual cuenta como bueno', async () => {
+    const r = await respaldarMensajes({ ...base, mensajesSofia: () => { throw new Error('Sofía rota') }, ahora: new Date('2026-11-26T12:00:00Z') })
+    expect(r).toMatchObject({ verificado: true, error: null, sofia: null, sofiaError: 'Sofía rota', ultimoOk: '2026-11-26T12:00:00.000Z' })
+  })
+
+  it('chats con el mismo nombre (o grupos repetidos) no se pisan: cada uno tiene su carpeta', async () => {
+    const chats = [
+      { id: '1@s.whatsapp.net', nombre: 'Juan', telefono: '', esGrupo: false },
+      { id: '2@s.whatsapp.net', nombre: 'Juan', telefono: '', esGrupo: false },
+      { id: 'g1@g.us', nombre: 'Ventas', esGrupo: true },
+      { id: 'g2@g.us', nombre: 'Ventas', esGrupo: true },
+      { id: '3@s.whatsapp.net', nombre: '', telefono: '', esGrupo: false },
+    ]
+    const rutas = rutasDeChats(chats)
+    expect(new Set(rutas.map((r) => r.toLowerCase())).size).toBe(chats.length)
+    expect(rutas[2]).toContain('[g1@g.us]')
+    expect(rutas[3]).toContain('[g2@g.us]')
+    const msj = (id) => [{ id: `m-${id}`, ts: ts('2026-10-06T14:05:00'), deMi: false, tipo: 'texto', texto: `de ${id}` }]
+    const r = await respaldarMensajes({ ...base, chats: () => chats, mensajesDe: (id) => msj(id), ahora: new Date('2026-11-27T12:00:00Z') })
+    expect(r).toMatchObject({ verificado: true, chats: 5, mensajes: 5 })
   })
 
   it('si lo que se lee de vuelta está dañado, no cuenta como bueno', async () => {
@@ -136,5 +160,29 @@ describe('aviso si los respaldos se atrasan', () => {
     expect(await revisarRespaldoMensajes({ ...opciones, activo: false, ahora: new Date('2027-05-01T12:00:00Z') })).toBeNull()
     expect(alertas).toHaveLength(0)
     expect(vistaRespaldoMensajes(false)).toMatchObject({ activo: false, ultimoOk: null })
+  })
+})
+
+describe('restaurar un respaldo con chats de igual nombre', async () => {
+  const a = await import('../src/almacen.js')
+  const { importarRespaldo } = await import('../src/importar.js')
+  const { textoDeChat } = await import('../src/exportar.js')
+
+  it('cada mensaje vuelve a su chat, aunque los grupos se llamen igual', async () => {
+    const g1 = 'restaurar1@g.us'
+    const g2 = 'restaurar2@g.us'
+    a.upsertChat(g1, { nombre: 'Ventas', esGrupo: true })
+    a.upsertChat(g2, { nombre: 'Ventas', esGrupo: true })
+    const chats = [a.buscarChat(g1), a.buscarChat(g2)]
+    const rutas = rutasDeChats(chats)
+    const t = (min) => Math.floor(Date.now() / 1000) - min * 60
+    const arma = (chat, texto, min) => textoDeChat(chat, [{ id: `x${min}`, ts: t(min), deMi: false, tipo: 'texto', texto, autor: 'Nico' }])
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'rest-')), 'r.zip')
+    fs.writeFileSync(f, crearZip([{ nombre: rutas[0], datos: arma(chats[0], 'mensaje del grupo uno', 30) }, { nombre: rutas[1], datos: arma(chats[1], 'mensaje del grupo dos', 20) }]))
+    const r = await importarRespaldo(f, { nombreArchivo: 'r.zip' })
+    expect(r.salteados).toEqual([])
+    expect(a.listarMensajes(g1).map((m) => m.texto).join()).toContain('grupo uno')
+    expect(a.listarMensajes(g2).map((m) => m.texto).join()).toContain('grupo dos')
+    expect(a.listarMensajes(g1).map((m) => m.texto).join()).not.toContain('grupo dos')
   })
 })

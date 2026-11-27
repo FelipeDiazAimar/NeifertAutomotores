@@ -343,8 +343,11 @@ export async function altaAutomatica(jid) {
   if (!normal || enCurso.has(normal)) return null
   enCurso.add(normal)
   try {
-    const { porTelefono } = await clientes()
-    if (porTelefono.has(normal) || (await telefonosEmpleados()).has(normal)) return null
+    if ((await clientes()).porTelefono.has(normal) || (await telefonosEmpleados()).has(normal)) return null
+    // Antes de crear se vuelve a leer la lista del CRM (rara vez: solo con números nuevos): alguien
+    // pudo cargarlo a mano hace instantes y la copia en memoria tiene hasta 2 minutos.
+    olvidarCache()
+    if ((await clientes()).porTelefono.has(normal)) return null
     const nombre = nombreDe(jid)
     const cliente = await altaCliente(
       {

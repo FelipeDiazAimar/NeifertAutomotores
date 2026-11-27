@@ -175,6 +175,16 @@ describe('alta automática de quien escribe', () => {
     expect((await altaAutomatica(J)).nombre).toBe('Contacto de WhatsApp')
   })
 
+  it('si alguien lo cargó a mano hace instantes (la copia en memoria no lo tiene), no se duplica', async () => {
+    const J = '5493492555444@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Rosa' })
+    await clientePorTelefono('3576412286') // deja la copia en memoria cargada
+    CLIENTES.push({ id: 'manual', nombre: 'Rosa a mano', telefono: '3492 55-5444', status: 'activo', archivado_en: null })
+    const antes = enviados.length
+    expect(await altaAutomatica(J)).toBeNull()
+    expect(enviados).toHaveLength(antes)
+  })
+
   it('no carga clientes existentes, empleados, grupos ni chats marcados', async () => {
     upsertChat('5493564562413@s.whatsapp.net', { pushName: 'Empleado' })
     expect(await altaAutomatica('5493564562413@s.whatsapp.net')).toBeNull()
