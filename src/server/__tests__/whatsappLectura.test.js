@@ -92,3 +92,25 @@ describe('vista sin conexión: cada CRM ve la línea de su servidor', () => {
     expect(consultas.some((c) => /clave = 'lectura'/.test(c.sql))).toBe(false)
   })
 })
+
+describe('estado de Sofía sin conexión', () => {
+  it('con el servidor apagado se ve "sin señal" con lo último que se supo', async () => {
+    const { vistaSofiaGuardada } = await import('../whatsappLectura.js')
+    const ahora = Date.parse('2026-12-07T23:00:00Z')
+    const guardado = { reporte: { vinculado: true, conectado: true, activo: true, horario: { dentro: false }, recibidoEn: ahora - 3600e3, ia: { usadas: 10, cupo: 1500 } }, estadisticas: { total: { clientes: 5 }, hoy: {}, mes: {}, porDia: [], desde: 1 } }
+    const v = vistaSofiaGuardada(guardado, ahora)
+    expect(v.conexion.estado).toBe('sin_senal')
+    expect(v.reporte.ia.usadas).toBe(10)
+    expect(v.estadisticas.total.clientes).toBe(5)
+    expect(vistaSofiaGuardada({ reporte: { ...guardado.reporte, recibidoEn: ahora - 10_000 } }, ahora).conexion).toMatchObject({ estado: 'conectado', respondiendo: true })
+  })
+
+  it('sin nada guardado todavía: "nunca" y todo en cero, con la forma que espera el panel', async () => {
+    const { vistaSofiaGuardada } = await import('../whatsappLectura.js')
+    const v = vistaSofiaGuardada(null, Date.now())
+    expect(v.conexion.estado).toBe('nunca')
+    expect(v.reporte).toBeNull()
+    expect(v.estadisticas.total).toEqual({ clientes: 0, conversaciones: 0, mensajesCliente: 0, mensajesSofia: 0, caracteresCliente: 0, caracteresSofia: 0, derivadas: 0 })
+    expect(v.estadisticas.porDia).toEqual([])
+  })
+})

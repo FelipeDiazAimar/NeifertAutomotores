@@ -55,11 +55,14 @@ import {
 import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
+import { altaAutomatica } from './crm.js'
+import { armarNegocio } from './negocioBot.js'
+import { renovarConexiones } from './nube.js'
 import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
 import { manejaLinea, sinUsuario, usuarioActual } from './auth.js'
-import { aNotaDeVoz, duracionOgg, formaDeOnda, miniatura } from './audio.js'
+import { aNotaDeVoz, duracionOgg, fotoJpeg, formaDeOnda, miniatura } from './audio.js'
 import { claveFoto, configurarFotos, pedirFotos, pedirFotosDeTodos, repararFotos } from './fotos.js'
 import { borrar as borrarArchivo, guardar as guardarArchivo, leer as leerArchivo, listarArchivos, medirR2 } from './archivos.js'
 import * as cuota from './cuota.js'
@@ -365,6 +368,7 @@ function arrancarVigia() {
     estado: () => ({ conexion, desde: conexionDesde }),
     ultimaSenalCelular: () => meta().ultimaSenalCelular || null,
     alDespertar: () => {
+      renovarConexiones()
       if (detenido) return
       intentos = 0
       iniciar().catch((err) => log('error', 'No se pudo reconectar al despertar', err.message))
@@ -1111,6 +1115,11 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   if (tipoUpsert === 'notify') pedirFotos([chatId])
   if (tipoUpsert === 'notify' && !deMi) {
     sumarNoLeido(chatId)
+    if (config().clientesAutomaticos) {
+      altaAutomatica(chatId)
+        .then((c) => c && log('info', 'Cliente cargado en el CRM', `${c.nombre} · ${c.telefono}`))
+        .catch((err) => log('aviso', 'No se pudo cargar el cliente en el CRM', err.message))
+    }
     // Igual que el celular: si la cuenta tiene activado "desarchivar al recibir mensajes", el chat vuelve a la lista.
     if (estaArchivado(chatId) && desarchivaAlRecibir()) setArchivado(chatId, false)
   }
@@ -2892,7 +2901,7 @@ export async function enviarProducto(chatId, productoId) {
 
 /* ---------------- Autos del catálogo de la página web ---------------- */
 
-const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,estado,es_nuevo,imagen_principal,imagenes,descripcion'
+const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,precio_usd,estado,es_nuevo,categoria,imagen_principal,imagenes,descripcion'
 let vehiculosWebCache = { ts: 0, lista: [] }
 
 async function vehiculosWebTodos() {
@@ -2907,9 +2916,42 @@ async function vehiculosWebTodos() {
   return vehiculosWebCache.lista
 }
 
+/** Dirección del auto en la página (usados o 0 km), en el mismo dominio que el CRM. '' si no se sabe el dominio. */
+const enlaceWeb = (v) => {
+  try {
+    return `${new URL(CRM_URL).origin}/${v.es_nuevo ? 'catalogo-0km' : 'catalogo'}/${v.id}`
+  } catch {
+    return ''
+  }
+}
+
 const tituloWeb = (v) => [v.marca, v.modelo, v.version].filter(Boolean).join(' ')
 const fotosWeb = (v) => [v.imagen_principal, ...(Array.isArray(v.imagenes) ? v.imagenes : [])].filter((u, i, a) => typeof u === 'string' && u && a.indexOf(u) === i)
 const precioWeb = (v) => (v.precio ? `${v.moneda === 'ARS' ? '$' : 'U$S'} ${Number(v.precio).toLocaleString('es-AR')}` : '')
+
+let negocioCache = { ts: 0, datos: null }
+
+/** Dirección, horarios y contacto de la página (para que el bot los consulte). Se guarda 1 minuto. */
+export async function datosNegocio() {
+  if (negocioCache.datos && Date.now() - negocioCache.ts < 60_000) return negocioCache.datos
+  let web = ''
+  try {
+    web = new URL(CRM_URL).origin
+  } catch {
+    /* sin CRM_URL: no se sabe la dirección de la página */
+  }
+  let contenido = {}
+  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/contenido_sitio?clave=in.(socials,categories)&select=clave,valor`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) throw Object.assign(new Error(`No se pudo leer el contenido de la página (${res.status})`), { status: 502 })
+    contenido = Object.fromEntries((await res.json()).map((f) => [f.clave, f.valor]))
+  }
+  negocioCache = { ts: Date.now(), datos: armarNegocio(contenido, web) }
+  return negocioCache.datos
+}
 
 /** Los autos publicados en la página (disponibles y reservados), con el mismo formato que el catálogo de WhatsApp. */
 export async function vehiculosWeb() {
@@ -2925,6 +2967,14 @@ export async function vehiculosWeb() {
     reservado: v.estado === 'reservado',
     descripcion: [v.anio, v.km ? `${Number(v.km).toLocaleString('es-AR')} km` : 'Sin uso', v.estado === 'reservado' ? 'Reservado' : ''].filter(Boolean).join(' · '),
     precioTexto: precioWeb(v),
+    precio: v.precio ? Number(v.precio) : null,
+    moneda: v.moneda || null,
+    // El equivalente en dólares que usa la página para ordenar y filtrar (los autos en pesos y en dólares se comparan con esto).
+    precioUsd: Number(v.precio_usd) > 0 ? Number(v.precio_usd) : v.moneda === 'USD' && v.precio ? Number(v.precio) : null,
+    nuevo: !!v.es_nuevo,
+    condicion: v.es_nuevo ? '0km' : 'usado',
+    categoria: v.categoria || '',
+    enlace: enlaceWeb(v),
     imagen: fotosWeb(v).length ? `/api/vehiculos-web/${v.id}/foto` : null,
   }))
 }
@@ -2949,6 +2999,35 @@ export async function fotoVehiculoWeb(id) {
     }
   }
   return null
+}
+
+/** Un auto de la página con las fotos que tiene (para que el bot las mande por WhatsApp): { nombre, descripcion, fotos: [url] }. null si no existe. */
+export async function fotosDeVehiculoWeb(id) {
+  const v = (await vehiculosWebTodos()).find((x) => x.id === String(id))
+  if (!v) return null
+  const precio = precioWeb(v)
+  return { nombre: tituloWeb(v), descripcion: [tituloWeb(v), v.anio, precio].filter(Boolean).join(' · '), fotos: fotosWeb(v) }
+}
+
+const fotosGrandesCache = new Map() // `${id}|${n}` → Buffer jpg 1280 px
+
+/** La foto número n (desde 0) de un auto, como JPEG de hasta 1280 px. null si no hay o no se pudo bajar. */
+export async function fotoGrandeVehiculoWeb(id, n) {
+  const clave = `${id}|${n}`
+  if (fotosGrandesCache.has(clave)) return fotosGrandesCache.get(clave)
+  const v = await fotosDeVehiculoWeb(id)
+  const url = v?.fotos[n]
+  if (!url) return null
+  try {
+    const r = await fetch(url, { signal: AbortSignal.timeout(20000) })
+    if (!r.ok) return null
+    const jpg = await fotoJpeg(Buffer.from(await r.arrayBuffer()))
+    fotosGrandesCache.set(clave, jpg)
+    if (fotosGrandesCache.size > 40) fotosGrandesCache.delete(fotosGrandesCache.keys().next().value)
+    return jpg
+  } catch {
+    return null
+  }
 }
 
 /**

@@ -257,7 +257,7 @@ dl.kv dd { margin: 0; text-align: right; font-weight: 500; }
 .new-client b { color: var(--ink); font-size: 13.5px; }
 
 /* ---------- Conexión ---------- */
-.connect { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 1fr); gap: 12px; align-items: start; }
+.connect { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .card { border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .card h2 { font-size: 17px; }
 .card-sub { margin: -10px 0 0; color: var(--ink-3); font-size: 13px; }
@@ -351,3 +351,11 @@ body.show-notes .anno { display: flex; }
   .msg { max-width: 86%; }
 }
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+
+/* Respaldo de mensajes: empleados que reciben el aviso si se atrasa */
+.sub-titulo { margin: 14px 0 6px; font-size: 13px; font-weight: 600; color: var(--ink-2); }
+.check-lista { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 4px 12px; }
+.check-row { display: flex; align-items: center; gap: 8px; font-size: 13px; padding: 4px 0; cursor: pointer; }
+.check-row input { accent-color: var(--accent, #1a9e52); width: 16px; height: 16px; }
+.check-row input:disabled + span { color: var(--ink-3); }
+.check-row small { color: var(--ink-3); }

@@ -21,6 +21,7 @@ const ARCHIVO = {
 
 /** Quién escribió: la línea (con el empleado que lo mandó), el contacto o el integrante del grupo. */
 function autor(m, chat) {
+  if (m.sofia) return m.sofia.rol === 'bot' ? `${m.sofia.asistente || 'Asistente'} (IA)` : chat.nombre || chat.telefono || 'Contacto'
   if (m.deMi) return m.enviadoPor?.nombre ? `Neifert (${m.enviadoPor.nombre})` : 'Neifert'
   if (chat.esGrupo) return m.autorNombre || 'Integrante'
   return chat.nombre || chat.telefono || 'Contacto'
@@ -63,6 +64,23 @@ export function carpetaDeChat(chat) {
   if (chat.esGrupo) return carpeta(`Grupo - ${chat.nombre || 'sin nombre'}`)
   const nombre = chat.nombre && String(chat.nombre).replace(/\D/g, '') !== numero ? chat.nombre : ''
   return carpeta([numero, nombre].filter(Boolean).join(' - ') || chat.id?.split('@')[0])
+}
+
+/**
+ * Ruta de cada chat dentro del .zip, la misma carpeta que el export normal. Nunca se repite:
+ * si dos chats caen en la misma carpeta (dos grupos con el mismo nombre, dos "Juan"), o si es
+ * un grupo, se le suma el id del chat entre corchetes, que "Importar respaldo" reconoce.
+ */
+export function rutasDeChats(chats) {
+  const base = chats.map(carpetaDeChat)
+  const veces = base.reduce((m, c) => m.set(c.toLowerCase(), (m.get(c.toLowerCase()) || 0) + 1), new Map())
+  const usadas = new Set()
+  return chats.map((chat, i) => {
+    let carpeta = chat.esGrupo || veces.get(base[i].toLowerCase()) > 1 ? `${base[i]} [${chat.id}]` : base[i]
+    for (let n = 2; usadas.has(carpeta.toLowerCase()); n++) carpeta = `${base[i]} [${chat.id}] (${n})`
+    usadas.add(carpeta.toLowerCase())
+    return `${carpeta}/Chat de WhatsApp.txt`
+  })
 }
 
 // "2026-10-06 14.05.33" (con puntos: Windows no acepta ":" en los nombres).

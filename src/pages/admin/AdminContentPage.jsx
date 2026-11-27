@@ -692,6 +692,28 @@ function RedesTab() {
         </div>
       </Section>
 
+      <Section
+        title="Información para el asistente"
+        desc="Lo consulta el asistente con IA (Sofía) cuando un cliente pregunta por WhatsApp fuera de horario. Si lo dejás vacío, no responde sobre eso y deriva a una persona."
+      >
+        <div className="grid gap-4">
+          <TextField
+            label="Financiación"
+            textarea
+            value={socials.financing}
+            onChange={(v) => setSocials({ financing: v })}
+            placeholder="Ej.: Financiamos hasta el 70% en 12, 24 o 36 cuotas con DNI y recibo de sueldo."
+          />
+          <TextField
+            label="Toma de usados / permuta"
+            textarea
+            value={socials.tradeIn}
+            onChange={(v) => setSocials({ tradeIn: v })}
+            placeholder="Ej.: Tomamos tu usado como parte de pago; para cotizarlo hace falta marca, modelo, año y kilómetros."
+          />
+        </div>
+      </Section>
+
       <Section title="Redes sociales" desc="Enlaces a perfiles. Se muestran en footer e Instagram.">
         <div className="grid gap-4 sm:grid-cols-2">
           <TextField label="Instagram" value={socials.instagram} onChange={(v) => setSocials({ instagram: v })} placeholder="https://instagram.com/…" />

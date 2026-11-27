@@ -1,7 +1,7 @@
 import './entorno.js'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { upsertChat } from '../src/almacen.js'
-import { buscarClientes, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, vincularCliente } from '../src/crm.js'
+import { altaAutomatica, asegurarCliente, buscarClientes, clientePorTelefono, crearAlerta, crearCliente, crearTarea, fichaCrm, registrarSeguimiento, seguimientoPorTelefono, tareaPorTelefono, vincularCliente } from '../src/crm.js'
 
 // CRM de mentira: clientes con teléfonos cargados "a mano", como en el real.
 const CLIENTES = [
@@ -24,6 +24,8 @@ beforeAll(() => {
       if (tabla === 'clientes') CLIENTES.push({ ...creada, archivado_en: null })
       return json([creada], 201)
     }
+    // Empleado con el teléfono como lo cargan: sin 0 y con 15.
+    if (tabla === 'usuarios') return json([{ telefono: '3564 15 562413' }])
     if (tabla === 'clientes') return json(CLIENTES.slice(Number(u.searchParams.get('offset')) || 0))
     return json([])
   })
@@ -92,5 +94,155 @@ describe('cliente del CRM en cada chat', () => {
     await expect(crearTarea(J, { titulo: 'Sin fecha' }, USUARIO)).rejects.toThrow(/fecha/)
     await expect(registrarSeguimiento(J, '   ', USUARIO)).rejects.toThrow()
     await expect(registrarSeguimiento('5490000000001@s.whatsapp.net', 'x', USUARIO)).rejects.toThrow(/no está vinculado/)
+  })
+
+  it('la alerta exige fecha y hora y avisa al elegido o a quien la crea', async () => {
+    const J = '5493576412286@s.whatsapp.net'
+    await crearAlerta(J, { titulo: ' Llamar por el Gol ', fecha: '2026-11-25', hora: '10:30' }, USUARIO)
+    expect(enviados.at(-1)).toMatchObject({ tabla: 'alertas', fila: { titulo: 'Llamar por el Gol', fecha: '2026-11-25', hora: '10:30', cliente_id: 'c1', asignado_a: 'u-vend', creado_por: 'u-vend' } })
+    await crearAlerta(J, { titulo: 'x', fecha: '2026-11-25', hora: '10:30', asignadoA: 'u-otro' }, USUARIO)
+    expect(enviados.at(-1).fila.asignado_a).toBe('u-otro')
+    await expect(crearAlerta(J, { titulo: 'Sin hora', fecha: '2026-11-25' }, USUARIO)).rejects.toThrow(/hora/)
+    await expect(crearAlerta(J, { titulo: 'Sin fecha', hora: '10:30' }, USUARIO)).rejects.toThrow(/fecha/)
+  })
+})
+
+describe('tarea o alerta de un chat que no es cliente', () => {
+  const tareas = () => enviados.filter((e) => e.tabla === 'tareas')
+  const clientesCreados = () => enviados.filter((e) => e.tabla === 'clientes').length
+
+  it('la tarea queda sin cliente, con el contacto en el detalle, y no se crea ningún cliente', async () => {
+    const J = '5493492666111@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Sergio' })
+    const antes = clientesCreados()
+    const r = await crearTarea(J, { titulo: 'Llamar al proveedor', fecha: '2026-12-05', descripcion: 'Pedir presupuesto' }, USUARIO)
+    expect(r).toMatchObject({ ok: true, clienteId: null, sinCliente: true })
+    const fila = tareas().at(-1).fila
+    expect(fila).toMatchObject({ titulo: 'Llamar al proveedor', cliente_id: null, creado_por: 'u-vend' })
+    expect(fila.descripcion).toBe('Contacto de WhatsApp (no es cliente): Sergio · +5493492666111\nPedir presupuesto')
+    expect(clientesCreados()).toBe(antes)
+    // No se anota nada en la bitácora de un cliente que no existe.
+    expect(enviados.filter((e) => e.tabla === 'eventos' && e.fila.datos?.titulo === 'Llamar al proveedor')).toHaveLength(0)
+  })
+
+  it('la alerta también: sin cliente y con el contacto (sin nombre, solo el teléfono)', async () => {
+    const J = '5493492666222@s.whatsapp.net'
+    upsertChat(J)
+    const r = await crearAlerta(J, { titulo: 'Avisar', fecha: '2026-12-05', hora: '10:00' }, USUARIO)
+    expect(r).toMatchObject({ ok: true, clienteId: null, sinCliente: true })
+    const fila = enviados.filter((e) => e.tabla === 'alertas').at(-1).fila
+    expect(fila).toMatchObject({ cliente_id: null, asignado_a: 'u-vend' })
+    expect(fila.descripcion).toBe('Contacto de WhatsApp (no es cliente): +5493492666222')
+  })
+
+  it('un chat marcado "no es cliente" y un grupo también pueden tener tarea', async () => {
+    const J = '5493492666444@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Spam', clienteId: 'ninguno' })
+    expect((await crearTarea(J, { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).sinCliente).toBe(true)
+    const G = '120363000000000009@g.us'
+    upsertChat(G, { nombre: 'Proveedores' })
+    await crearTarea(G, { titulo: 'Pedir lista', fecha: '2026-12-05' }, USUARIO)
+    expect(tareas().at(-1).fila.descripcion).toMatch(/^Grupo de WhatsApp: /)
+  })
+
+  it('si es cliente, queda del cliente y sin la línea de contacto', async () => {
+    const J = '5493576412286@s.whatsapp.net'
+    await crearTarea(J, { titulo: 'Con cliente', fecha: '2026-12-05' }, USUARIO)
+    expect(tareas().at(-1).fila).toMatchObject({ cliente_id: 'c1', descripcion: null })
+  })
+
+  it('con datos que faltan no crea nada', async () => {
+    const J = '5493492666333@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Nadie' })
+    const antes = tareas().length
+    await expect(crearTarea(J, { titulo: 'Sin fecha' }, USUARIO)).rejects.toThrow(/fecha/)
+    expect(tareas()).toHaveLength(antes)
+  })
+})
+
+describe('el bot habla con el CRM por teléfono', () => {
+  it('reconoce al cliente por teléfono, con cualquier formato; inválido o desconocido da null', async () => {
+    expect((await clientePorTelefono('+54 9 3576 41-2286'))).toMatchObject({ id: 'c1' })
+    expect((await clientePorTelefono('3406518585')).id).toBe('c2')
+    expect(await clientePorTelefono('3511000000')).toBeNull()
+    expect(await clientePorTelefono('abc')).toBeNull()
+  })
+
+  it('si el cliente existe lo devuelve; con interés deja un contacto del bot', async () => {
+    const antes = enviados.length
+    expect(await asegurarCliente({ telefono: '3576412286', nombre: 'Otro' }, null)).toMatchObject({ creado: false, cliente: { id: 'c1' } })
+    expect(enviados.length).toBe(antes)
+    await asegurarCliente({ telefono: '3576412286', interes: 'Corolla 2020' }, null)
+    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { entidad_id: 'c1', tipo: 'contacto', usuario_id: null, datos: { texto: 'Interés: Corolla 2020', via: 'bot' } } })
+  })
+
+  it('si no existe lo crea con los 10 dígitos, nombre por defecto y el interés en las notas', async () => {
+    const r = await asegurarCliente({ telefono: '+54 9 351 555-0101', localidad: 'Rafaela', interes: 'Gol', notas: 'Pidió financiar' }, null)
+    expect(r).toMatchObject({ creado: true, cliente: { nombre: 'Contacto de WhatsApp', telefono: '3515550101' } })
+    const alta = enviados.filter((e) => e.tabla === 'clientes').at(-1).fila
+    expect(alta).toMatchObject({ canal: 'whatsapp', status: 'activo', creado_por: null, localidad: 'Rafaela', notas: 'Pidió financiar\nInterés: Gol' })
+    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { tipo: 'alta', datos: { origen: 'bot' } } })
+    // El segundo pedido ya lo encuentra (se olvidó la caché).
+    expect((await asegurarCliente({ telefono: '3515550101' }, null)).creado).toBe(false)
+  })
+
+  it('un teléfono inválido es un error 400', async () => {
+    await expect(asegurarCliente({ telefono: 'xx' }, null)).rejects.toMatchObject({ status: 400, message: 'Teléfono inválido.' })
+  })
+
+  it('seguimiento y tarea de un teléfono que no es cliente dan 404', async () => {
+    await expect(seguimientoPorTelefono('3511000000', 'hola', null)).rejects.toMatchObject({ status: 404, message: 'Ese teléfono no es cliente del CRM.' })
+    await expect(tareaPorTelefono('3511000000', { titulo: 'x' }, null)).rejects.toMatchObject({ status: 404 })
+    await expect(seguimientoPorTelefono('3576412286', '  ', null)).rejects.toThrow(/qué se habló/)
+    await seguimientoPorTelefono('3576412286', 'Quiere visitar', null)
+    expect(enviados.at(-1).fila.datos).toEqual({ texto: 'Quiere visitar', via: 'bot' })
+  })
+
+  it('la tarea del bot sin fecha es para hoy (Argentina) y sin asignado', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-11-25T01:30:00Z')) // en Argentina todavía es 24
+    try {
+      await tareaPorTelefono('3576412286', { titulo: 'Llamar' }, null)
+    } finally {
+      vi.useRealTimers()
+    }
+    expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.fecha === '2026-11-24').fila).toMatchObject({ cliente_id: 'c1', asignado_a: null, creado_por: null })
+    expect(enviados.at(-1).fila.datos).toMatchObject({ titulo: 'Llamar', via: 'bot' })
+  })
+})
+
+describe('alta automática de quien escribe', () => {
+  it('carga al desconocido con su nombre de WhatsApp, una sola vez', async () => {
+    const J = '5493492555111@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Lucía' })
+    const c = await altaAutomatica(J)
+    expect(c).toMatchObject({ nombre: 'Lucía', telefono: '3492555111' })
+    expect(enviados.filter((e) => e.tabla === 'eventos').at(-1).fila).toMatchObject({ tipo: 'alta', datos: { origen: 'whatsapp_automatico' }, usuario_id: null })
+    expect(await altaAutomatica(J)).toBeNull()
+  })
+
+  it('sin nombre de WhatsApp queda como "Contacto de WhatsApp"', async () => {
+    const J = '5493492555222@s.whatsapp.net'
+    upsertChat(J)
+    expect((await altaAutomatica(J)).nombre).toBe('Contacto de WhatsApp')
+  })
+
+  it('si alguien lo cargó a mano hace instantes (la copia en memoria no lo tiene), no se duplica', async () => {
+    const J = '5493492555444@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Rosa' })
+    await clientePorTelefono('3576412286') // deja la copia en memoria cargada
+    CLIENTES.push({ id: 'manual', nombre: 'Rosa a mano', telefono: '3492 55-5444', status: 'activo', archivado_en: null })
+    const antes = enviados.length
+    expect(await altaAutomatica(J)).toBeNull()
+    expect(enviados).toHaveLength(antes)
+  })
+
+  it('no carga clientes existentes, empleados, grupos ni chats marcados', async () => {
+    upsertChat('5493564562413@s.whatsapp.net', { pushName: 'Empleado' })
+    expect(await altaAutomatica('5493564562413@s.whatsapp.net')).toBeNull()
+    expect(await altaAutomatica('5493576412286@s.whatsapp.net')).toBeNull()
+    expect(await altaAutomatica('120363000000000001@g.us')).toBeNull()
+    upsertChat('5493492555333@s.whatsapp.net', { pushName: 'Pepe', clienteId: 'ninguno' })
+    expect(await altaAutomatica('5493492555333@s.whatsapp.net')).toBeNull()
   })
 })

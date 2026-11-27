@@ -1,9 +1,11 @@
 import crypto from 'node:crypto'
+import { once } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import {
   ALERTAS_CRM,
+  BACKUP_CLAVE,
   CONSERVAR_EDICIONES,
   DATA_DIR,
   CONSERVAR_ELIMINADOS,
@@ -24,13 +26,19 @@ import {
 import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual, sinUsuario } from './src/auth.js'
 import { vigilarAlertas } from './src/alertas.js'
+import { respaldarMensajes, vigilarRespaldoMensajes, vistaRespaldoMensajes } from './src/respaldoMensajes.js'
+import { registrarRespaldoLocal, vigilarRespaldoLocal, vistaRespaldoLocal } from './src/respaldoLocal.js'
+import { crearCifrador, descifrarArchivo, esRespaldoCifrado } from './src/cifradoFlujo.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
+import { rutasBot } from './src/bot.js'
+import { esDeSofia, sofiaVisto } from './src/sofia.js'
+import { vistaSofia } from './src/sofiaEstado.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
-import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
+import { exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
 import { importarRespaldo } from './src/importar.js'
 import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm, soltarServidor, tomarServidor } from './src/nube.js'
 
@@ -155,8 +163,9 @@ app.post('/api/sesion/salir', cerrarSesion)
 // QR, sin login del CRM. Exige la clave que la app genera en cada arranque (WA_CLAVE_LOCAL)
 // y que el pedido salga de esta misma PC, no por el túnel. Para cualquier otro no existe.
 const CLAVE_LOCAL = Buffer.from(process.env.WA_CLAVE_LOCAL || '')
+const esDeEstaPc = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
 app.get('/api/local/estado', (req, res) => {
-  const deEstaPc = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
+  const deEstaPc = esDeEstaPc(req)
   const clave = Buffer.from(String(req.get('x-nf-local') || ''))
   if (!CLAVE_LOCAL.length || !deEstaPc || clave.length !== CLAVE_LOCAL.length || !crypto.timingSafeEqual(clave, CLAVE_LOCAL)) {
     return res.status(404).json({ error: 'Ruta inexistente' })
@@ -164,6 +173,20 @@ app.get('/api/local/estado', (req, res) => {
   const { conexion, desde, qr, numeroLinea: linea, rechazo, yo } = wa.estadoConexion({ linea: true })
   res.json({ conexion, desde, qr, numeroLinea: linea, rechazo, telefono: yo?.telefono || null, nombre: yo?.nombre || null })
 })
+
+// El bot de respuestas automáticas (otro programa, en esta misma PC) habla con el CRM por
+// acá: exige WA_BOT_SECRETO y que el pedido salga de esta PC, no por el túnel. Sin el
+// secreto configurado, la ruta no existe.
+const SECRETO_BOT = Buffer.from(process.env.WA_BOT_SECRETO || '')
+function exigirBot(req, res, next) {
+  const clave = Buffer.from(String(req.get('authorization') || '').replace(/^Bearer\s+/i, ''))
+  if (!SECRETO_BOT.length || !esDeEstaPc(req) || clave.length !== SECRETO_BOT.length || !crypto.timingSafeEqual(clave, SECRETO_BOT)) {
+    return res.status(404).json({ error: 'Ruta inexistente' })
+  }
+  req.usuario = null
+  next()
+}
+app.use('/api/bot', exigirBot, rutasBot({ ruta, accion }))
 
 // Todo lo demás exige haber entrado desde el CRM.
 app.use('/api', exigirSesion)
@@ -182,16 +205,29 @@ app.use('/api/chats/:id', (req, res, next) => {
   if (!ocupante) return next()
   res.status(423).json({ error: `${ocupante.nombre} está atendiendo este chat: mientras tanto no se puede cambiar nada.`, ocupado: ocupante })
 })
+// Los mensajes de Sofía son de otra línea: no se les contesta, reacciona, reenvía ni borra desde acá.
+app.use('/api/chats/:id', (req, res, next) => {
+  if (req.method === 'GET') return next()
+  // Rutas /salida/:msgId/... y /media/:msgId/...: el id es el segundo tramo (puede venir codificado).
+  const enRuta = req.path.split('/')[2]
+  let decodificado = enRuta
+  try { decodificado = enRuta && decodeURIComponent(enRuta) } catch { /* queda como vino */ }
+  const ids = [decodificado, req.body?.id, req.body?.citadoId, ...(Array.isArray(req.body?.ids) ? req.body.ids : [])]
+  if (ids.some(esDeSofia)) return res.status(400).json({ error: 'Ese mensaje es de la charla con el asistente: no se puede usar desde esta línea.' })
+  next()
+})
 
 /* Estado y conexión */
 app.get('/api/eventos', (req, res) => suscribir(req, res))
 // Lo que el panel necesita saber de la configuración del servidor (límite de archivos y
 // la definición de privacidad: si se conservan los eliminados y las ediciones).
-const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, subidaMaxMb: SUBIDA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO })
+const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, subidaMaxMb: SUBIDA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO, respaldoCifrado: Boolean(BACKUP_CLAVE) })
 app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: configPublica() })))
 app.get('/api/log', exigirLinea, ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
+// Estado de Sofía (asistente con IA): conexión del bot, uso del cupo y recuento de lo que atendió.
+app.get('/api/sofia', ruta(() => vistaSofia()))
 // "Descargar multimedia al llegar" lo puede pausar cualquier usuario (para no guardar
 // archivos de más); el resto de las preferencias, solo quien maneja la línea.
 const PREFS_PARA_TODOS = ['descargarMedia']
@@ -235,16 +271,25 @@ app.get('/api/chats/:id/mensajes/:msgId', ruta((req) => {
  * de a un archivo por vez mientras se arma, así que la descarga empieza enseguida.
  */
 const leerMedia = (jid, m) => leerGuardado(claveMedia(jid, m.media.archivo))
-async function exportarZip(req, res, chats, nombre) {
-  res.attachment(nombre).type('application/zip')
+async function exportarZip(req, res, chats, nombre, { cifrarCon = null } = {}) {
+  res.attachment(nombre).type(cifrarCon ? 'application/octet-stream' : 'application/zip')
   res.setHeader('Cache-Control', 'no-store')
-  const zip = zipEnVivo(res)
+  // Con clave, el .zip sale cifrado de a trozos (src/cifradoFlujo.js): nunca pasa sin cifrar por la red ni por el disco.
+  const cifrador = cifrarCon ? crearCifrador(cifrarCon) : null
+  if (cifrador) {
+    cifrador.pipe(res)
+    res.on('close', () => cifrador.destroy()) // si se cancela la descarga, se frena todo
+  }
+  const zip = zipEnVivo(cifrador || res)
   try {
     const r = await exportarConArchivos(zip, chats, { mensajesDe: listarMensajes, leerMedia })
     await zip.terminar()
+    // Con cifrado, "terminó" es cuando salió el último byte: recién ahí cuenta como respaldo hecho.
+    if (cifrador && !res.writableFinished) await once(res, 'finish')
     return { chats: chats.length, ...r }
   } catch (err) {
     // La descarga ya empezó: no se puede avisar con un error, se corta.
+    cifrador?.destroy()
     res.destroy(err)
     throw err
   }
@@ -297,8 +342,16 @@ app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req
   emitir('importacion', { estado: 'cargando', nombre })
   ;(async () => {
     try {
-      const r = await importarRespaldo(archivo, {
-        nombreArchivo: nombre,
+      // Un respaldo local (.enc) viene cifrado: se descifra de a trozos a un .zip temporal y se carga ese.
+      let aCargar = archivo
+      if (esRespaldoCifrado(archivo)) {
+        if (!BACKUP_CLAVE) throw new Error('El respaldo está cifrado y falta WA_BACKUP_CLAVE en el servidor.')
+        aCargar = `${archivo}.zip`
+        emitir('importacion', { estado: 'cargando', nombre, paso: 0, total: 1, chat: 'Descifrando…' })
+        await descifrarArchivo(archivo, aCargar, BACKUP_CLAVE)
+      }
+      const r = await importarRespaldo(aCargar, {
+        nombreArchivo: nombre.replace(/\.enc$/i, '.zip'),
         nombrePropio: wa.estadoConexion(null).yo?.nombre || '',
         carpetaTmp,
         avance: (a) => emitir('importacion', { estado: 'cargando', nombre, ...a }),
@@ -311,21 +364,41 @@ app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req
     } finally {
       importando = null
       fs.rmSync(archivo, { force: true })
+      fs.rmSync(`${archivo}.zip`, { force: true })
       fs.rmSync(carpetaTmp, { recursive: true, force: true })
     }
   })()
   return { ok: true }
 }, (req) => ({ nombre: String(req.body?.nombre || '').slice(0, 200) })))
-app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
-  const chats = listarChats()
-  if (req.query.archivos === '1') {
-    await exportarZip(req, res, chats, `Chats de WhatsApp Neifert con archivos ${hoyIso()}.zip`)
-    return
+// Todos los chats = el respaldo LOCAL (src/respaldoLocal.js): cuando termina bien se anota en la base y
+// de ahí sale el aviso si pasan días sin ninguno.
+const resumenDeExportacion = (chats) => {
+  let mensajes = 0
+  let hasta = 0
+  for (const c of chats) {
+    const lista = listarMensajes(c.id)
+    mensajes += lista.length
+    for (const m of lista) if (m.ts > hasta) hasta = m.ts
   }
-  const zip = crearZip(chats.map((c) => ({ nombre: nombreArchivo(c.nombre, 'txt'), datos: textoDeChat(c, listarMensajes(c.id)) })))
-  const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
-  res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
+  return { chats: chats.length, mensajes, hasta }
+}
+// El respaldo local es SIEMPRE completo (todos los chats con todos sus archivos descargados) y cifrado con
+// WA_BACKUP_CLAVE, igual que el de la nube. Sin la clave no se hace: nunca sale uno sin cifrar.
+// Se abre con "Cargar respaldo" en el panel o con `npm run descifrar-respaldo`.
+app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
+  if (!BACKUP_CLAVE) throw Object.assign(new Error('Falta WA_BACKUP_CLAVE en la configuración del servidor: el respaldo local va siempre cifrado.'), { status: 400 })
+  const chats = listarChats()
+  const resumen = resumenDeExportacion(chats)
+  const usuario = req.usuario?.nombre || req.usuario?.usuario || null
+  const r = await exportarZip(req, res, chats, `Respaldo de WhatsApp Neifert ${hoyIso()}.enc`, { cifrarCon: BACKUP_CLAVE })
+  await registrarRespaldoLocal({ ...resumen, archivos: r.archivos, usuario, conArchivos: true, cifrado: true })
 }, () => ({})))
+// Respaldo programado de los mensajes (src/respaldoMensajes.js): el estado y "respaldar ahora".
+app.get('/api/respaldo/mensajes', exigirLinea, ruta(async () => ({ ...vistaRespaldoMensajes(), local: await vistaRespaldoLocal() })))
+app.post('/api/respaldo/mensajes', exigirLinea, accion('respaldo_mensajes', async () => {
+  await respaldarMensajes()
+  return vistaRespaldoMensajes()
+}, (req, r) => ({ chats: r.chats, mensajes: r.mensajes, verificado: r.verificado })))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))
@@ -334,6 +407,7 @@ app.post('/api/chats/:id/salir', exigirLinea, accion('salir_grupo', (req) => wa.
 app.post('/api/chats/:id/borrar', exigirLinea, accion('borrar_chat', (req) => wa.borrarChat(chatId(req)), (req, r) => r))
 app.post('/api/chats/:id/marca', exigirEscritura, accion('marca', (req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null), (req) => ({ marca: req.body?.accion, valor: req.body?.valor ?? null })))
 app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
+  sofiaVisto(chatId(req))
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
@@ -375,6 +449,7 @@ app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_client
 }, (req, r) => ({ cliente: r.cliente?.id })))
 app.post('/api/chats/:id/crm/seguimiento', exigirEscritura, accion('crm_seguimiento', (req) => crm.registrarSeguimiento(chatId(req), req.body?.texto, req.usuario), (req, r) => ({ cliente: r.clienteId })))
 app.post('/api/chats/:id/crm/tarea', exigirEscritura, accion('crm_tarea', (req) => crm.crearTarea(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, tarea: r.tareaId })))
+app.post('/api/chats/:id/crm/alerta', exigirEscritura, accion('crm_alerta', (req) => crm.crearAlerta(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, alerta: r.alertaId })))
 
 app.get('/api/chats/:id/integrantes',ruta((req) => wa.integrantesDe(chatId(req))))
 app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))
@@ -467,9 +542,17 @@ const servidor = app.listen(PUERTO, HOST, () => {
       // Si se está apagando (se cerró la app justo al arrancar), la base ya se cerró: no es un error.
       .catch((err) => cerrando || log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
     // Este CRM (CRM_URL) muestra esta línea cuando el servidor está apagado.
-    registrarCrm()
-      .then((r) => r && log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`))
-      .catch((err) => cerrando || log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
+    const anotarCrm = (primera) =>
+      registrarCrm()
+        .then((r) => {
+          if (!r) return
+          if (r.ocupada) primera && log('aviso', 'Vista sin conexión del CRM', `${r.host} muestra la línea +${r.ocupada}, que tiene su servidor andando`)
+          else if (primera || r.antes) log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`)
+        })
+        .catch((err) => cerrando || (primera && log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message)))
+    anotarCrm(true)
+    // Cada 10 min: si otra línea se la había quedado y su servidor ya se apagó, se recupera.
+    setInterval(() => anotarCrm(false), 10 * 60e3).unref()
   }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()
@@ -494,6 +577,11 @@ const servidor = app.listen(PUERTO, HOST, () => {
       conectado: () => wa.estadoConexion(null).conexion === 'conectado',
       log,
     })
+  }
+  // Respaldo de los mensajes cada 2 días (con aviso a admin/dueño si se atrasa): solo con la base en Supabase.
+  if (almacen.modo === 'supabase') {
+    vigilarRespaldoMensajes()
+    vigilarRespaldoLocal()
   }
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
@@ -554,4 +642,12 @@ process.on('SIGTERM', () => cerrar())
 process.on('message', (m) => m?.tipo === 'cerrar' && cerrar({ cerrarLectura: !!m.cerrarLectura }))
 // Si la app se cerró de golpe, el servidor no queda huérfano ocupando el puerto.
 process.on('disconnect', () => cerrar())
-process.on('unhandledRejection', (err) => log('error', 'Error no controlado', err?.message || String(err)))
+// Con el código y el lugar del código donde pasó: sin eso no se sabe qué lo causó.
+const dondeFue = (err) => {
+  const m = String(err?.stack || '').match(/[\\/](src[\\/][\w.]+|index\.js):(\d+)/)
+  return m ? `${m[1].replace(/\\/g, '/')}:${m[2]}` : null
+}
+process.on('unhandledRejection', (err) => {
+  const lugar = dondeFue(err)
+  log('error', 'Error no controlado', [err?.message || String(err), err?.code, lugar && `en ${lugar}`].filter(Boolean).join(' · '))
+})

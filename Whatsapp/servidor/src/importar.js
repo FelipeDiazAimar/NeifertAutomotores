@@ -250,6 +250,10 @@ export function nombreDesdeArchivo(nombre) {
 
 /** A qué chat guardado va cada texto: por número (lo más seguro) o por nombre. */
 function resolverChat({ carpeta, titulo, nombreArchivo }, chats) {
+  // Los respaldos programados le suman el id del chat a la carpeta cuando el nombre no alcanza ("Grupo - Ventas [123@g.us]").
+  const idEnCarpeta = /\[([^\]\s]+@[^\]\s]+)\](?: \(\d+\))?$/.exec(carpeta || '')?.[1]
+  const porId = idEnCarpeta && chats.find((c) => c.id === idEnCarpeta)
+  if (porId) return { jid: porId.id, nombre: porId.nombre, esGrupo: porId.esGrupo }
   const num = /^(\d{8,15})(?:\s|$)/.exec(carpeta || '')?.[1] || titulo?.telefono || null
   if (num) {
     const existente = chats.find((c) => digitos(c.telefono) === num)
@@ -321,9 +325,17 @@ export async function importarRespaldo(archivo, { nombreArchivo = '', nombreProp
       // Un chat que no estaba guardado se queda con el nombre que trae el respaldo.
       const nuevoChat = !existeChat(jid) && titulo?.nombre && !/^\+?[\d\s-]+$/.test(titulo.nombre) ? titulo.nombre : null
       const deMi = armarDeMi(mensajes, { nombreChat: destino.nombre, nombrePropio, esGrupo: destino.esGrupo || jid.endsWith('@g.us') })
-      // Lo que ya está guardado: mismo minuto, mismo lado y mismo texto.
+      // Lo que ya está guardado: mismo minuto, mismo lado y mismo texto. Se CUENTAN (no alcanza con
+      // saber si está): dos "ok" en el mismo minuto son dos mensajes, y dos respaldos que se solapan
+      // traen los mismos. De cada uno se suma solo lo que supera lo ya guardado.
       const clave = (ts, mio, texto, media) => `${Math.floor(ts / 60)}|${mio ? 1 : 0}|${media ? 'm' : 't'}|${normalizar(texto)}`
-      const existentes = new Set(listarMensajes(jid).map((m) => clave(m.ts, m.deMi, m.texto, !!m.media)))
+      const existentes = new Map()
+      for (const x of listarMensajes(jid)) {
+        const k = clave(x.ts, x.deMi, x.texto, !!x.media)
+        existentes.set(k, (existentes.get(k) || 0) + 1)
+      }
+      const enElArchivo = new Map() // cuántas veces vimos cada uno en este .txt
+      const iguales = new Map() // cuántas líneas idénticas (misma hora, autor y texto) hubo, para darles id distinto
       const dirTxt = path.posix.dirname(txt.ruta)
       let sumados = 0
       for (const m of mensajes) {
@@ -334,11 +346,18 @@ export async function importarRespaldo(archivo, { nombreArchivo = '', nombreProp
         }
         const mio = deMi(m.autor)
         const c = interpretarCuerpo(m.cuerpo)
-        if (existentes.has(clave(m.ts, mio, c.texto, !!c.adjunto))) {
+        const k = clave(m.ts, mio, c.texto, !!c.adjunto)
+        const vez = (enElArchivo.get(k) || 0) + 1
+        enElArchivo.set(k, vez)
+        if (vez <= (existentes.get(k) || 0)) {
           resumen.yaEstaban++
           continue
         }
-        const id = `IMP${crypto.createHash('sha1').update(`${jid}|${m.ts}|${m.autor}|${m.cuerpo}`).digest('hex').slice(0, 20).toUpperCase()}`
+        // Dos líneas idénticas en el mismo minuto: la segunda lleva un número para no pisar a la primera.
+        const linea = `${jid}|${m.ts}|${m.autor}|${m.cuerpo}`
+        const n = iguales.get(linea) || 0
+        iguales.set(linea, n + 1)
+        const id = `IMP${crypto.createHash('sha1').update(n ? `${linea}|#${n}` : linea).digest('hex').slice(0, 20).toUpperCase()}`
         const msg = { id, deMi: mio, ts: m.ts, texto: c.texto || '', origen: 'historial', importado: true }
         if (mio) {
           msg.estado = 'leido'
@@ -365,10 +384,8 @@ export async function importarRespaldo(archivo, { nombreArchivo = '', nombreProp
           }
         } else msg.tipo = c.tipo
         const { nuevo } = agregarMensaje(jid, msg, { avisar: false })
-        if (nuevo) {
-          sumados++
-          existentes.add(clave(msg.ts, mio, msg.texto, !!msg.media))
-        } else resumen.yaEstaban++
+        if (nuevo) sumados++
+        else resumen.yaEstaban++
       }
       if (sumados && nuevoChat) upsertChat(jid, { pushName: nuevoChat })
       if (sumados) resumen.chats++

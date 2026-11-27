@@ -102,9 +102,9 @@ function ControlHistorial({ enviar }) {
     return () => document.removeEventListener('keydown', esc)
   }, [abierto])
 
-  const descargar = (archivos) => {
+  const descargar = () => {
     setAbierto(false)
-    enviar({ tipo: 'nf-wa:exportar', archivos })
+    enviar({ tipo: 'nf-wa:exportar' })
   }
   const alElegir = (e) => {
     const archivo = e.target.files?.[0]
@@ -126,24 +126,17 @@ function ControlHistorial({ enviar }) {
         <Archive size={16} />
         Historial
       </button>
-      <input ref={archivoRef} type="file" accept=".zip,.rar" hidden onChange={alElegir} />
+      <input ref={archivoRef} type="file" accept=".zip,.rar,.enc" hidden onChange={alElegir} />
 
       {abierto && <div className="fixed inset-0 z-40" aria-hidden="true" onPointerDown={() => setAbierto(false)} />}
       {abierto && (
         <div role="menu" aria-label="Historial" className="absolute right-0 top-full z-50 mt-2 w-[20rem] max-w-[calc(100vw-2rem)] rounded-2xl border border-line bg-surface-solid p-2 shadow-2xl">
           <p className="px-3 pb-1 pt-2 text-xs font-semibold uppercase tracking-wide text-ink-3">Descargar todos los chats</p>
-          <button type="button" role="menuitem" className={opcion} onClick={() => descargar(true)}>
+          <button type="button" role="menuitem" className={opcion} onClick={descargar}>
             <Download size={18} className="mt-0.5 shrink-0 text-ink-2" />
             <span>
-              <span className="block text-sm font-semibold text-ink">Con archivos multimedia</span>
-              <span className="block text-[12.5px] leading-snug text-ink-2">Una carpeta por número con el chat y sus fotos, audios, videos y documentos.</span>
-            </span>
-          </button>
-          <button type="button" role="menuitem" className={opcion} onClick={() => descargar(false)}>
-            <FileText size={18} className="mt-0.5 shrink-0 text-ink-2" />
-            <span>
-              <span className="block text-sm font-semibold text-ink">Solo texto</span>
-              <span className="block text-[12.5px] leading-snug text-ink-2">Más liviano: el texto de cada chat, sin los archivos.</span>
+              <span className="block text-sm font-semibold text-ink">Respaldo completo (cifrado)</span>
+              <span className="block text-[12.5px] leading-snug text-ink-2">Todos los chats con sus fotos, audios, videos y documentos, cifrado igual que el de la nube. Se abre con “Cargar respaldo”.</span>
             </span>
           </button>
           <div className="my-1.5 h-px bg-line" />
@@ -159,7 +152,7 @@ function ControlHistorial({ enviar }) {
             <Upload size={18} className="mt-0.5 shrink-0 text-ink-2" />
             <span>
               <span className="block text-sm font-semibold text-ink">Cargar un respaldo (.zip o .rar)</span>
-              <span className="block text-[12.5px] leading-snug text-ink-2">Suma los mensajes y archivos que falten. Sirve el de acá o el "Exportar chat" del celular.</span>
+              <span className="block text-[12.5px] leading-snug text-ink-2">Suma los mensajes y archivos que falten. Sirve el respaldo de acá (.enc) o el "Exportar chat" del celular.</span>
             </span>
           </button>
         </div>
