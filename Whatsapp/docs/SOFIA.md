@@ -52,6 +52,16 @@ datos) pero que lo puede ayudar con cualquier otra consulta**, y lo queda en la 
 Con un CRM conectado, el texto del negocio (tono, financiación, políticas) tiene un tope de 10.000 letras; sin CRM
 sigue en 30.000 porque ahí van el catálogo y los horarios escritos a mano.
 
+## Ver cómo anda Sofía (en el WhatsApp del CRM)
+
+En **Conexión → Sofía (asistente con IA)**:
+
+- **Estado:** conectada, sin señal del bot (la app del bot está apagada o la PC sin internet), sin WhatsApp vinculado o apagada; si está respondiendo o es horario de atención; charlas abiertas ahora; última falla de la IA.
+- **Capacidad y uso:** respuestas con IA de este mes frente al cupo de la licencia (con barra: ámbar desde el 80%, roja al llegar al tope) y el tope por minuto.
+- **Recuento:** clientes atendidos, conversaciones, mensajes y caracteres de clientes y de Sofía, y derivadas a un asesor, de hoy, del mes y total; más un gráfico de mensajes por día de los últimos 30 días.
+
+El bot informa su estado cada minuto (`POST /api/bot/estado`); el recuento sale de las charlas de Sofía que ya se guardan. Con la PC servidor apagada, el CRM en solo lectura muestra lo último que se supo como "sin señal del bot".
+
 ## Paso a paso en la PC servidor
 
 ### 1. Servidor (Neifert WhatsApp)
@@ -75,7 +85,7 @@ sigue en 30.000 porque ahí van el catálogo y los horarios escritos a mano.
    1. **Número:** *Vincular otro número* → escaneá el QR con el **celular de Sofía**. Conviene que sea un número propio: WhatsApp deja vincular el bot al mismo número que el servidor (son dos dispositivos distintos), pero hoy en el CRM cada mensaje de Sofía se vería dos veces.
    2. **Negocio:** nombre "Neifert Automotores", rubro "concesionaria", tono, e información útil: horarios, dirección, formas de pago, si toman usados, etc. El catálogo de autos no hace falta cargarlo: lo trae solo del CRM.
    3. **Firma:** `Sofía · asistente virtual`. Cada respuesta sale con esa firma.
-   4. **Horario de atención:** activalo con los días y horas en que atienden personas. Sofía contesta solo **fuera** de ese horario.
+   4. **Horario de atención:** activalo con los días y horas en que atienden personas. Sofía contesta solo **fuera** de ese horario. **Al empezar el horario de atención, las charlas que venía atendiendo se cierran y se derivan a una persona**: el cliente recibe el mensaje de derivación, el CRM una tarea "Responder a …" y el cierre en la charla (recuadro violeta), y los números del negocio un aviso. Dentro del horario no contesta nada; la próxima vez que escriban fuera de horario arranca una charla nueva.
    5. **CRM:**
       - URL: `http://localhost:3100/api/bot`
       - Secreto: el mismo `WA_BOT_SECRETO`

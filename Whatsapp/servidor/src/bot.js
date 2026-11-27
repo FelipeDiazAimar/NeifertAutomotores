@@ -8,6 +8,7 @@ import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
 import { datosNegocio, vehiculosWeb } from './whatsapp.js'
 import { guardarCharla } from './sofia.js'
+import { guardarReporte } from './sofiaEstado.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
 
 const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'precioMax', 'moneda', 'combustible', 'transmision', 'nuevo', 'disponibles', 'limite']
@@ -15,6 +16,8 @@ const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'pre
 export function rutasBot({ ruta, accion }) {
   const r = Router()
   r.get('/salud', ruta(() => ({ ok: true, crm: CRM_CONFIGURADO })))
+  // Cada minuto el bot cuenta cómo está (conectado, uso del cupo, charlas abiertas): lo ve el panel en Conexión → Sofía.
+  r.post('/estado', ruta((req) => guardarReporte(req.body || {})))
   // `imagen` es una ruta interna del panel: al bot no le sirve.
   // Dirección, horarios, teléfonos y categorías de la página.
   r.get('/negocio', ruta(() => datosNegocio()))

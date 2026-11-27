@@ -260,6 +260,33 @@ export async function historialRespaldos(env, req) {
   return { linea, items }
 }
 
+/**
+ * Estado de Sofía (el asistente con IA) con lo último que el servidor guardó en wa.estado (clave sofia_estado): el
+ * reporte del bot y el recuento de lo que atendió. Con la PC apagada no llegan reportes nuevos, así que se ve como "sin
+ * señal del bot" con lo último que se supo. Misma forma que GET /api/sofia del servidor de la PC.
+ */
+const SIN_SENAL_MS = 3 * 60e3
+const periodoVacio = () => ({ clientes: 0, conversaciones: 0, mensajesCliente: 0, mensajesSofia: 0, caracteresCliente: 0, caracteresSofia: 0, derivadas: 0 })
+export function vistaSofiaGuardada(guardado, ahora = Date.now()) {
+  const reporte = guardado?.reporte || null
+  let conexion = { estado: 'nunca', respondiendo: false }
+  if (reporte) {
+    const hace = ahora - (reporte.recibidoEn || 0)
+    if (hace > SIN_SENAL_MS) conexion = { estado: 'sin_senal', respondiendo: false, hace }
+    else if (!reporte.vinculado) conexion = { estado: 'sin_numero', respondiendo: false, hace }
+    else if (!reporte.conectado) conexion = { estado: 'desconectado', respondiendo: false, hace }
+    else if (!reporte.activo) conexion = { estado: 'apagado', respondiendo: false, hace }
+    else conexion = { estado: 'conectado', respondiendo: !reporte.horario?.dentro, hace }
+  }
+  const estadisticas = guardado?.estadisticas || { hoy: periodoVacio(), mes: periodoVacio(), total: periodoVacio(), porDia: [], desde: null }
+  return { conexion, reporte, estadisticas, ahora }
+}
+
+async function estadoSofia(env, linea) {
+  const { rows } = await base(env).query("select valor from wa.estado where linea = $1 and clave = 'sofia_estado'", [linea])
+  return vistaSofiaGuardada(rows[0]?.valor, Date.now())
+}
+
 /** Mismos roles que el servidor del WhatsApp. En modo lectura nadie escribe ni maneja la línea. */
 function puedeEntrar(env, rol) {
   const roles = [
@@ -559,6 +586,7 @@ async function atender(env, req, res, ruta) {
     }
   }
   if (seccion === 'agentes' || seccion === 'log') return []
+  if (seccion === 'sofia') return estadoSofia(env, linea)
   if (seccion === 'buscar') return buscar(env, linea, q)
   if (seccion === 'chats' && !jid) return listarChats(env, linea)
   if (seccion === 'chats' && chatValido(jid)) {

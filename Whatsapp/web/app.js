@@ -3714,6 +3714,7 @@ function setView(view) {
     renderPrefs()
     renderPrivacidad()
     renderRespaldoMensajes()
+    renderSofia()
   }
   renderPill()
 }
@@ -3732,6 +3733,96 @@ function renderPrivacidad() {
   ]
   $('#privacidadCard').innerHTML = `<ul class="priv">${filas.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
     <p class="card-sub">Lo define la concesionaria en la configuración del servidor. Todo lo que se hace desde el panel queda registrado con el nombre de quien lo hizo.</p>`
+}
+
+/*
+ * Sofía (el asistente con IA) en Conexión: si el bot está conectado, cuánto lleva usado del cupo mensual y el recuento
+ * de lo que atendió (clientes, mensajes y caracteres). Lo manda el bot cada minuto (GET /api/sofia). Se actualiza solo
+ * mientras la pestaña está abierta.
+ */
+const SOFIA_ESTADOS = {
+  conectado: ['ok', 'Conectada'],
+  sin_senal: ['mal', 'Sin señal del bot'],
+  desconectado: ['aviso', 'Sin WhatsApp (falta vincular el número)'],
+  sin_numero: ['aviso', 'Sin número vinculado'],
+  apagado: ['nada', 'Apagada'],
+  nunca: ['nada', 'El bot todavía no avisó'],
+}
+const haceTexto = (ms) => {
+  const s = Math.max(0, Math.round(ms / 1000))
+  if (s < 60) return 'hace instantes'
+  if (s < 3600) return `hace ${Math.round(s / 60)} min`
+  if (s < 86400) return `hace ${Math.round(s / 3600)} h`
+  return `hace ${Math.round(s / 86400)} días`
+}
+let sofiaTimer = null
+
+async function renderSofia() {
+  const el = $('#sofiaCard')
+  if (!el) return
+  clearTimeout(sofiaTimer)
+  let v
+  try {
+    v = await api('/api/sofia')
+  } catch (err) {
+    el.innerHTML = `<p class="path">No se pudo leer el estado de Sofía: ${esc(err.message)}</p>`
+    return
+  }
+  const rep = v.reporte
+  const [clase, rotulo] = SOFIA_ESTADOS[v.conexion.estado] || SOFIA_ESTADOS.nunca
+  const nombre = rep?.asistente || 'Sofía'
+  const partes = [`<div class="sofia-estado"><span class="sofia-pill ${clase}">${esc(rotulo)}</span>`]
+  if (v.conexion.estado === 'conectado') {
+    partes.push(v.conexion.respondiendo
+      ? '<span>Respondiendo ahora (fuera del horario de atención)</span>'
+      : `<span>En horario de atención: atienden personas, ${esc(nombre)} no responde</span>`)
+  }
+  partes.push('</div>')
+  if (rep) {
+    const detalle = [
+      `Último aviso del bot: ${haceTexto(v.ahora - rep.recibidoEn)}`,
+      rep.numeroPropio ? 'con su propio número' : 'con el mismo número de envíos',
+      rep.horario?.activo ? `responde fuera de: ${rep.horario.texto || 'el horario cargado'}` : 'responde a cualquier hora',
+      `charlas abiertas ahora: ${fmtNum(rep.atendiendo)}`,
+      rep.version ? `versión ${rep.version}` : '',
+    ].filter(Boolean).join(' · ')
+    partes.push(`<p class="sofia-sub">${esc(detalle)}</p>`)
+
+    // Capacidad: respuestas con IA de este mes frente al cupo de la licencia.
+    if (rep.ia?.cupo) {
+      const pct = Math.min(100, Math.round((rep.ia.usadas / rep.ia.cupo) * 100))
+      const nivel = pct >= 100 ? 'lleno' : pct >= 80 ? 'alto' : ''
+      partes.push(`<div class="sofia-uso"><b>Respuestas con IA este mes: ${fmtNum(rep.ia.usadas)} de ${fmtNum(rep.ia.cupo)} (${pct}%)</b>
+        <div class="sofia-barra ${nivel}" role="progressbar" aria-valuenow="${pct}" aria-valuemin="0" aria-valuemax="100"><i style="width:${pct}%"></i></div>
+        <p class="sofia-sub">Quedan ${fmtNum(Math.max(0, rep.ia.cupo - rep.ia.usadas))} hasta el día 1${rep.ia.porMinuto ? ` · tope de ${fmtNum(rep.ia.porMinuto)} respuestas por minuto` : ''}. Las pruebas del bot también cuentan.</p></div>`)
+    } else {
+      partes.push('<p class="sofia-sub">Todavía no se sabe cuánto lleva usado del cupo (el bot lo informa con la primera respuesta o a los pocos minutos).</p>')
+    }
+    if (rep.ultimaFalla?.ts) partes.push(`<div class="sofia-falla">Última falla (${haceTexto(v.ahora - rep.ultimaFalla.ts)}): ${esc(rep.ultimaFalla.que)}</div>`)
+  }
+
+  // Recuento de lo que atendió.
+  const e = v.estadisticas
+  const fila = (rotuloFila, clave) => `<tr><td>${rotuloFila}</td><td>${fmtNum(e.hoy[clave])}</td><td>${fmtNum(e.mes[clave])}</td><td>${fmtNum(e.total[clave])}</td></tr>`
+  partes.push(`<table class="sofia-tabla"><thead><tr><th></th><th>Hoy</th><th>Este mes</th><th>Total</th></tr></thead><tbody>
+    ${fila('Clientes atendidos', 'clientes')}
+    ${fila('Conversaciones', 'conversaciones')}
+    ${fila('Mensajes de clientes', 'mensajesCliente')}
+    ${fila(`Mensajes de ${esc(nombre)}`, 'mensajesSofia')}
+    ${fila('Caracteres de clientes', 'caracteresCliente')}
+    ${fila(`Caracteres de ${esc(nombre)}`, 'caracteresSofia')}
+    ${fila('Derivadas a un asesor', 'derivadas')}
+  </tbody></table>`)
+  const maximo = Math.max(1, ...e.porDia.map((d) => d.mensajes))
+  const barras = e.porDia.map((d) => `<i class="${d.mensajes ? '' : 'cero'}" style="height:${d.mensajes ? Math.max(8, Math.round((d.mensajes / maximo) * 100)) : 4}%" title="${esc(d.dia)}: ${fmtNum(d.clientes)} clientes, ${fmtNum(d.mensajes)} mensajes"></i>`).join('')
+  partes.push(`<div class="sofia-dias" role="img" aria-label="Mensajes por día, últimos 30 días">${barras}</div>
+    <p class="sofia-sub">Mensajes por día, últimos 30 días${e.desde ? ` · desde el ${esc(new Date(e.desde).toLocaleDateString('es-AR'))}` : ''}.</p>`)
+  el.innerHTML = partes.join('')
+  // Mientras se mira la pestaña, se actualiza solo.
+  sofiaTimer = setTimeout(() => {
+    const tarjeta = $('#sofiaCard')
+    if (tarjeta && tarjeta.offsetParent !== null && !document.hidden) renderSofia()
+  }, 30_000)
 }
 
 /** Respaldo programado de los mensajes (solo quien maneja la línea): último bueno, si se pudo leer de vuelta y "Respaldar ahora". */

@@ -35,6 +35,7 @@ import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
 import { rutasBot } from './src/bot.js'
 import { esDeSofia, sofiaVisto } from './src/sofia.js'
+import { vistaSofia } from './src/sofiaEstado.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
@@ -225,6 +226,8 @@ app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), confi
 app.get('/api/log', exigirLinea, ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
 app.get('/api/almacenamiento', ruta(() => usoAlmacenamiento()))
+// Estado de Sofía (asistente con IA): conexión del bot, uso del cupo y recuento de lo que atendió.
+app.get('/api/sofia', ruta(() => vistaSofia()))
 // "Descargar multimedia al llegar" lo puede pausar cualquier usuario (para no guardar
 // archivos de más); el resto de las preferencias, solo quien maneja la línea.
 const PREFS_PARA_TODOS = ['descargarMedia']
