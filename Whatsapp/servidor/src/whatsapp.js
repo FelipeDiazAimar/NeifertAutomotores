@@ -2901,7 +2901,7 @@ export async function enviarProducto(chatId, productoId) {
 
 /* ---------------- Autos del catálogo de la página web ---------------- */
 
-const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,estado,es_nuevo,imagen_principal,imagenes,descripcion'
+const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,estado,es_nuevo,categoria,imagen_principal,imagenes,descripcion'
 let vehiculosWebCache = { ts: 0, lista: [] }
 
 async function vehiculosWebTodos() {

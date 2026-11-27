@@ -11,7 +11,7 @@ import { guardarCharla } from './sofia.js'
 import { guardarReporte } from './sofiaEstado.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
 
-const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'precioMax', 'moneda', 'combustible', 'transmision', 'nuevo', 'disponibles', 'limite']
+const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'precioMax', 'moneda', 'combustible', 'transmision', 'categoria', 'condicion', 'ordenar', 'nuevo', 'disponibles', 'limite']
 
 export function rutasBot({ ruta, accion }) {
   const r = Router()
