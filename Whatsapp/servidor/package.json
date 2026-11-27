@@ -17,6 +17,7 @@
     "restaurar": "node scripts/restaurar.mjs",
     "restaurar-mensajes": "node scripts/restaurar-mensajes.mjs",
     "descifrar-respaldo": "node scripts/descifrar-respaldo.mjs",
+    "estadisticas-ia": "node scripts/estadisticas-fuera-de-horario.mjs",
     "mudar-a-lineas": "node scripts/mudar-a-lineas.mjs"
   },
   "dependencies": {

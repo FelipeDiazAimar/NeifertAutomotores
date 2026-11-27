@@ -126,10 +126,15 @@ archivos ya están en R2) en `respaldo/mensajes/AAAA-MM-DD.enc`, cifrado con la 
 
 ### Respaldo local (el que se baja a mano)
 
-Es el de **Conexión → Exportar todos los chats** (con o sin archivos), que se guarda en la PC o
-en un disco. Cada vez que termina bien queda anotado en la base (`wa.estado`, clave
-`respaldo_local`): cuándo, quién, cuántos chats y mensajes y hasta qué mensaje llega (los
-últimos 30). La tarjeta de Conexión muestra el último y cuántos días pasaron.
+Es el de **Conexión → Exportar todos los chats**, que se guarda en la PC o en un disco. Es **siempre
+completo** (todos los chats con todos sus archivos descargados) y **siempre cifrado** con
+`WA_BACKUP_CLAVE`, igual que el de la nube: sale un solo archivo `.enc`, cifrado de a trozos (aguanta
+varios GB sin cargarse en memoria). Sin la clave el servidor no lo hace. Se abre con **Cargar
+respaldo** (acepta el `.enc`) o, sin el panel, con `npm run descifrar-respaldo -- archivo.enc`.
+
+Cada vez que termina bien queda anotado en la base (`wa.estado`, clave `respaldo_local`): cuándo,
+quién, cuántos chats, mensajes y archivos y hasta qué mensaje llega (los últimos 120). La tarjeta de
+Conexión y Admin → Respaldos de WhatsApp muestran el historial.
 
 - **Aviso**: si pasan más de `WA_RESPALDO_LOCAL_AVISO_DIAS` días (3 por defecto) sin ninguno, se crea
   la alerta "Hace más de 3 días que no se hace el respaldo local de WhatsApp" para admin, dueño
@@ -139,6 +144,8 @@ en un disco. Cada vez que termina bien queda anotado en la base (`wa.estado`, cl
   cuenta los mensajes iguales (mismo minuto, lado y texto): suma solo los que faltan, no duplica
   y no pierde dos mensajes idénticos del mismo minuto. Da igual el orden en que se carguen.
   Límite conocido: un mensaje editado o con archivo entre dos respaldos puede entrar dos veces.
+- **Si falla el de la nube** (R2), el aviso va solo al administrador. La lista "Avisar si falta el
+  respaldo local" es solo para el local.
 
 ### Restaurar en una PC nueva
 
