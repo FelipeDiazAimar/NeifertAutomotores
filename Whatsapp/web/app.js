@@ -2156,6 +2156,22 @@ async function abrirFormCrm(tipo) {
   renderCrm()
 }
 
+/**
+ * "Crear tarea" / "Crear alerta" desde el menú del chat: abre el chat y su ficha con el
+ * formulario ya puesto. Si el contacto todavía no es cliente del CRM, lleva a la ficha para
+ * crearlo o vincularlo primero (la tarea y la alerta siempre son de un cliente).
+ */
+async function crearDesdeChat(id, tipo) {
+  if (state.activo !== id) await abrirChat(id)
+  if (state.activo !== id) return // no se pudo entrar (lo está atendiendo otra persona)
+  await cargarInfo(id)
+  await cargarCrm(id)
+  if (crmUi.ficha?.error) return toast(`No se pudo consultar el CRM: ${crmUi.ficha.error}`)
+  if (!crmUi.ficha?.cliente) return toast(`Este contacto todavía no es cliente del CRM: creá el cliente o vinculá uno y después creá la ${tipo}.`, 7000)
+  await abrirFormCrm(tipo)
+  $('#crmBloque form')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+}
+
 /** Guarda lo del formulario (crear cliente, seguimiento, tarea, alerta) o el vínculo elegido. */
 async function enviarCrm(tipo, datos, boton) {
   const chat = crmUi.chat
@@ -2519,6 +2535,8 @@ function abrirMenuChat(id, ancla) {
          <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="1s">${ic('mute')}Silenciar 1 semana</button>
          <button class="item" role="menuitem" data-chat-act="silenciar" data-valor="siempre">${ic('mute')}Silenciar siempre</button>`}
     ${c.noLeidos ? '' : `<button class="item" role="menuitem" data-chat-act="no-leido">${ic('chat')}Marcar como no leído</button>`}
+    ${c.esGrupo || !state.config?.crm ? '' : `<button class="item solo-escritura" role="menuitem" data-chat-act="crm-tarea">${ic('clock')}Crear tarea</button>
+    <button class="item solo-escritura" role="menuitem" data-chat-act="crm-alerta">${ic('alert')}Crear alerta</button>`}
     <button class="item" role="menuitem" data-chat-act="exportar">${ic('download')}Exportar chat</button>`
   menu.dataset.chat = id
   menu.hidden = false
@@ -2563,6 +2581,7 @@ async function accionChat(id, accion, valor) {
     }
     return
   }
+  if (accion === 'crm-tarea' || accion === 'crm-alerta') return crearDesdeChat(id, accion === 'crm-tarea' ? 'tarea' : 'alerta')
   if (accion === 'exportar') {
     // Como "Exportar chat" del celular: un .txt con todos los mensajes guardados, o un
     // .zip con el texto y los archivos.
@@ -3736,14 +3755,19 @@ async function renderRespaldoMensajes() {
     : r.error
       ? `Error: ${r.error}`
       : r.verificado ? 'Verificado ✓ (se pudo leer de vuelta)' : 'Todavía no hay respaldo.'
-  el.innerHTML = `<div class="toggle-row"><div>${fecha ? `Último respaldo: ${esc(fecha)}` : 'Sin respaldos todavía'}<span>${esc(estado)}${r.ultimoOk ? ` · ${fmtNum(r.chats)} chats · ${fmtNum(r.mensajes)} mensajes` : ''}</span></div>
+  const loc = r.local
+  const ultimoLocal = loc?.ultimo ? new Date(loc.ultimo).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+  const detalleLocal = loc?.historial?.[0]
+  el.innerHTML = `<div class="toggle-row"><div>${fecha ? `Respaldo en la nube: ${esc(fecha)}` : 'Respaldo en la nube: todavía no hay'}<span>${esc(estado)}${r.ultimoOk ? ` · ${fmtNum(r.chats)} chats · ${fmtNum(r.mensajes)} mensajes` : ''}</span></div>
     <button class="btn ghost" data-act="respaldar-mensajes" ${r.activo && !r.corriendo ? '' : 'disabled'}>${ic('download')}${r.corriendo ? 'Respaldando…' : 'Respaldar ahora'}</button></div>
-    <p class="card-sub">Cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar, se avisa a admin, dueño y a quienes marques abajo.</p>
+    <p class="card-sub">En la nube: cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar se avisa solo al administrador.</p>
+    <div class="toggle-row"><div>${ultimoLocal ? `Respaldo local: ${esc(ultimoLocal)}` : 'Respaldo local: todavía no se hizo ninguno'}<span>${loc?.atrasado ? `⚠ Hace ${loc.diasSinRespaldo} días sin respaldo local` : 'Al día'}${detalleLocal ? ` · ${fmtNum(detalleLocal.chats)} chats · ${fmtNum(detalleLocal.mensajes)} mensajes${detalleLocal.usuario ? ` · ${esc(detalleLocal.usuario)}` : ''}` : ''}</span></div></div>
+    <p class="card-sub">Local: el que se baja con "Exportar todos los chats" y se guarda en la PC o en un disco. Queda anotado cada vez. Si pasan más de ${loc?.avisoDias || 3} días sin uno, se avisa a admin, dueño y a quienes marques abajo. Se pueden solapar entre sí: al cargarlos no se duplica nada.</p>
     <div id="avisarRespaldo"></div>`
   renderAvisarRespaldo()
 }
 
-/** Empleados del CRM que reciben el aviso de respaldo atrasado (admin y dueño, siempre). */
+/** Empleados del CRM que reciben el aviso de que falta el respaldo local (admin y dueño, siempre). */
 async function renderAvisarRespaldo() {
   const el = $('#avisarRespaldo')
   if (!el) return
@@ -3755,7 +3779,7 @@ async function renderAvisarRespaldo() {
     return `<label class="check-row"><input type="checkbox" data-avisar-respaldo="${esc(u.id)}" ${siempre || elegidos.has(u.id) ? 'checked' : ''} ${siempre ? 'disabled' : ''}>
       <span>${esc(u.nombre || u.usuario)}${siempre ? ' <small>(siempre)</small>' : ''}</span></label>`
   }
-  el.innerHTML = `<h3 class="sub-titulo">Avisar si se atrasa</h3><div class="check-lista">${usuarios.map(fila).join('')}</div>`
+  el.innerHTML = `<h3 class="sub-titulo">Avisar si falta el respaldo local</h3><div class="check-lista">${usuarios.map(fila).join('')}</div>`
 }
 
 document.addEventListener('change', async (e) => {
@@ -3766,7 +3790,7 @@ document.addEventListener('change', async (e) => {
   else elegidos.delete(id)
   try {
     state.config = await api('/api/config', { method: 'POST', json: { avisarRespaldo: [...elegidos] } })
-    toast(e.target.checked ? 'Va a recibir el aviso si el respaldo se atrasa.' : 'Ya no recibe el aviso.')
+    toast(e.target.checked ? 'Va a recibir el aviso si falta el respaldo local.' : 'Ya no recibe el aviso.')
   } catch (err) {
     e.target.checked = !e.target.checked
     toast(`No se pudo guardar: ${err.message}`)

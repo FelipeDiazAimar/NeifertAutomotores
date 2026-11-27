@@ -4,8 +4,8 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { listarArchivos } from '../src/archivos.js'
-import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, rutasDeChats, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
-import { crearZip } from '../src/exportar.js'
+import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, soloAdmin, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
+import { crearZip, rutasDeChats } from '../src/exportar.js'
 
 const CLAVE = 'clave larga de prueba'
 const ts = (iso) => new Date(iso).getTime() / 1000
@@ -122,21 +122,25 @@ describe('aviso si los respaldos se atrasan', () => {
     expect(ids(['u-bruno'])).toEqual(['u-admin', 'u-dueno', 'u-bruno'])
   })
 
-  it('crea una alerta por admin/dueño y no repite antes de 24 h', async () => {
+  it('si falla el respaldo en la nube se avisa solo al admin', () => {
+    expect(soloAdmin(USUARIOS).map((u) => u.id)).toEqual(['u-admin'])
+  })
+
+  it('crea una alerta solo para el admin y no repite antes de 24 h', async () => {
     // Nunca hubo uno bueno y este falla: no hay con qué respaldar.
     const falla = { ...opciones, mensajesDe: () => { throw new Error('base caída') } }
     const t0 = new Date('2027-02-01T12:00:00Z')
     await revisarRespaldoMensajes({ ...falla, ahora: t0 })
-    expect(alertas).toHaveLength(2)
-    expect(alertas.map((a) => a.asignado_a)).toEqual(['u-admin', 'u-dueno'])
-    expect(alertas[0]).toMatchObject({ titulo: 'Respaldo de WhatsApp atrasado', fecha: '2027-02-01', hora: '09:00', creado_por: null })
+    expect(alertas).toHaveLength(1)
+    expect(alertas.map((a) => a.asignado_a)).toEqual(['u-admin'])
+    expect(alertas[0]).toMatchObject({ titulo: 'Respaldo de WhatsApp en la nube atrasado', fecha: '2027-02-01', hora: '09:00', creado_por: null })
     expect(alertas[0].descripcion).toContain('nunca')
     expect(alertas[0].descripcion).toContain('base caída')
 
     await revisarRespaldoMensajes({ ...falla, ahora: new Date(t0.getTime() + 3600e3) })
-    expect(alertas).toHaveLength(2)
+    expect(alertas).toHaveLength(1)
     await revisarRespaldoMensajes({ ...falla, ahora: new Date(t0.getTime() + 25 * 3600e3) })
-    expect(alertas).toHaveLength(4)
+    expect(alertas).toHaveLength(2)
   })
 
   it('con un respaldo reciente no respalda de nuevo ni avisa', async () => {

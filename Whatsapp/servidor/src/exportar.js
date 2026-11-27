@@ -66,6 +66,23 @@ export function carpetaDeChat(chat) {
   return carpeta([numero, nombre].filter(Boolean).join(' - ') || chat.id?.split('@')[0])
 }
 
+/**
+ * Ruta de cada chat dentro del .zip, la misma carpeta que el export normal. Nunca se repite:
+ * si dos chats caen en la misma carpeta (dos grupos con el mismo nombre, dos "Juan"), o si es
+ * un grupo, se le suma el id del chat entre corchetes, que "Importar respaldo" reconoce.
+ */
+export function rutasDeChats(chats) {
+  const base = chats.map(carpetaDeChat)
+  const veces = base.reduce((m, c) => m.set(c.toLowerCase(), (m.get(c.toLowerCase()) || 0) + 1), new Map())
+  const usadas = new Set()
+  return chats.map((chat, i) => {
+    let carpeta = chat.esGrupo || veces.get(base[i].toLowerCase()) > 1 ? `${base[i]} [${chat.id}]` : base[i]
+    for (let n = 2; usadas.has(carpeta.toLowerCase()); n++) carpeta = `${base[i]} [${chat.id}] (${n})`
+    usadas.add(carpeta.toLowerCase())
+    return `${carpeta}/Chat de WhatsApp.txt`
+  })
+}
+
 // "2026-10-06 14.05.33" (con puntos: Windows no acepta ":" en los nombres).
 const sello = (ts) => {
   const d = new Date(ts * 1000)

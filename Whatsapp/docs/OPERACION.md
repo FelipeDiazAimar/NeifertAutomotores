@@ -115,16 +115,30 @@ archivos ya están en R2) en `respaldo/mensajes/AAAA-MM-DD.enc`, cifrado con la 
 - **Prueba de que se puede importar**: apenas se guarda, se baja de nuevo, se descifra y se lee
   con el mismo código de "Importar respaldo" (sin escribir nada). Solo cuenta como bueno si
   los chats y mensajes leídos coinciden con los exportados.
-- **Aviso si se atrasa**: pasados `WA_RESPALDO_AVISO_DIAS` días (3 por defecto) sin un respaldo
-  bueno, se crea una alerta "Respaldo de WhatsApp atrasado" para cada admin y dueño del CRM
-  y para los empleados elegidos en el panel (Conexión → Respaldo de mensajes → "Avisar también
-  a"). Les llega por push, mail y WhatsApp, una vez cada 24 h mientras siga atrasado. A los demás
-  vendedores no.
+- **Aviso si la nube falla**: pasados `WA_RESPALDO_AVISO_DIAS` días (3 por defecto) sin un respaldo
+  bueno, se crea una alerta "Respaldo de WhatsApp en la nube atrasado" **solo para el
+  administrador** (push, mail y WhatsApp), una vez cada 24 h mientras siga atrasado.
 - **Estado y respaldo manual**: pestaña Conexión → "Respaldo de mensajes" → "Respaldar ahora".
 - **Recuperar**: `npm run restaurar-mensajes` (el último) o
   `npm run restaurar-mensajes -- --fecha=AAAA-MM-DD`. Baja, descifra y deja un
   `Mensajes de WhatsApp Neifert AAAA-MM-DD.zip` en la carpeta actual; se carga desde el CRM con
   "Importar respaldo" (suma lo que falta, no duplica).
+
+### Respaldo local (el que se baja a mano)
+
+Es el de **Conexión → Exportar todos los chats** (con o sin archivos), que se guarda en la PC o
+en un disco. Cada vez que termina bien queda anotado en la base (`wa.estado`, clave
+`respaldo_local`): cuándo, quién, cuántos chats y mensajes y hasta qué mensaje llega (los
+últimos 30). La tarjeta de Conexión muestra el último y cuántos días pasaron.
+
+- **Aviso**: si pasan más de `WA_RESPALDO_LOCAL_AVISO_DIAS` días (3 por defecto) sin ninguno, se crea
+  la alerta "Hace más de 3 días que no se hace el respaldo local de WhatsApp" para admin, dueño
+  y los empleados marcados en Conexión → "Avisar si falta el respaldo local", una vez cada 24 h.
+  El primer día que se instala no avisa: cuenta desde que se empezó a vigilar.
+- **Solapados**: los respaldos pueden repetirse un poco entre sí a propósito. "Importar respaldo"
+  cuenta los mensajes iguales (mismo minuto, lado y texto): suma solo los que faltan, no duplica
+  y no pierde dos mensajes idénticos del mismo minuto. Da igual el orden en que se carguen.
+  Límite conocido: un mensaje editado o con archivo entre dos respaldos puede entrar dos veces.
 
 ### Restaurar en una PC nueva
 

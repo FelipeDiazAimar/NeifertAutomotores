@@ -39,6 +39,20 @@ function base() {
   return pool
 }
 
+/** Un valor suelto de wa.estado de esta línea (null si no existe). */
+export async function leerEstadoNube(clave) {
+  const { rows } = await base().query('select valor from wa.estado where linea = $1 and clave = $2', [LINEA, clave])
+  return rows[0]?.valor ?? null
+}
+
+export async function guardarEstadoNube(clave, valor) {
+  await base().query(
+    `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, $2, $3::jsonb, now())
+     on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,
+    [LINEA, clave, JSON.stringify(valor)],
+  )
+}
+
 /** La PC volvió de una suspensión: las conexiones abiertas están muertas, se abren nuevas. */
 export function renovarConexiones() {
   const viejo = pool

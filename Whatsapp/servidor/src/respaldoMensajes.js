@@ -9,7 +9,7 @@
  *
  * Cada hora se revisa: si el último bueno tiene más de WA_RESPALDO_MENSAJES_DIAS (2) se
  * hace otro; y si pasaron más de WA_RESPALDO_AVISO_DIAS (3) sin uno bueno, se crea una
- * alerta del CRM para cada admin/dueño (así llega por push, mail y WhatsApp), una vez por día.
+ * alerta del CRM solo para el admin (así llega por push, mail y WhatsApp), una vez por día.
  *
  * Se baja y descifra con `npm run restaurar-mensajes` (scripts/restaurar-mensajes.mjs).
  */
@@ -20,7 +20,7 @@ import { BACKUP_CLAVE, LINEA_DIR } from './config.js'
 import { respaldoActivo, cifrar, descifrar } from './respaldo.js'
 import { guardar, leer, listarArchivos, borrar } from './archivos.js'
 import { config, listarChats, listarMensajes } from './almacen.js'
-import { carpetaDeChat, crearZip, textoDeChat } from './exportar.js'
+import { crearZip, rutasDeChats, textoDeChat } from './exportar.js'
 import { entradasZip, leerChatTxt } from './importar.js'
 import * as crm from './crm.js'
 import { log } from './eventos.js'
@@ -32,23 +32,6 @@ const DIA_MS = 86400e3
 const dias = (valor, porDefecto) => (Number(valor) > 0 ? Number(valor) : porDefecto)
 const CADA_DIAS = () => dias(process.env.WA_RESPALDO_MENSAJES_DIAS, 2)
 const AVISO_DIAS = () => dias(process.env.WA_RESPALDO_AVISO_DIAS, 3)
-
-/**
- * Ruta de cada chat dentro del .zip, la misma carpeta que el export normal. Nunca se repite:
- * si dos chats caen en la misma carpeta (dos grupos con el mismo nombre, dos "Juan"), o si es
- * un grupo, se le suma el id del chat entre corchetes, que "Importar respaldo" reconoce.
- */
-export function rutasDeChats(chats) {
-  const base = chats.map(carpetaDeChat)
-  const veces = base.reduce((m, c) => m.set(c.toLowerCase(), (m.get(c.toLowerCase()) || 0) + 1), new Map())
-  const usadas = new Set()
-  return chats.map((chat, i) => {
-    let carpeta = chat.esGrupo || veces.get(base[i].toLowerCase()) > 1 ? `${base[i]} [${chat.id}]` : base[i]
-    for (let n = 2; usadas.has(carpeta.toLowerCase()); n++) carpeta = `${base[i]} [${chat.id}] (${n})`
-    usadas.add(carpeta.toLowerCase())
-    return `${carpeta}/Chat de WhatsApp.txt`
-  })
-}
 
 export const claveDeDia = (dia, prefijo = PREFIJO) => `${prefijo}${dia}.enc`
 // Las charlas de Sofía (sofia.js) van en un respaldo aparte.
@@ -156,27 +139,37 @@ export async function respaldarMensajes({ activo = respaldoActivo(), clave = BAC
   }
 }
 
-/** Una alerta del CRM por cada admin/dueño activo (el CRM la manda por push, mail y WhatsApp). */
 /**
- * A quién se avisa: admin y dueño siempre, más los usuarios del CRM elegidos en el panel
- * (Conexión → Respaldo de mensajes → "Avisar también a"). A los demás, no.
+ * A quién se avisa cuando falta el respaldo LOCAL (el que se baja a mano con "Exportar chats"):
+ * admin y dueño siempre, más los usuarios del CRM elegidos en el panel (Conexión → Respaldo →
+ * "Avisar si falta el respaldo local"). A los demás, no.
  */
 export function destinatariosAviso(usuarios, elegidos = config().avisarRespaldo || []) {
   return usuarios.filter((u) => ['admin', 'dueno'].includes(u.rol) || elegidos.includes(u.id))
 }
 
-async function avisarAtraso(estado, ahora, rest) {
+/** Cuando falla el respaldo en la nube (R2) se avisa solo al admin, a nadie más. */
+export const soloAdmin = (usuarios) => usuarios.filter((u) => u.rol === 'admin')
+
+/**
+ * Crea una alerta del CRM por cada usuario (el CRM la manda por push, mail y WhatsApp). Uno que
+ * falla no frena a los demás. Si llegó a alguno, no se reintenta en una hora (duplicaría la
+ * alerta de los que sí la recibieron); si fallaron todos, sí. Devuelve a cuántos llegó.
+ */
+export async function avisarUsuarios(usuarios, { titulo, descripcion }, ahora, rest) {
   const [fecha, hora] = [enArgentina(ahora).slice(0, 10), enArgentina(ahora).slice(11, 16)]
-  const usuarios = destinatariosAviso(await rest('usuarios?select=id,rol&activo=eq.true'))
-  const ultimo = estado.ultimoOk ? new Date(estado.ultimoOk).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'nunca'
-  const descripcion = `Último respaldo de mensajes bueno: ${ultimo}.${estado.error ? ` Último error: ${estado.error}` : ''}`
-  // Uno que falla no frena a los demás. Si llegó a alguno, no se reintenta en una hora
-  // (duplicaría la alerta de los que sí la recibieron); si fallaron todos, sí.
-  const envios = await Promise.allSettled(usuarios.map((u) => rest('alertas', { metodo: 'POST', cuerpo: { titulo: 'Respaldo de WhatsApp atrasado', descripcion, fecha, hora, asignado_a: u.id, creado_por: null } })))
+  const envios = await Promise.allSettled(usuarios.map((u) => rest('alertas', { metodo: 'POST', cuerpo: { titulo, descripcion, fecha, hora, asignado_a: u.id, creado_por: null } })))
   const fallidos = envios.filter((e) => e.status === 'rejected')
   if (usuarios.length && fallidos.length === usuarios.length) throw fallidos[0].reason
-  if (fallidos.length) log('aviso', 'No se pudo avisar a todos del respaldo atrasado', fallidos[0].reason?.message || '')
+  if (fallidos.length) log('aviso', `No se pudo avisar a todos (${titulo})`, fallidos[0].reason?.message || '')
   return usuarios.length - fallidos.length
+}
+
+async function avisarAtraso(estado, ahora, rest) {
+  const usuarios = soloAdmin(await rest('usuarios?select=id,rol&activo=eq.true'))
+  const ultimo = estado.ultimoOk ? new Date(estado.ultimoOk).toLocaleString('es-AR', { timeZone: 'America/Argentina/Buenos_Aires' }) : 'nunca'
+  const descripcion = `Último respaldo de mensajes en la nube (R2) bueno: ${ultimo}.${estado.error ? ` Último error: ${estado.error}` : ''}`
+  return avisarUsuarios(usuarios, { titulo: 'Respaldo de WhatsApp en la nube atrasado', descripcion }, ahora, rest)
 }
 
 /** Una vuelta: respalda si toca y avisa si hace demasiado que no hay uno bueno. */

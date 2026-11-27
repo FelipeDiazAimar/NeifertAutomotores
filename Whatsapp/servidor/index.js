@@ -25,6 +25,7 @@ import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs 
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual, sinUsuario } from './src/auth.js'
 import { vigilarAlertas } from './src/alertas.js'
 import { respaldarMensajes, vigilarRespaldoMensajes, vistaRespaldoMensajes } from './src/respaldoMensajes.js'
+import { registrarRespaldoLocal, vigilarRespaldoLocal, vistaRespaldoLocal } from './src/respaldoLocal.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
@@ -33,7 +34,7 @@ import { rutasBot } from './src/bot.js'
 import { esDeSofia, sofiaVisto } from './src/sofia.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
-import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
+import { crearZip, exportarConArchivos, nombreArchivo, rutasDeChats, textoDeChat, zipEnVivo } from './src/exportar.js'
 import { importarRespaldo } from './src/importar.js'
 import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm, soltarServidor, tomarServidor } from './src/nube.js'
 
@@ -345,18 +346,35 @@ app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req
   })()
   return { ok: true }
 }, (req) => ({ nombre: String(req.body?.nombre || '').slice(0, 200) })))
+// Todos los chats = el respaldo LOCAL (src/respaldoLocal.js): cuando termina bien se anota en la base y
+// de ahí sale el aviso si pasan días sin ninguno.
+const resumenDeExportacion = (chats) => {
+  let mensajes = 0
+  let hasta = 0
+  for (const c of chats) {
+    const lista = listarMensajes(c.id)
+    mensajes += lista.length
+    for (const m of lista) if (m.ts > hasta) hasta = m.ts
+  }
+  return { chats: chats.length, mensajes, hasta }
+}
 app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
   const chats = listarChats()
+  const resumen = resumenDeExportacion(chats)
+  const usuario = req.usuario?.nombre || req.usuario?.usuario || null
   if (req.query.archivos === '1') {
     await exportarZip(req, res, chats, `Chats de WhatsApp Neifert con archivos ${hoyIso()}.zip`)
+    await registrarRespaldoLocal({ ...resumen, usuario, conArchivos: true })
     return
   }
-  const zip = crearZip(chats.map((c) => ({ nombre: nombreArchivo(c.nombre, 'txt'), datos: textoDeChat(c, listarMensajes(c.id)) })))
+  const rutas = rutasDeChats(chats)
+  const zip = crearZip(chats.map((c, i) => ({ nombre: rutas[i], datos: textoDeChat(c, listarMensajes(c.id)) })))
   const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
   res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
+  await registrarRespaldoLocal({ ...resumen, usuario, conArchivos: false })
 }, () => ({})))
 // Respaldo programado de los mensajes (src/respaldoMensajes.js): el estado y "respaldar ahora".
-app.get('/api/respaldo/mensajes', exigirLinea, ruta(() => vistaRespaldoMensajes()))
+app.get('/api/respaldo/mensajes', exigirLinea, ruta(async () => ({ ...vistaRespaldoMensajes(), local: await vistaRespaldoLocal() })))
 app.post('/api/respaldo/mensajes', exigirLinea, accion('respaldo_mensajes', async () => {
   await respaldarMensajes()
   return vistaRespaldoMensajes()
@@ -541,7 +559,10 @@ const servidor = app.listen(PUERTO, HOST, () => {
     })
   }
   // Respaldo de los mensajes cada 2 días (con aviso a admin/dueño si se atrasa): solo con la base en Supabase.
-  if (almacen.modo === 'supabase') vigilarRespaldoMensajes()
+  if (almacen.modo === 'supabase') {
+    vigilarRespaldoMensajes()
+    vigilarRespaldoLocal()
+  }
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
 })

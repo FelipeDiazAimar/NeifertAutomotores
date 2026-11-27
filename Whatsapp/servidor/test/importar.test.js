@@ -118,3 +118,67 @@ describe('cargar un respaldo: sumar al historial', async () => {
     expect(a.nombreDe(JID)).toBe('Pedro')
   })
 })
+
+describe('respaldos locales que se solapan', async () => {
+  const a = await import('../src/almacen.js')
+  const { importarRespaldo } = await import('../src/importar.js')
+  const { textoDeChat } = await import('../src/exportar.js')
+  const J = '5493564777001@s.whatsapp.net'
+  const CHAT = { id: J, nombre: 'Laura', telefono: '+5493564777001', esGrupo: false }
+  const base = Math.floor(Date.now() / 1000) - 20 * 86400
+  const min = (n) => base + n * 60
+  // Conversación de 12 mensajes; dos "ok" idénticos en el mismo minuto (n = 5 y 6).
+  const TODOS = Array.from({ length: 12 }, (_, i) => ({
+    id: `m${i}`, ts: min(i < 6 ? i : i === 6 ? 5 : i), deMi: i === 6 ? true : i % 2 === 1, tipo: 'texto', texto: i === 5 || i === 6 ? 'ok' : `mensaje ${i}`,
+  }))
+  const zipDe = (mensajes) => {
+    const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sol-')), 'r.zip')
+    fs.writeFileSync(f, crearZip([{ nombre: `${J.split('@')[0]} - Laura/Chat de WhatsApp.txt`, datos: textoDeChat(CHAT, mensajes) }]))
+    return f
+  }
+  const textos = () => a.listarMensajes(J).map((m) => m.texto)
+
+  it('dos respaldos que se solapan dan el historial completo, sin repetir ni perder nada', async () => {
+    // Respaldo A: mensajes 0-7. Respaldo B: 5-11 (se solapa en 5, 6 y 7).
+    await importarRespaldo(zipDe(TODOS.slice(0, 8)), { nombreArchivo: 'a.zip' })
+    expect(textos()).toHaveLength(8)
+    const r = await importarRespaldo(zipDe(TODOS.slice(5)), { nombreArchivo: 'b.zip' })
+    expect(r.mensajes).toBe(4)
+    expect(r.yaEstaban).toBe(3)
+    expect(textos().sort()).toEqual(TODOS.map((m) => m.texto).sort())
+    // Los dos "ok" idénticos del mismo minuto siguen siendo dos.
+    expect(textos().filter((t) => t === 'ok')).toHaveLength(2)
+  })
+
+  it('el orden de carga da igual: primero el nuevo y después el viejo', async () => {
+    const J2 = '5493564777002@s.whatsapp.net'
+    const chat2 = { ...CHAT, id: J2, telefono: '+5493564777002' }
+    const f = (mensajes) => {
+      const z = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sol-')), 'r.zip')
+      fs.writeFileSync(z, crearZip([{ nombre: `${J2.split('@')[0]} - Laura/Chat de WhatsApp.txt`, datos: textoDeChat(chat2, mensajes) }]))
+      return z
+    }
+    await importarRespaldo(f(TODOS.slice(5)), { nombreArchivo: 'b.zip' })
+    await importarRespaldo(f(TODOS.slice(0, 8)), { nombreArchivo: 'a.zip' })
+    expect(a.listarMensajes(J2)).toHaveLength(12)
+    expect(a.listarMensajes(J2).filter((m) => m.texto === 'ok')).toHaveLength(2)
+  })
+
+  it('cargar el mismo respaldo varias veces no suma nada', async () => {
+    const archivo = zipDe(TODOS)
+    const antes = textos().length
+    for (let i = 0; i < 3; i++) await importarRespaldo(archivo, { nombreArchivo: 'c.zip' })
+    expect(textos()).toHaveLength(antes)
+  })
+
+  it('un respaldo contra un chat que ya tiene los mensajes en vivo (otro id) no los duplica', async () => {
+    const J3 = '5493564777003@s.whatsapp.net'
+    const chat3 = { ...CHAT, id: J3, telefono: '+5493564777003' }
+    for (const m of TODOS.slice(0, 6)) a.agregarMensaje(J3, { ...m, id: `VIVO${m.id}`, origen: 'vivo' }, { avisar: false })
+    const z = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'sol-')), 'r.zip')
+    fs.writeFileSync(z, crearZip([{ nombre: `${J3.split('@')[0]} - Laura/Chat de WhatsApp.txt`, datos: textoDeChat(chat3, TODOS) }]))
+    const r = await importarRespaldo(z, { nombreArchivo: 'd.zip' })
+    expect(r.mensajes).toBe(6)
+    expect(a.listarMensajes(J3)).toHaveLength(12)
+  })
+})
