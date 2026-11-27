@@ -95,6 +95,8 @@ export function limpiarReporte(r = {}) {
     asistente: texto(r.asistente, 60) || 'Asistente',
     vinculado: !!r.vinculado,
     numeroPropio: !!r.numeroPropio,
+    // Solo dígitos (con código de país): el número de WhatsApp de la línea de Sofía.
+    numero: String(r.numero ?? '').replace(/\D/g, '').slice(0, 20) || null,
     iniciado: !!r.iniciado,
     conectado: !!r.conectado,
     activo: !!r.activo,

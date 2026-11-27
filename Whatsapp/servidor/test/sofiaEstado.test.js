@@ -85,6 +85,14 @@ describe('el reporte que manda el bot', () => {
     expect(limpiarReporte({}).ia).toBeNull()
   })
 
+  it('el número de la línea de Sofía queda solo con dígitos', () => {
+    expect(limpiarReporte({ numero: '5493564123456' }).numero).toBe('5493564123456')
+    expect(limpiarReporte({ numero: '+54 9 3564-123456' }).numero).toBe('5493564123456')
+    expect(limpiarReporte({ numero: 'hola' }).numero).toBeNull()
+    expect(limpiarReporte({}).numero).toBeNull()
+    expect(limpiarReporte({ numero: '1'.repeat(40) }).numero).toHaveLength(20)
+  })
+
   describe('con charlas guardadas de verdad', () => {
     beforeEach(() => _reiniciar())
 

@@ -3781,6 +3781,7 @@ async function renderSofia() {
   if (rep) {
     const detalle = [
       `Último aviso del bot: ${haceTexto(v.ahora - rep.recibidoEn)}`,
+      rep.numero ? `número de Sofía: +${rep.numero}` : '',
       rep.numeroPropio ? 'con su propio número' : 'con el mismo número de envíos',
       rep.horario?.activo ? `responde fuera de: ${rep.horario.texto || 'el horario cargado'}` : 'responde a cualquier hora',
       `charlas abiertas ahora: ${fmtNum(rep.atendiendo)}`,
