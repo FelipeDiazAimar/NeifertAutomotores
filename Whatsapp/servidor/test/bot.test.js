@@ -104,6 +104,15 @@ describe('datos del negocio para el bot', () => {
     expect(n.email).toBe('neifertsanfrancisco@gmail.com')
   })
 
+  it('financiación y toma de usados salen de lo que carga el negocio; sin cargar, no se mandan', () => {
+    const n = armarNegocio({ socials: { financing: ' Hasta 36 cuotas con DNI y recibo. ', tradeIn: 'Tomamos tu usado.' } })
+    expect(n).toMatchObject({ financiacion: 'Hasta 36 cuotas con DNI y recibo.', permuta: 'Tomamos tu usado.' })
+    const vacio = armarNegocio({ socials: { financing: '  ', tradeIn: '' } })
+    expect('financiacion' in vacio).toBe(false)
+    expect('permuta' in vacio).toBe(false)
+    expect('financiacion' in armarNegocio({})).toBe(false)
+  })
+
   it('sin nada guardado todavía usa lo que trae la página por defecto', () => {
     const n = armarNegocio({}, '')
     expect(n.direccion).toBe('Av. Urquiza 898, San Francisco, Córdoba')

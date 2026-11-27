@@ -47,6 +47,9 @@ const DEFAULT_CONTENT = {
     hours: 'Lun a Vie · 8 a 12:30 h y 16 a 20 h · Sáb 9 a 13 h',
     email: 'neifertsanfrancisco@gmail.com',
     phone: '(03564) 43-5199',
+    // Para el asistente con IA (Sofía): lo consulta por WhatsApp. Vacío hasta que se cargue (no se inventa nada).
+    financing: '',
+    tradeIn: '',
   },
   home: {
     heroBadge: 'Nuestros Clientes',

@@ -41,5 +41,9 @@ export function armarNegocio({ socials, categories } = {}, web = '') {
     instagram: s.instagram,
     facebook: s.facebook,
     categorias: categorias.length ? categorias : CATEGORIAS_POR_DEFECTO,
+    // Lo carga el negocio en Admin → Contenido → Redes y contacto → "Información para el asistente". Sin cargar no se
+    // manda: la IA no tiene que inventar condiciones de financiación ni de toma de usados.
+    ...(texto(s.financing) ? { financiacion: texto(s.financing) } : {}),
+    ...(texto(s.tradeIn) ? { permuta: texto(s.tradeIn) } : {}),
   }
 }
