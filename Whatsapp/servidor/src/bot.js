@@ -7,6 +7,10 @@
 import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
 import { datosNegocio, fotoGrandeVehiculoWeb, fotosDeVehiculoWeb, vehiculosWeb } from './whatsapp.js'
+import { buscarChat, listarMensajes } from './almacen.js'
+import { estaAbierto } from './negocioBot.js'
+import { historialParaBot } from './historialBot.js'
+import { normalizarAR } from './telefono.js'
 import { guardarCharla } from './sofia.js'
 import { guardarReporte } from './sofiaEstado.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
@@ -21,6 +25,14 @@ export function rutasBot({ ruta, accion }) {
   // `imagen` es una ruta interna del panel: al bot no le sirve.
   // Dirección, horarios, teléfonos y categorías de la página.
   r.get('/negocio', ruta(() => datosNegocio()))
+  // ¿Está abierto el salón ese día y a esa hora? (?dia=mañana&hora=10:00). Con la hora de Argentina.
+  r.get('/abierto', ruta(async (req) => estaAbierto((await datosNegocio()).horarios, { dia: req.query.dia, hora: req.query.hora })))
+  // Lo que se habló con ese teléfono en esta línea y con Sofía, junto y en orden (para que Sofía tenga todo el contexto).
+  r.get('/conversacion', ruta((req) => {
+    const numero = normalizarAR(req.query.telefono)
+    const jid = numero ? `${numero}@s.whatsapp.net` : ''
+    return { mensajes: jid && buscarChat(jid) ? historialParaBot(listarMensajes(jid, { conSofia: true }), { limite: Number(req.query.limite) || 30, dias: Number(req.query.dias) || 30 }) : [] }
+  }))
   // Sin filtros: la lista entera (como siempre). Con filtros: { total, vehiculos } para que la IA consulte lo que necesita.
   r.get('/vehiculos', ruta(async (req) => {
     const lista = (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))
