@@ -2933,6 +2933,9 @@ export async function vehiculosWeb() {
     reservado: v.estado === 'reservado',
     descripcion: [v.anio, v.km ? `${Number(v.km).toLocaleString('es-AR')} km` : 'Sin uso', v.estado === 'reservado' ? 'Reservado' : ''].filter(Boolean).join(' · '),
     precioTexto: precioWeb(v),
+    precio: v.precio ? Number(v.precio) : null,
+    moneda: v.moneda || null,
+    nuevo: !!v.es_nuevo,
     imagen: fotosWeb(v).length ? `/api/vehiculos-web/${v.id}/foto` : null,
   }))
 }

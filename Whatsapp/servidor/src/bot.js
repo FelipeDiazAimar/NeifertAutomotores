@@ -8,12 +8,19 @@ import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
 import { vehiculosWeb } from './whatsapp.js'
 import { guardarCharla } from './sofia.js'
+import { filtrarVehiculos } from './vehiculosFiltro.js'
+
+const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'precioMax', 'moneda', 'combustible', 'transmision', 'nuevo', 'disponibles', 'limite']
 
 export function rutasBot({ ruta, accion }) {
   const r = Router()
   r.get('/salud', ruta(() => ({ ok: true, crm: CRM_CONFIGURADO })))
   // `imagen` es una ruta interna del panel: al bot no le sirve.
-  r.get('/vehiculos', ruta(async () => (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))))
+  // Sin filtros: la lista entera (como siempre). Con filtros: { total, vehiculos } para que la IA consulte lo que necesita.
+  r.get('/vehiculos', ruta(async (req) => {
+    const lista = (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))
+    return FILTROS.some((f) => req.query[f] !== undefined) ? filtrarVehiculos(lista, req.query) : lista
+  }))
   r.get('/cliente', ruta(async (req) => ({ cliente: await clientePorTelefono(req.query.telefono) })))
   r.post('/cliente', accion('bot_cliente', (req) => asegurarCliente(req.body || {}, null), (req, res) => ({ cliente: res.cliente.id, creado: res.creado })))
   r.post('/seguimiento', accion('bot_seguimiento', (req) => seguimientoPorTelefono(req.body?.telefono, req.body?.texto, null), (req, res) => ({ cliente: res.clienteId })))
