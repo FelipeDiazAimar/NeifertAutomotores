@@ -2083,6 +2083,8 @@ function renderCrm() {
     partes.push(`<p class="info-vacio">${f.vinculo === 'ninguno' ? 'Marcado como que no es cliente del CRM.' : 'Este número no está cargado como cliente.'}</p>
     <div class="info-filas">
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="crear">${ic('plus')}<span>Crear cliente</span></button>
+      ${f.vinculo === 'ninguno' ? '' : `<button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea (crea el cliente)</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="alerta">${ic('alert')}<span>Crear alerta (crea el cliente)</span></button>`}
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('search')}<span>Vincular a un cliente existente</span></button>
     </div>`)
   }
@@ -2108,6 +2110,7 @@ function formCrm(tipo, f) {
       ${botones('Guardar')}</form>`
   }
   const yo = sesion.usuario?.id
+  const avisoNuevo = f.cliente ? '' : '<p class="info-sub">Todavía no es cliente: se crea solo, con su nombre de WhatsApp y su teléfono, al guardar.</p>'
   const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
   if (tipo === 'alerta') {
     return `<form class="crm-form" data-crm-form="alerta">
@@ -2116,6 +2119,7 @@ function formCrm(tipo, f) {
       ${opciones ? `<label>Avisarle a<select name="asignadoA">${opciones}</select></label>` : ''}
       <label>Detalle<textarea name="descripcion" rows="2" maxlength="1000"></textarea></label>
       <p class="info-sub">Avisa por notificación, mail y WhatsApp a esa hora.</p>
+      ${avisoNuevo}
       ${botones('Crear alerta')}</form>`
   }
   if (tipo === 'tarea') {
@@ -2125,6 +2129,7 @@ function formCrm(tipo, f) {
       <div class="crm-par"><label>Prioridad<select name="prioridad"><option value="baja">Baja</option><option value="normal" selected>Normal</option><option value="alta">Alta</option></select></label>
       ${opciones ? `<label>Para<select name="asignadoA">${opciones}</select></label>` : ''}</div>
       <label>Detalle<textarea name="descripcion" rows="2" maxlength="1000"></textarea></label>
+      ${avisoNuevo}
       ${botones('Crear tarea')}</form>`
   }
   // vincular
@@ -2158,8 +2163,8 @@ async function abrirFormCrm(tipo) {
 
 /**
  * "Crear tarea" / "Crear alerta" desde el menú del chat: abre el chat y su ficha con el
- * formulario ya puesto. Si el contacto todavía no es cliente del CRM, lleva a la ficha para
- * crearlo o vincularlo primero (la tarea y la alerta siempre son de un cliente).
+ * formulario ya puesto. Si el contacto todavía no es cliente del CRM, no hace falta crearlo
+ * antes: el servidor lo crea solo (con su nombre de WhatsApp y su teléfono) al guardar.
  */
 async function crearDesdeChat(id, tipo) {
   if (state.activo !== id) await abrirChat(id)
@@ -2167,7 +2172,7 @@ async function crearDesdeChat(id, tipo) {
   await cargarInfo(id)
   await cargarCrm(id)
   if (crmUi.ficha?.error) return toast(`No se pudo consultar el CRM: ${crmUi.ficha.error}`)
-  if (!crmUi.ficha?.cliente) return toast(`Este contacto todavía no es cliente del CRM: creá el cliente o vinculá uno y después creá la ${tipo}.`, 7000)
+  if (crmUi.ficha?.vinculo === 'ninguno') return toast(`Este chat está marcado como "no es cliente": vinculalo a un cliente para crear la ${tipo}.`, 7000)
   await abrirFormCrm(tipo)
   $('#crmBloque form')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
 }
@@ -2185,7 +2190,9 @@ async function enviarCrm(tipo, datos, boton) {
     crmUi.form = null
     if (r?.configurado !== undefined) crmUi.ficha = r
     renderCrm()
-    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
+    // Si el cliente se creó solo con la tarea/alerta, se vuelve a pedir la ficha para que aparezca.
+    if (r?.clienteCreado) cargarCrm(chat)
+    toast(r?.clienteCreado ? `Cliente creado en el CRM y ${tipo === 'tarea' ? 'tarea creada' : 'alerta creada'}.` : { crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
   } catch (e) {
     if (err) {
       err.textContent = e.message

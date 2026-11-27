@@ -104,7 +104,46 @@ describe('cliente del CRM en cada chat', () => {
     expect(enviados.at(-1).fila.asignado_a).toBe('u-otro')
     await expect(crearAlerta(J, { titulo: 'Sin hora', fecha: '2026-11-25' }, USUARIO)).rejects.toThrow(/hora/)
     await expect(crearAlerta(J, { titulo: 'Sin fecha', hora: '10:30' }, USUARIO)).rejects.toThrow(/fecha/)
-    await expect(crearAlerta('5490000000001@s.whatsapp.net', { titulo: 'x', fecha: '2026-11-25', hora: '10:30' }, USUARIO)).rejects.toThrow(/no está vinculado/)
+  })
+})
+
+describe('tarea o alerta desde un chat que todavía no es cliente', () => {
+  it('crea el cliente con su nombre de WhatsApp y su teléfono, y la tarea queda de ese cliente', async () => {
+    const J = '5493492666111@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Sergio' })
+    const r = await crearTarea(J, { titulo: 'Llamar', fecha: '2026-12-05' }, USUARIO)
+    expect(r.clienteCreado).toBe(true)
+    const cliente = enviados.filter((e) => e.tabla === 'clientes').at(-1).fila
+    expect(cliente).toMatchObject({ nombre: 'Sergio', telefono: '3492666111' })
+    expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.cliente_id === r.clienteId)).toBeTruthy()
+    // La segunda vez ya es cliente: no se crea otro.
+    const otra = await crearTarea(J, { titulo: 'Otra', fecha: '2026-12-06' }, USUARIO)
+    expect(otra.clienteCreado).toBeUndefined()
+    expect(otra.clienteId).toBe(r.clienteId)
+  })
+
+  it('con la alerta pasa lo mismo, y sin nombre queda como "Contacto de WhatsApp"', async () => {
+    const J = '5493492666222@s.whatsapp.net'
+    upsertChat(J)
+    const r = await crearAlerta(J, { titulo: 'Avisar', fecha: '2026-12-05', hora: '10:00' }, USUARIO)
+    expect(r.clienteCreado).toBe(true)
+    expect(enviados.filter((e) => e.tabla === 'clientes').at(-1).fila.nombre).toBe('Contacto de WhatsApp')
+  })
+
+  it('si faltan datos no crea el cliente de balde', async () => {
+    const J = '5493492666333@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Nadie' })
+    const antes = enviados.filter((e) => e.tabla === 'clientes').length
+    await expect(crearTarea(J, { titulo: 'Sin fecha' }, USUARIO)).rejects.toThrow(/fecha/)
+    await expect(crearAlerta(J, { titulo: 'Sin hora', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/hora/)
+    expect(enviados.filter((e) => e.tabla === 'clientes')).toHaveLength(antes)
+  })
+
+  it('respeta "no es cliente" y no crea nada en grupos', async () => {
+    const J = '5493492666444@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Spam', clienteId: 'ninguno' })
+    await expect(crearTarea(J, { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/no es cliente/)
+    await expect(crearTarea('120363000000000009@g.us', { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/grupo/i)
   })
 })
 

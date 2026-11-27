@@ -24,6 +24,7 @@ import { crearZip, rutasDeChats, textoDeChat } from './exportar.js'
 import { entradasZip, leerChatTxt } from './importar.js'
 import * as crm from './crm.js'
 import { log } from './eventos.js'
+import { anotarRespaldoNube } from './historialRespaldos.js'
 
 const PREFIJO = 'respaldo/mensajes/'
 const CONSERVAR = 15
@@ -130,9 +131,11 @@ export async function respaldarMensajes({ activo = respaldoActivo(), clave = BAC
     }
 
     log('ok', 'Respaldo de mensajes', `${linea.chats} chats · ${linea.mensajes} mensajes · verificado${sofia ? ` · Sofía: ${sofia.chats} chats · ${sofia.mensajes} mensajes` : ''}`)
+    await anotarRespaldoNube({ ts, ok: true, chats: linea.chats, mensajes: linea.mensajes, bytes: linea.bytes, clave: linea.clave, conArchivos: false, sofia: sofia && { chats: sofia.chats, mensajes: sofia.mensajes }, sofiaError, error: null })
     return guardarEstado({ ultimoOk: ts, ultimoIntento: ts, verificado: true, chats: linea.chats, mensajes: linea.mensajes, bytes: linea.bytes, clave: linea.clave, sofia, sofiaError, error: null })
   } catch (err) {
     guardarEstado({ ultimoIntento: ts, verificado: false, error: err.message })
+    await anotarRespaldoNube({ ts, ok: false, conArchivos: false, error: err.message })
     throw err
   } finally {
     corriendo = false

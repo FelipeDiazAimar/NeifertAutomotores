@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js'
 import { emailDeUsuario } from '../../src/crm/lib/authEmail.js'
 import { handleCheckAlertas } from './check-alertas.js'
-import { handleWhatsappLectura } from '../../src/server/whatsappLectura.js'
+import { handleWhatsappLectura, historialRespaldos } from '../../src/server/whatsappLectura.js'
 
 /** Serverless — alta de usuario, reset de contraseña, suscripción a push y
  *  email propio del CRM nuevo. `push_subscribe` y `guardar_mi_email` las puede
@@ -14,6 +14,7 @@ import { handleWhatsappLectura } from '../../src/server/whatsappLectura.js'
  *  Authorization: Bearer <access token del usuario logueado>
  *  body: { accion: 'crear',          usuario, nombre, rol, password, telefono? }
  *      | { accion: 'reset_password', id, password }
+ *      | { accion: 'respaldos_whatsapp' } (admin/dueno: historial de respaldos del WhatsApp)
  *      | { accion: 'push_subscribe', endpoint, p256dh, auth }
  *      | { accion: 'guardar_mi_email', email }
  *      | { accion: 'disparar_alertas' } (solo admin/dueno: corre la revisión
@@ -149,6 +150,17 @@ export async function handleUsuarios(req, res, { env = process.env, deps = {} } 
       }
       await ejecutar(fakeReq, fakeRes)
       return res.status(status).json(payload)
+    }
+
+    // Historial de respaldos de WhatsApp (solo admin/dueño, que son los que llegan hasta acá).
+    if (body.accion === 'respaldos_whatsapp') {
+      const leer = deps.historialRespaldos || historialRespaldos
+      try {
+        return res.status(200).json({ ok: true, ...(await leer(env, req)) })
+      } catch (e) {
+        // Sin línea asignada o sin base de WhatsApp: el mensaje ya dice qué falta.
+        return res.status(e.status || 500).json({ ok: false, error: e.message })
+      }
     }
 
     if (body.accion === 'crear') {

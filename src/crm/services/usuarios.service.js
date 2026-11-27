@@ -79,3 +79,8 @@ export function crearUsuario({ usuario, nombre, rol, password, telefono }) {
 export function resetPassword(id, password) {
   return llamarEndpoint({ accion: 'reset_password', id, password })
 }
+
+/** Historial de respaldos de WhatsApp (locales y en la nube) de la línea de este CRM. Solo admin/dueño. */
+export function respaldosWhatsapp() {
+  return llamarEndpoint({ accion: 'respaldos_whatsapp' })
+}

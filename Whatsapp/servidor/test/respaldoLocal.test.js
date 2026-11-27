@@ -37,10 +37,10 @@ describe('respaldo local (el que se baja a mano)', () => {
     expect(guardado.historial[1]).toMatchObject({ usuario: 'Feli', conArchivos: true, hasta: 1800000000 })
   })
 
-  it('guarda solo los últimos 30', async () => {
-    for (let i = 0; i < 35; i++) await registrarRespaldoLocal({ chats: 1, mensajes: i }, { almacen, ahora: dia(i) })
-    expect(guardado.historial).toHaveLength(30)
-    expect(guardado.historial[0].mensajes).toBe(34)
+  it('guarda solo los últimos 120', async () => {
+    for (let i = 0; i < 125; i++) await registrarRespaldoLocal({ chats: 1, mensajes: i }, { almacen, ahora: dia(i) })
+    expect(guardado.historial).toHaveLength(120)
+    expect(guardado.historial[0].mensajes).toBe(124)
   })
 
   it('si la base falla al anotar, no tira (el respaldo ya se hizo)', async () => {

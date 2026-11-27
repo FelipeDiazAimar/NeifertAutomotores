@@ -6,6 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { listarArchivos } from '../src/archivos.js'
 import { claveDeDia, destinatariosAviso, respaldarMensajes, revisarRespaldoMensajes, soloAdmin, vistaRespaldoMensajes } from '../src/respaldoMensajes.js'
 import { crearZip, rutasDeChats } from '../src/exportar.js'
+import { almacenDeEstado } from '../src/historialRespaldos.js'
 
 const CLAVE = 'clave larga de prueba'
 const ts = (iso) => new Date(iso).getTime() / 1000
@@ -64,6 +65,17 @@ describe('respaldo de mensajes', () => {
     const r = await respaldarMensajes({ ...base, mensajesSofia: (id) => sofia[id] || [], ahora: new Date('2026-11-25T12:00:00Z') })
     expect(r).toMatchObject({ chats: 3, mensajes: 3, sofia: { chats: 1, mensajes: 1, clave: 'respaldo/sofia/2026-11-25.enc' } })
     expect((await listarArchivos('respaldo/sofia/')).map((a) => a.clave)).toEqual(['respaldo/sofia/2026-11-25.enc'])
+  })
+
+  it('cada respaldo en la nube (bueno o fallado) queda en el historial', async () => {
+    const nube = almacenDeEstado('respaldo_nube')
+    fs.rmSync(path.join(DIR_PRUEBA, 'lineas', 'sin-numero', 'respaldo-nube.json'), { force: true })
+    await respaldarMensajes({ ...base, ahora: new Date('2026-12-01T12:00:00Z') })
+    await expect(respaldarMensajes({ ...base, chats: () => { throw new Error('base caída') }, ahora: new Date('2026-12-02T12:00:00Z') })).rejects.toThrow()
+    const { historial } = await nube.leer()
+    expect(historial).toHaveLength(2)
+    expect(historial[0]).toMatchObject({ ok: false, error: 'base caída' })
+    expect(historial[1]).toMatchObject({ ok: true, chats: 3, mensajes: 3, conArchivos: false, error: null })
   })
 
   it('si falla el respaldo de Sofía, el de la línea igual cuenta como bueno', async () => {

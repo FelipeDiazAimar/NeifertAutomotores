@@ -11,38 +11,18 @@
  * Los respaldos locales pueden solaparse entre sí (cada uno repite un poco del anterior, a
  * propósito): "Importar respaldo" (importar.js) los junta sin duplicar ni perder mensajes.
  */
-import fs from 'node:fs'
-import path from 'node:path'
-import { ALMACEN, LINEA_DIR } from './config.js'
-import { leerEstadoNube, guardarEstadoNube } from './nube.js'
+import { MAX_HISTORIAL, almacenDeEstado } from './historialRespaldos.js'
 import { destinatariosAviso, avisarUsuarios } from './respaldoMensajes.js'
 import * as crm from './crm.js'
 import { log } from './eventos.js'
 
 const CLAVE = 'respaldo_local'
-const ARCHIVO = path.join(LINEA_DIR, 'respaldo-local.json')
 const DIA_MS = 86400e3
-const HISTORIAL = 30
 const AVISO_DIAS = () => (Number(process.env.WA_RESPALDO_LOCAL_AVISO_DIAS) > 0 ? Number(process.env.WA_RESPALDO_LOCAL_AVISO_DIAS) : 3)
 
 const VACIO = { ultimo: null, vigilarDesde: null, ultimoAviso: null, historial: [] }
 
-/** Dónde se guarda: la base (Supabase) en producción, un archivo de la línea en modo local. */
-const almacenPorDefecto = {
-  async leer() {
-    if (ALMACEN === 'supabase') return leerEstadoNube(CLAVE)
-    try {
-      return JSON.parse(fs.readFileSync(ARCHIVO, 'utf8'))
-    } catch {
-      return null
-    }
-  },
-  async guardar(valor) {
-    if (ALMACEN === 'supabase') return guardarEstadoNube(CLAVE, valor)
-    fs.mkdirSync(path.dirname(ARCHIVO), { recursive: true })
-    fs.writeFileSync(ARCHIVO, JSON.stringify(valor, null, 1))
-  },
-}
+const almacenPorDefecto = almacenDeEstado(CLAVE)
 
 const leerTodo = async (almacen) => ({ ...VACIO, ...(await almacen.leer()) })
 
@@ -70,7 +50,7 @@ export async function registrarRespaldoLocal(datos, { almacen = almacenPorDefect
       conArchivos: !!datos.conArchivos,
       hasta: datos.hasta || null,
     }
-    await almacen.guardar({ ...e, ultimo: registro.ts, ultimoAviso: null, historial: [registro, ...e.historial].slice(0, HISTORIAL) })
+    await almacen.guardar({ ...e, ultimo: registro.ts, ultimoAviso: null, historial: [registro, ...e.historial].slice(0, MAX_HISTORIAL) })
     log('ok', 'Respaldo local registrado', `${registro.chats} chats · ${registro.mensajes} mensajes${registro.usuario ? ` · ${registro.usuario}` : ''}`)
     return registro
   } catch (err) {

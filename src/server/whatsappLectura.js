@@ -242,6 +242,24 @@ function ponerCookie(req, res, valor, maxAge) {
   res.setHeader('Set-Cookie', `${COOKIE}=${valor}; Path=/wa-lectura; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${segura ? '; Secure' : ''}`)
 }
 
+/**
+ * Historial de respaldos de la línea de este CRM (Admin → Respaldos de WhatsApp): los que se
+ * bajan a mano ("local", wa.estado clave respaldo_local) y los automáticos a R2 ("nube", clave
+ * respaldo_nube). Los escribe el servidor de la PC (Whatsapp/servidor/src/historialRespaldos.js);
+ * acá solo se leen. Más nuevos primero.
+ */
+export async function historialRespaldos(env, req) {
+  const linea = await lineaActual(env, req)
+  const { rows } = await base(env).query(
+    "select clave, valor from wa.estado where linea = $1 and clave in ('respaldo_local', 'respaldo_nube')",
+    [linea],
+  )
+  const por = Object.fromEntries(rows.map((r) => [r.clave, r.valor || {}]))
+  const lista = (clave, tipo) => (por[clave]?.historial || []).map((h) => ({ tipo, ok: h.ok !== false, ...h }))
+  const items = [...lista('respaldo_local', 'local'), ...lista('respaldo_nube', 'nube')].sort((a, b) => String(b.ts).localeCompare(String(a.ts)))
+  return { linea, items }
+}
+
 /** Mismos roles que el servidor del WhatsApp. En modo lectura nadie escribe ni maneja la línea. */
 function puedeEntrar(env, rol) {
   const roles = [
