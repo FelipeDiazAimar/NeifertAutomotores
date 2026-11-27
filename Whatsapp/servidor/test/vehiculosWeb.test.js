@@ -28,9 +28,10 @@ describe('catálogo de la página para el bot', () => {
     const { vehiculosWeb } = await import('../src/whatsapp.js')
     const lista = await vehiculosWeb()
     const select = new URL(pedidos.at(-1)).searchParams.get('select').split(',')
-    expect(select).toEqual(expect.arrayContaining(['categoria', 'es_nuevo', 'precio', 'moneda', 'estado']))
+    expect(select).toEqual(expect.arrayContaining(['categoria', 'es_nuevo', 'precio', 'precio_usd', 'moneda', 'estado']))
     expect(lista.map((v) => v.categoria)).toEqual(['pickup', 'pickup', 'suv'])
     expect(lista.map((v) => v.condicion)).toEqual(['usado', '0km', 'usado'])
+    expect(lista.map((v) => v.precioUsd)).toEqual([42000, 49000, 27000])
   })
 
   it('con eso, "pickups usadas" y "0 km" devuelven lo que corresponde', async () => {

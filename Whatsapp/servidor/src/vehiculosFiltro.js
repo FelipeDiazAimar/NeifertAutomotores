@@ -2,12 +2,14 @@
  * Búsqueda en el catálogo para el bot (la IA la usa como herramienta). Sin dependencias: se prueba sola.
  */
 const sinTildes = (t) => String(t ?? '').toLowerCase().normalize('NFD').replace(/\p{Diacritic}/gu, '')
+/** El precio en dólares para comparar: el equivalente de la página, o el precio si ya está en USD. null si no tiene precio. */
+const valorUsd = (v) => (Number(v.precioUsd) > 0 ? Number(v.precioUsd) : String(v.moneda || '').toUpperCase() === 'USD' && v.precio ? Number(v.precio) : null)
 const numero = (v) => (v === undefined || v === null || v === '' || !Number.isFinite(Number(v)) ? null : Number(v))
 
 /**
  * Busca en el catálogo lo que pide el bot (la IA lo consulta en vez de recibirlo entero en cada
  * mensaje). Filtros, todos opcionales: q (palabras sueltas, todas tienen que estar), marca, modelo,
- * anioDesde, anioHasta, kmMax, precioMax (con moneda: 'USD' o 'ARS'), combustible, transmision,
+ * anioDesde, anioHasta, kmMax, precioMax (en dólares por defecto: los de pesos se comparan con su equivalente; con moneda 'ARS', solo los publicados en pesos), combustible, transmision,
  * categoria (tipo: pickup, SUV, sedán...), condicion ('usado' o '0km'), nuevo ('1' = solo 0 km), disponibles ('1' = sin los
  * reservados), ordenar (precio_asc, precio_desc, anio_desc, anio_asc, km_asc). Devuelve { total, vehiculos }
  * con hasta `limite` (10 por defecto, 25 como máximo).
@@ -39,9 +41,14 @@ export function filtrarVehiculos(lista, q = {}) {
     if (hasta !== null && !(v.anio <= hasta)) return false
     if (kmMax !== null && !((v.km || 0) <= kmMax)) return false
     if (precioMax !== null) {
-      if (!v.precio) return false // sin precio cargado ("consultar"): no se puede decir que entra
-      if (moneda && String(v.moneda || '').toUpperCase() !== moneda) return false
-      if (v.precio > precioMax) return false
+      if (moneda === 'ARS') {
+        // En pesos: solo los que están publicados en pesos.
+        if (String(v.moneda || '').toUpperCase() !== 'ARS' || !v.precio || v.precio > precioMax) return false
+      } else {
+        // En dólares (o sin decir moneda): los de pesos se comparan con su equivalente en dólares. Sin precio ("consultar"): no se puede decir que entra.
+        const usd = valorUsd(v)
+        if (usd === null || usd > precioMax) return false
+      }
     }
     if (categoria) {
       const c = sinTildes(v.categoria).trim()
@@ -55,8 +62,9 @@ export function filtrarVehiculos(lista, q = {}) {
   })
   // Para "el más barato", "el más nuevo", "el de menos kilómetros". Sin precio, al final.
   const ORDENES = {
-    precio_asc: (a, b) => (a.precio || Infinity) - (b.precio || Infinity),
-    precio_desc: (a, b) => (b.precio || -Infinity) - (a.precio || -Infinity),
+    // Por el precio en dólares: así los de pesos y los de dólares se ordenan juntos.
+    precio_asc: (a, b) => (valorUsd(a) ?? Infinity) - (valorUsd(b) ?? Infinity),
+    precio_desc: (a, b) => (valorUsd(b) ?? -Infinity) - (valorUsd(a) ?? -Infinity),
     anio_desc: (a, b) => (b.anio || 0) - (a.anio || 0),
     anio_asc: (a, b) => (a.anio || 0) - (b.anio || 0),
     km_asc: (a, b) => (a.km || 0) - (b.km || 0),

@@ -126,3 +126,31 @@ describe('datos del negocio para el bot', () => {
     expect(armarNegocio({ socials: null, categories: null }).nombre).toBe('Neifert Automotores')
   })
 })
+
+describe('catálogo con precios en pesos y en dólares (como el real: 44 de 55 en pesos)', () => {
+  // precioUsd: el equivalente que usa la página (acá, pesos / 1000).
+  const M = [
+    { id: 1, nombre: 'Audi A1', marca: 'Audi', anio: 2012, precio: 14100, moneda: 'USD', precioUsd: 14100, categoria: 'hatchback', condicion: 'usado' },
+    { id: 2, nombre: 'Chevrolet S-10', marca: 'Chevrolet', anio: 2018, precio: 29000000, moneda: 'ARS', precioUsd: 29000, categoria: 'pickup', condicion: 'usado' },
+    { id: 3, nombre: 'Honda Wave 110', marca: 'Honda', anio: 2020, precio: 3000000, moneda: 'ARS', precioUsd: 3000, categoria: 'moto', condicion: 'usado' },
+    { id: 4, nombre: 'Ford Ranger Limited', marca: 'Ford', anio: 2025, precio: 66000000, moneda: 'ARS', precioUsd: 66000, categoria: 'pickup', condicion: '0km' },
+    { id: 5, nombre: 'BMW 120D', marca: 'BMW', anio: 2008, precio: 12000, moneda: 'USD', precioUsd: 12000, categoria: 'sedan', condicion: 'usado' },
+    { id: 6, nombre: 'Sin precio', marca: 'X', anio: 2019, precio: null, moneda: 'ARS', precioUsd: null, categoria: 'suv', condicion: 'usado' },
+  ]
+  const ids = (r) => r.vehiculos.map((v) => v.id)
+
+  it('"el más caro" y "el más barato" comparan pesos y dólares juntos', () => {
+    expect(ids(filtrarVehiculos(M, { ordenar: 'precio_desc', limite: 1 }))).toEqual([4]) // la Ranger de $66.000.000, no el Audi de U$S 14.100
+    expect(ids(filtrarVehiculos(M, { ordenar: 'precio_asc', limite: 1 }))).toEqual([3]) // la moto
+    expect(ids(filtrarVehiculos(M, { ordenar: 'precio_asc' })).at(-1)).toBe(6) // sin precio, al final
+  })
+
+  it('"algo hasta 15 mil dólares" incluye los autos en pesos que equivalen a eso', () => {
+    expect(ids(filtrarVehiculos(M, { precioMax: 15000, moneda: 'USD' }))).toEqual([1, 3, 5])
+    expect(ids(filtrarVehiculos(M, { precioMax: 15000 }))).toEqual([1, 3, 5]) // sin moneda: dólares
+  })
+
+  it('con moneda ARS solo los publicados en pesos', () => {
+    expect(ids(filtrarVehiculos(M, { precioMax: 30000000, moneda: 'ARS' }))).toEqual([2, 3])
+  })
+})

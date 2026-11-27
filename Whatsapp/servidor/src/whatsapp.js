@@ -2901,7 +2901,7 @@ export async function enviarProducto(chatId, productoId) {
 
 /* ---------------- Autos del catálogo de la página web ---------------- */
 
-const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,estado,es_nuevo,categoria,imagen_principal,imagenes,descripcion'
+const CAMPOS_WEB = 'id,marca,modelo,version,anio,km,combustible,transmision,moneda,precio,precio_usd,estado,es_nuevo,categoria,imagen_principal,imagenes,descripcion'
 let vehiculosWebCache = { ts: 0, lista: [] }
 
 async function vehiculosWebTodos() {
@@ -2969,6 +2969,8 @@ export async function vehiculosWeb() {
     precioTexto: precioWeb(v),
     precio: v.precio ? Number(v.precio) : null,
     moneda: v.moneda || null,
+    // El equivalente en dólares que usa la página para ordenar y filtrar (los autos en pesos y en dólares se comparan con esto).
+    precioUsd: Number(v.precio_usd) > 0 ? Number(v.precio_usd) : v.moneda === 'USD' && v.precio ? Number(v.precio) : null,
     nuevo: !!v.es_nuevo,
     condicion: v.es_nuevo ? '0km' : 'usado',
     categoria: v.categoria || '',
