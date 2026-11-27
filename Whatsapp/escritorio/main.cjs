@@ -15,7 +15,7 @@
  * con Windows (safeStorage/DPAPI) en %APPDATA%\Neifert WhatsApp. No viaja por internet.
  * Los datos de la línea (sesión, registros) quedan en %APPDATA%\Neifert WhatsApp\data.
  */
-const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, nativeTheme, safeStorage, shell } = require('electron')
+const { app, BrowserWindow, Menu, Notification, Tray, clipboard, dialog, ipcMain, nativeImage, nativeTheme, powerSaveBlocker, safeStorage, shell } = require('electron')
 const { fork, spawn } = require('node:child_process')
 const crypto = require('node:crypto')
 const fs = require('node:fs')
@@ -1074,6 +1074,9 @@ app.on('window-all-closed', () => {})
 
 app.whenReady().then(async () => {
   app.setAppUserModelId('ar.neifert.whatsapp')
+  // Esta PC es el servidor: si Windows la suspende, la línea y el túnel se caen. No impide
+  // apagar la pantalla, solo que el equipo se duerma.
+  powerSaveBlocker.start('prevent-app-suspension')
   nativeTheme.themeSource = temaGuardado()
   registrar(`App iniciada (versión ${app.getVersion()})`)
   icono = new Tray(nativeImage.createFromPath(ICONO).resize({ width: 16, height: 16 }))

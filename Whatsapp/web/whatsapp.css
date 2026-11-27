@@ -6,6 +6,9 @@
   --burbuja-sombra: 0 1px 0.5px rgba(11, 11, 15, 0.13);
   --hover: rgba(11, 11, 15, 0.05);
   --cita-fondo: rgba(11, 11, 15, 0.05);
+  --sofia: #6d28d9;
+  --sofia-soft: rgba(124, 58, 237, 0.07);
+  --sofia-line: rgba(124, 58, 237, 0.3);
   --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%230b0b0f' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.07'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
 }
 @media (prefers-color-scheme: dark) {
@@ -14,6 +17,9 @@
     --burbuja-sombra: 0 1px 0.5px rgba(0, 0, 0, 0.5);
     --hover: rgba(255, 255, 255, 0.05);
     --cita-fondo: rgba(255, 255, 255, 0.06);
+    --sofia: #a78bfa;
+    --sofia-soft: rgba(167, 139, 250, 0.09);
+    --sofia-line: rgba(167, 139, 250, 0.32);
     --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
   }
 }
@@ -22,6 +28,9 @@
   --burbuja-sombra: 0 1px 0.5px rgba(0, 0, 0, 0.5);
   --hover: rgba(255, 255, 255, 0.05);
   --cita-fondo: rgba(255, 255, 255, 0.06);
+  --sofia: #a78bfa;
+  --sofia-soft: rgba(167, 139, 250, 0.09);
+  --sofia-line: rgba(167, 139, 250, 0.32);
   --doodle: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180' fill='none' stroke='%23ffffff' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round' opacity='0.045'%3E%3Cpath d='M16 44h40l-5-11a5 5 0 0 0-4.5-3H25.5a5 5 0 0 0-4.5 3z'/%3E%3Crect x='12' y='44' width='48' height='10' rx='3'/%3E%3Ccircle cx='22' cy='56' r='4'/%3E%3Ccircle cx='50' cy='56' r='4'/%3E%3Ccircle cx='118' cy='34' r='7'/%3E%3Cpath d='M125 34h24M141 34v6M147 34v5'/%3E%3Cpath d='M26 110h30a6 6 0 0 1 6 6v14a6 6 0 0 1-6 6H40l-8 7v-7h-6a6 6 0 0 1-6-6v-14a6 6 0 0 1 6-6z'/%3E%3Ccircle cx='130' cy='124' r='14'/%3E%3Ccircle cx='130' cy='124' r='3.5'/%3E%3Cpath d='M116 124h10.5M133.5 124H144M130 127.5V138'/%3E%3Cpath d='M90 82v10M85 87h10M160 88l5 5M165 88l-5 5'/%3E%3C/svg%3E");
 }
 
@@ -359,6 +368,18 @@ a.arch-fila:hover { background: color-mix(in srgb, var(--ink) 11%, transparent);
 .agente-tag svg.i { width: 12px; height: 12px; flex: none; }
 .agente-tag span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tag.equipo { background: var(--wa-soft); color: var(--wa); border-color: transparent; }
+
+/* Sofía (asistente IA): sus charlas van en un recuadro violeta dentro del chat. */
+.sofia-bloque { align-self: stretch; display: flex; flex-direction: column; margin: 10px 0 4px; padding: 6px 12px 8px; border: 1px solid var(--sofia-line); border-radius: 12px; background: var(--sofia-soft); }
+.sofia-cab, .sofia-pie { align-self: center; padding: 2px 4px; font-size: 11.5px; font-weight: 600; color: var(--sofia); text-align: center; }
+.sofia-cab { margin-bottom: 4px; }
+.sofia-pie { margin-top: 8px; }
+.sofia-pie.atendiendo { font-style: italic; }
+.msg.sofia.out { --bubble-out: color-mix(in srgb, var(--sofia) 16%, var(--solid)); }
+.msg.sofia.out.con-texto { --meta-ancho: 140px; }
+.msg .sofia-etq { margin-right: 6px; font-size: 10.5px; font-weight: 600; color: var(--sofia); }
+.sofia-tag { color: var(--sofia); }
+.row-prev.sofia-prev { color: var(--sofia); }
 
 /* Al entrar: "Verificando la línea…" hasta saber si va a la bandeja o a Conexión. */
 .cargando-vista { flex: 1; min-height: 320px; display: grid; place-items: center; }

@@ -72,7 +72,7 @@ mudarCarpetasViejas()
 
 for (const dir of [DATA_DIR, LINEA_DIR, MSG_DIR]) fs.mkdirSync(dir, { recursive: true })
 
-const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false }
+const CONFIG_INICIAL = { descargarMedia: true, confirmarLectura: false, clientesAutomaticos: false, avisarRespaldo: [] }
 
 const estado = EN_SUPABASE ? {} : leerJson(ESTADO_FILE, {})
 function completarEstado() {
@@ -157,7 +157,11 @@ export const clave = (jid) => jid.replace(/[^0-9a-z]+/gi, '_')
 export const config = () => estado.config
 export function setConfig(patch) {
   for (const k of Object.keys(CONFIG_INICIAL)) {
-    if (typeof patch[k] === 'boolean') estado.config[k] = patch[k]
+    if (typeof patch[k] === 'boolean' && typeof CONFIG_INICIAL[k] === 'boolean') estado.config[k] = patch[k]
+  }
+  // Usuarios del CRM (ids) que también reciben el aviso de respaldo atrasado.
+  if (Array.isArray(patch.avisarRespaldo)) {
+    estado.config.avisarRespaldo = [...new Set(patch.avisarRespaldo.map(String).filter((id) => /^[\w-]{1,64}$/.test(id)))].slice(0, 50)
   }
   guardarEstado()
   return estado.config
@@ -393,7 +397,8 @@ const OCULTOS = new Set(['0@s.whatsapp.net'])
 export function listarChats() {
   return Object.values(estado.chats)
     .filter((c) => !OCULTOS.has(c.id))
-    .sort((a, b) => (b.ultimoTs || 0) - (a.ultimoTs || 0))
+    // Lo último que pasó en el chat, sea de la línea o de Sofía.
+    .sort((a, b) => Math.max(b.ultimoTs || 0, b.sofiaTs || 0) - Math.max(a.ultimoTs || 0, a.sofiaTs || 0))
     .map(vistaChat)
 }
 
@@ -496,8 +501,14 @@ const resumen = (m) => ({
   estado: m.estado || null,
 })
 
-export function listarMensajes(jid) {
-  return [...cargar(jid).values()].sort((a, b) => a.ts - b.ts)
+/**
+ * Los mensajes de la línea, en orden. Los de Sofía (charlas del asistente en su propia
+ * línea, ver sofia.js) quedan afuera salvo `conSofia`: no son de esta línea, así que no
+ * cuentan para leídos, archivados, recibos ni el respaldo de la línea.
+ */
+export function listarMensajes(jid, { conSofia = false } = {}) {
+  const todos = [...cargar(jid).values()].sort((a, b) => a.ts - b.ts)
+  return conSofia ? todos : todos.filter((m) => !m.sofia)
 }
 
 /**
@@ -506,7 +517,7 @@ export function listarMensajes(jid) {
  * una vez: trae lo último y va pidiendo hacia atrás a medida que se sube.
  */
 export function paginaDeMensajes(jid, { limite = 400, antes = null } = {}) {
-  const todos = listarMensajes(jid)
+  const todos = listarMensajes(jid, { conSofia: true })
   let fin = todos.length
   if (antes) {
     const i = todos.findIndex((m) => m.id === antes)
@@ -636,7 +647,8 @@ export function agregarMensaje(jid, m, { avisar = true } = {}) {
   escribir(jid, { op: 'add', m })
 
   const chat = estado.chats[jid] || upsertChat(jid)
-  if (m.ts >= (chat.ultimoTs || 0)) upsertChat(jid, { ultimoTs: m.ts, ultimo: resumen(m) })
+  // Los de Sofía llevan su propio resumen en el chat (sofia.js): no cambian el último de la línea.
+  if (!m.sofia && m.ts >= (chat.ultimoTs || 0)) upsertChat(jid, { ultimoTs: m.ts, ultimo: resumen(m) })
   if (avisar) emitir('mensaje', { chatId: jid, mensaje: vistaMensaje(m) })
   return { nuevo: true, mensaje: m }
 }

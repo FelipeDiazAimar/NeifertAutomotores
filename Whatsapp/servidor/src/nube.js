@@ -30,8 +30,20 @@ const MAX_PENDIENTES = 800 // con más que esto se escribe sin esperar
 
 let pool = null
 function base() {
-  pool ??= new pg.Pool({ connectionString: WA_DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3 })
+  if (!pool) {
+    // Las conexiones quietas se cierran a los 30 s: tras una suspensión de la PC no quedan sockets muertos.
+    pool = new pg.Pool({ connectionString: WA_DATABASE_URL, ssl: { rejectUnauthorized: false }, max: 3, idleTimeoutMillis: 30_000, keepAlive: true })
+    // Una conexión quieta que se corta (suspensión, red) avisa acá; el pool la descarta y abre otra.
+    pool.on('error', (err) => log('aviso', 'Se cortó una conexión con la base', err.message))
+  }
   return pool
+}
+
+/** La PC volvió de una suspensión: las conexiones abiertas están muertas, se abren nuevas. */
+export function renovarConexiones() {
+  const viejo = pool
+  pool = null
+  viejo?.end().catch(() => {})
 }
 
 /** Consulta suelta, fuera de las tandas (auditoría, bandeja de salida, mantenimiento). */
@@ -110,6 +122,14 @@ export async function registrarCrm() {
   const host = hostDeCrm(CRM_URL)
   if (!host || !NUMERO) return null
   const db = base()
+  // Otra línea con su servidor andando ya muestra este CRM (por ejemplo, una línea de prueba que
+  // arranca con el .env de la concesionaria): no se le quita. Cuando ese servidor se apague, se toma.
+  const { rows: vivas } = await db.query(
+    `select c.linea from wa.estado c join wa.estado s on s.linea = c.linea and s.clave = 'servidor'
+     where c.clave = 'crm' and c.linea <> $1 and c.valor->'hosts' ? $2 and (s.valor->>'ts')::bigint > $3`,
+    [LINEA, host, Date.now() - LATIDO_VENCE_MS],
+  )
+  if (vivas.length) return { host, ocupada: vivas[0].linea }
   await db.query(
     `insert into wa.estado (linea, clave, valor, actualizado_en) values ($1, 'crm', $2::jsonb, now())
      on conflict (linea, clave) do update set valor = excluded.valor, actualizado_en = now()`,

@@ -21,6 +21,7 @@ const ARCHIVO = {
 
 /** Quién escribió: la línea (con el empleado que lo mandó), el contacto o el integrante del grupo. */
 function autor(m, chat) {
+  if (m.sofia) return m.sofia.rol === 'bot' ? `${m.sofia.asistente || 'Asistente'} (IA)` : chat.nombre || chat.telefono || 'Contacto'
   if (m.deMi) return m.enviadoPor?.nombre ? `Neifert (${m.enviadoPor.nombre})` : 'Neifert'
   if (chat.esGrupo) return m.autorNombre || 'Integrante'
   return chat.nombre || chat.telefono || 'Contacto'

@@ -55,6 +55,8 @@ import {
 import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
+import { altaAutomatica } from './crm.js'
+import { renovarConexiones } from './nube.js'
 import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
 import { auditar } from './auditoria.js'
@@ -365,6 +367,7 @@ function arrancarVigia() {
     estado: () => ({ conexion, desde: conexionDesde }),
     ultimaSenalCelular: () => meta().ultimaSenalCelular || null,
     alDespertar: () => {
+      renovarConexiones()
       if (detenido) return
       intentos = 0
       iniciar().catch((err) => log('error', 'No se pudo reconectar al despertar', err.message))
@@ -1111,6 +1114,11 @@ async function procesarEntrante(m, tipoUpsert, origen = 'vivo') {
   if (tipoUpsert === 'notify') pedirFotos([chatId])
   if (tipoUpsert === 'notify' && !deMi) {
     sumarNoLeido(chatId)
+    if (config().clientesAutomaticos) {
+      altaAutomatica(chatId)
+        .then((c) => c && log('info', 'Cliente cargado en el CRM', `${c.nombre} · ${c.telefono}`))
+        .catch((err) => log('aviso', 'No se pudo cargar el cliente en el CRM', err.message))
+    }
     // Igual que el celular: si la cuenta tiene activado "desarchivar al recibir mensajes", el chat vuelve a la lista.
     if (estaArchivado(chatId) && desarchivaAlRecibir()) setArchivado(chatId, false)
   }

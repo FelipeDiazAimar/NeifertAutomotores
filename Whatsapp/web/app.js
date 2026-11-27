@@ -354,6 +354,7 @@ const FILTROS = [
   { id: 'todos', label: 'Todos', test: () => true },
   { id: 'no-leidos', label: 'No leídos', test: (c) => c.noLeidos > 0 },
   { id: 'grupos', label: 'Grupos', test: (c) => c.esGrupo },
+  { id: 'sofia', label: 'Sofía', test: (c) => !!c.sofiaTs },
 ]
 const PREVIA = {
   imagen: ['image', 'Foto'], video: ['video', 'Video'], gif: ['video', 'GIF'], nota_voz: ['mic', 'Nota de voz'],
@@ -398,11 +399,46 @@ function sinFormato(texto) {
     .replace(/(^|[\s(])([*_~])(?=\S)([^*_~\n]*?\S)\2(?=$|[\s.,!?:;)])/g, '$1$3')
 }
 
+/** Última actividad del chat: la más nueva entre la línea de Neifert y Sofía (un chat solo de Sofía tiene ultimoTs 0). */
+const actividadTs = (c) => Math.max(c.ultimoTs || 0, c.sofiaTs || 0)
+
+/**
+ * Agrupa los mensajes de Sofía consecutivos (ya ordenados por ts) en arreglos; un mensaje de
+ * otro tipo, o un cambio de día según `claveDia`, corta el grupo. Los demás pasan tal cual.
+ */
+function bloquesSofia(mensajes, claveDia = () => '') {
+  const salida = []
+  for (const m of mensajes) {
+    const previo = salida.at(-1)
+    if (!m.sofia) salida.push(m)
+    else if (Array.isArray(previo) && claveDia(previo.at(-1)) === claveDia(m)) previo.push(m)
+    else salida.push([m])
+  }
+  return salida
+}
+
+/** Pie del recuadro de Sofía: derivó a una persona, sigue atendiendo (último y < 30 min) o terminó. */
+function pieBloqueSofia(ms, esUltimo, ahoraSeg = Date.now() / 1000) {
+  const asistente = ms.find((x) => x.sofia?.asistente)?.sofia.asistente || 'Asistente'
+  const ultimoBot = [...ms].reverse().find((x) => x.sofia?.rol === 'bot')
+  if (ultimoBot?.sofia.derivo) return { clase: 'derivo', texto: `${asistente} derivó a una persona · ${hora(ms.at(-1).ts)}` }
+  if (esUltimo && ahoraSeg - ms.at(-1).ts < 1800) return { clase: 'atendiendo', texto: `${asistente} está atendiendo…` }
+  return { clase: '', texto: `${asistente} terminó · ${hora(ms.at(-1).ts)}` }
+}
+
+function bloqueSofiaHtml(ms, esUltimo) {
+  const asistente = ms.find((x) => x.sofia?.asistente)?.sofia.asistente || 'Asistente'
+  const pie = pieBloqueSofia(ms, esUltimo)
+  return `<div class="sofia-bloque"><div class="sofia-cab">🤖 ${esc(asistente)} inició la conversación · ${hora(ms[0].ts)}</div>${ms.map((m, i) => msgHtml(m, i === 0 || ms[i - 1].deMi !== m.deMi)).join('')}<div class="sofia-pie ${pie.clase}">${esc(pie.texto)}</div></div>`
+}
+
 function previaHtml(c) {
   const actividad = actividadDe(c.id)
   if (actividad) return `<span class="row-prev escribiendo">${actividad}</span>`
   const borrador = c.id !== state.activo && borradores.get(c.id)
   if (borrador) return `<span class="row-prev"><span class="borrador">Borrador:</span> ${esc(borrador)}</span>`
+  // Si Sofía contestó después del último mensaje de la línea, la vista previa es su respuesta.
+  if (c.sofiaTs > (c.ultimoTs || 0) && c.sofiaUltimo?.texto) return `<span class="row-prev sofia-prev"><i>${esc(c.sofiaAsistente || 'Sofía')}: ${esc(sinFormato(c.sofiaUltimo.texto))}</i></span>`
   const u = c.ultimo
   if (!u) return '<span class="row-prev"></span>'
   if (u.eliminado) return `<span class="row-prev deleted">${ic('history')}Se eliminó este mensaje</span>`
@@ -419,7 +455,7 @@ function ordenChats(a, b) {
   const fb = b.fijado || 0
   if (!fa !== !fb) return fa ? -1 : 1
   if (fa && fb && fa !== fb) return fb - fa
-  return (b.ultimoTs || 0) - (a.ultimoTs || 0)
+  return actividadTs(b) - actividadTs(a)
 }
 
 let listaPendiente = false
@@ -446,6 +482,18 @@ function rotuloChat(c) {
   }
 }
 
+function sofiaPillHtml(c) {
+  const nombre = c.sofiaAsistente || 'Sofía'
+  const n = c.sofiaNoVistos || 0
+  const ultimo = c.sofiaUltimo?.texto ? String(c.sofiaUltimo.texto).replace(/\s+/g, ' ') : ''
+  const titulo = [
+    `${nombre} atendió este chat`,
+    n > 0 && (n === 1 ? '1 mensaje sin ver' : `${n} mensajes sin ver`),
+    ultimo && `Última respuesta: ${ultimo.length > 80 ? `${ultimo.slice(0, 80)}…` : ultimo}`,
+  ].filter(Boolean).join(' · ')
+  return `<span class="agente-tag sofia-tag" title="${esc(titulo)}">🤖<span>${esc(nombre)}${n > 0 ? ` ${n}` : ''}</span></span>`
+}
+
 function filaChat(c) {
   const r = rotuloChat(c)
   const sub = r.sub ? `<span class="row-sub ${r.subEsNombre ? '' : 'tnum'}">${esc(r.sub)}</span>` : ''
@@ -454,6 +502,7 @@ function filaChat(c) {
   const iconos = [
     // Sin login no hay bloqueo: solo se avisa quién más lo tiene abierto.
     !ocupante && otros.length ? `<span class="agente-tag" title="${esc(nombresLista(otros))} ${otros.length === 1 ? 'está' : 'están'} en este chat">${ic('user')}<span>${esc(nombresLista(otros))}</span></span>` : '',
+    c.sofiaTs ? sofiaPillHtml(c) : '',
     c.silenciado ? ic('mute') : '',
     c.fijado && !c.archivado ? ic('fijado') : '',
     c.noLeidos ? `<span class="unread tnum">${c.noLeidos}</span>` : '',
@@ -467,7 +516,7 @@ function filaChat(c) {
       <span class="row-top"><span class="row-name ${r.subEsNombre ? 'tnum' : ''}">${esc(r.titulo)}</span></span>${sub}
       ${previaHtml(c)}
     </span>
-    <span class="row-side"><span class="tnum">${horaLista(c.ultimoTs)}</span><span class="row-icons">${iconos}</span></span>
+    <span class="row-side"><span class="tnum">${horaLista(actividadTs(c))}</span><span class="row-icons">${iconos}</span></span>
   </button>`
 }
 
@@ -502,6 +551,7 @@ function renderList() {
     if (q) vacio = 'Ningún chat coincide con la búsqueda.'
     else if (state.verArchivados) vacio = 'No hay chats archivados.'
     else if (state.filter === 'no-leidos') vacio = 'No hay chats sin leer.'
+    else if (state.filter === 'sofia') vacio = 'Sofía todavía no atendió ningún chat.'
     else if (state.filter === 'grupos') vacio = 'No hay grupos en la bandeja. Traelos con el botón de actualizar, arriba a la derecha.'
     else vacio = 'Todavía no hay chats. Cuando la línea reciba o envíe un mensaje, aparece acá.'
   }
@@ -610,7 +660,8 @@ function deUnaVez(llave, fn) {
 function alDiaNube(chatId) {
   return deUnaVez(`nuevo|${chatId}`, async () => {
     const clave = claveNube(chatId)
-    const ultimoTs = state.chats.get(chatId)?.ultimoTs || 0
+    const chatNube = state.chats.get(chatId)
+    const ultimoTs = chatNube ? actividadTs(chatNube) : 0
     let e = await cacheNube.leer('chats', clave)
     if (!e) {
       const r = await api(`/api/chats/${enc(chatId)}/mensajes?limite=${SEGMENTO_NUBE}`)
@@ -681,7 +732,7 @@ async function precargarNube() {
   if (!NUBE || precargandoNube) return
   precargandoNube = true
   try {
-    const orden = [...state.chats.values()].sort((a, b) => (b.ultimoTs || 0) - (a.ultimoTs || 0)).map((c) => c.id)
+    const orden = [...state.chats.values()].sort((a, b) => actividadTs(b) - actividadTs(a)).map((c) => c.id)
     // 1) La tanda más nueva de cada chat (o lo nuevo, si ya estaba guardado).
     await deANa(orden, PARALELO_NUBE, async (id) => sumarAlAbierto(id, await alDiaNube(id)))
     // 2) Las tandas anteriores, de la más nueva a la más vieja, hasta completar cada chat.
@@ -806,7 +857,7 @@ async function abrirChat(id) {
 function prepararSinLeer() {
   if (!state.sinLeerCantidad) return
   const todos = ordenados()
-  const recibidos = todos.filter((m) => !m.deMi)
+  const recibidos = todos.filter((m) => !m.deMi && !m.sofia)
   const primero = recibidos[Math.max(0, recibidos.length - state.sinLeerCantidad)]
   if (!primero) return
   state.sinLeerDesde = primero.id
@@ -815,7 +866,12 @@ function prepararSinLeer() {
 }
 
 function marcarLeido(id) {
-  if (!state.chats.get(id)?.noLeidos && !state.config.confirmarLectura) return
+  const c = state.chats.get(id)
+  if (!c?.noLeidos && !c?.sofiaNoVistos && !state.config.confirmarLectura) return
+  if (c?.sofiaNoVistos) {
+    c.sofiaNoVistos = 0
+    pedirLista()
+  }
   api(`/api/chats/${enc(id)}/leido`, { method: 'POST' }).catch(() => {})
 }
 let leidoTimer
@@ -927,8 +983,8 @@ function ventanaDibujada() {
 /** El primer mensaje que se ve y a qué altura: para no mover la vista al redibujar. */
 function anclaDeVista() {
   const box = $('#messages')
-  for (const el of $('#msgList').children) {
-    if (el.dataset.id && el.offsetTop + el.offsetHeight > box.scrollTop) return { id: el.dataset.id, delta: el.offsetTop - box.scrollTop }
+  for (const el of $('#msgList').querySelectorAll('.msg[data-id], .aviso-grupo[data-id]')) {
+    if (el.offsetTop + el.offsetHeight > box.scrollTop) return { id: el.dataset.id, delta: el.offsetTop - box.scrollTop }
   }
   return null
 }
@@ -945,7 +1001,8 @@ function renderMensajes({ mantenerPosicion = false } = {}) {
   if (desde > 0 || state.hayAnteriores) partes.push('<div class="mas-antiguos">Subí para ver mensajes anteriores</div>')
   let dia = null
   let lado = null
-  for (const m of visibles) {
+  for (const it of bloquesSofia(visibles, (x) => diaDe(x.ts))) {
+    const m = Array.isArray(it) ? it[0] : it
     const d = diaDe(m.ts)
     if (d !== dia) {
       partes.push(diaHtml(d))
@@ -955,6 +1012,12 @@ function renderMensajes({ mantenerPosicion = false } = {}) {
     if (m.id === state.sinLeerDesde) {
       partes.push(sinLeerHtml(state.sinLeerCantidad))
       lado = null
+    }
+    if (Array.isArray(it)) {
+      // Lo de Sofía va en un recuadro propio, aparte de la línea de Neifert.
+      partes.push(bloqueSofiaHtml(it, it.at(-1) === todos.at(-1)))
+      lado = null
+      continue
     }
     const ladoActual = `${m.deMi ? 'out' : 'in'}:${firmanteDe(m)}`
     partes.push(msgHtml(m, ladoActual !== lado))
@@ -1097,6 +1160,8 @@ seguirAbajo.observe($('#messages'))
 function onMensaje({ chatId, mensaje }) {
   if (chatId !== state.activo) return
   const existia = state.mensajes.has(mensaje.id)
+  // Lo que dice Sofía no es "mío": no baja la vista ni cuenta como enviado desde acá.
+  const propio = mensaje.deMi && !mensaje.sofia
   state.mensajes.set(mensaje.id, mensaje)
 
   if (existia) {
@@ -1121,7 +1186,7 @@ function onMensaje({ chatId, mensaje }) {
     // Se está leyendo más arriba (los más nuevos están fuera de la pantalla): no se dibuja,
     // se cuenta en el botón de bajar.
     state.recorte++
-    if (mensaje.deMi) irAlFinal()
+    if (propio) irAlFinal()
     else {
       state.nuevosAbajo++
       actualizarBajar()
@@ -1137,23 +1202,28 @@ function onMensaje({ chatId, mensaje }) {
     primero?.remove()
   }
   const lista = $('#msgList')
-  lista.querySelector('[data-vacio]')?.remove()
-  const d = diaDe(mensaje.ts)
-  const dias = lista.querySelectorAll('.day')
-  if (dias[dias.length - 1]?.dataset.dia !== d) lista.insertAdjacentHTML('beforeend', diaHtml(d))
-  const ultimo = lista.lastElementChild
-  const mismoLado = ultimo?.classList.contains('msg') && ultimo.classList.contains(mensaje.deMi ? 'out' : 'in')
-  const mismoAutor = (ultimo?.dataset.autor || '') === firmanteDe(mensaje)
-  const cola = !(mismoLado && mismoAutor)
-  lista.insertAdjacentHTML('beforeend', msgHtml(mensaje, cola))
+  if (mensaje.sofia || lista.lastElementChild?.classList.contains('sofia-bloque')) {
+    // Sofía va en un recuadro con pie que cambia: se redibuja en vez de insertar suelto.
+    renderMensajes({ mantenerPosicion: !state.pegadoAbajo })
+  } else {
+    lista.querySelector('[data-vacio]')?.remove()
+    const d = diaDe(mensaje.ts)
+    const dias = lista.querySelectorAll('.day')
+    if (dias[dias.length - 1]?.dataset.dia !== d) lista.insertAdjacentHTML('beforeend', diaHtml(d))
+    const ultimo = lista.lastElementChild
+    const mismoLado = ultimo?.classList.contains('msg') && ultimo.classList.contains(mensaje.deMi ? 'out' : 'in')
+    const mismoAutor = (ultimo?.dataset.autor || '') === firmanteDe(mensaje)
+    const cola = !(mismoLado && mismoAutor)
+    lista.insertAdjacentHTML('beforeend', msgHtml(mensaje, cola))
+  }
   if (esAudio(mensaje)) actualizarVoz(mensaje.id)
 
-  if (mensaje.deMi) irAbajo()
+  if (propio) irAbajo()
   else if (!state.pegadoAbajo) {
     state.nuevosAbajo++
     actualizarBajar()
   }
-  if (!mensaje.deMi && document.visibilityState === 'visible') marcarLeidoDiferido(chatId)
+  if ((!mensaje.deMi || mensaje.sofia) && document.visibilityState === 'visible') marcarLeidoDiferido(chatId)
 }
 
 function iconoEstado(e) {
@@ -1237,6 +1307,7 @@ function colorAutor(nombre) {
 function citaHtml(q, { boton = true } = {}) {
   const p = PREVIA[q.tipo]
   const texto = q.eliminado ? 'Mensaje eliminado' : q.texto ? esc(sinFormato(q.texto)) : `${p ? ic(p[0]) : ''} ${p ? p[1] : 'Mensaje'}`
+  if (String(q.id).startsWith('sofia:')) boton = false
   const etiqueta = boton ? 'button' : 'div'
   return `<${etiqueta} class="cita ${q.deMi ? '' : 'de-contacto'}" ${boton ? `data-cita="${esc(q.id)}" aria-label="Ir al mensaje citado"` : ''}><b>${esc(autorDe(q))}</b><span class="cita-txt">${texto}</span></${etiqueta}>`
 }
@@ -1307,8 +1378,8 @@ function msgHtml(m, cola) {
         ? `${m.estado === 'error' ? `<button class="link-btn" data-salida-act="reintentar" data-id="${esc(m.id)}">Reintentar</button>` : ''}<button class="link-btn" data-salida-act="descartar" data-id="${esc(m.id)}">Descartar</button>`
         : ''}</div>`
     : ''
-  const meta = `<div class="meta">${m.destacado ? `<span class="star" title="Destacado">${ic('fijado')}</span>` : ''}${m.ediciones?.length ? '<span class="edited">editado</span>' : ''}<span class="tnum">${hora(m.ts)}</span>${m.deMi ? iconoEstado(m.estado) : ''}</div>`
-  const opciones = m.tipo === 'desconocido' ? '' : `<button class="opciones" data-opciones="${esc(m.id)}" aria-label="Opciones del mensaje" aria-haspopup="menu" aria-expanded="false">${ic('down')}</button>`
+  const meta = `<div class="meta">${m.sofia?.rol === 'bot' ? `<span class="sofia-etq">${esc(m.sofia.asistente || 'Sofía')} (IA)</span>` : ''}${m.destacado ? `<span class="star" title="Destacado">${ic('fijado')}</span>` : ''}${m.ediciones?.length ? '<span class="edited">editado</span>' : ''}<span class="tnum">${hora(m.ts)}</span>${m.deMi && !m.sofia ? iconoEstado(m.estado) : ''}</div>`
+  const opciones = m.tipo === 'desconocido' || m.sofia ? '' : `<button class="opciones" data-opciones="${esc(m.id)}" aria-label="Opciones del mensaje" aria-haspopup="menu" aria-expanded="false">${ic('down')}</button>`
   // En un grupo, quién habló va arriba de la burbuja y solo cuando cambia de persona.
   const nombreAutor = !m.deMi && cola && esGrupoActivo() && m.autorNombre
     ? `<div class="autor" style="--autor:${colorAutor(m.autorNombre)}">${esc(m.autorNombre)}</div>`
@@ -1331,6 +1402,7 @@ function msgHtml(m, cola) {
     revelado && 'revelado',
     reacciones.length && 'has-reacts',
     m.tipo === 'desconocido' && 'desconocido',
+    m.sofia && 'sofia',
   ].filter(Boolean).join(' ')
   return `<div class="${clases}" id="${domId(m.id)}" data-id="${esc(m.id)}" data-autor="${esc(firmanteDe(m))}">${opciones}${nombreAutor}${eliminado}${cuerpo}${texto}${ediciones}${salida}${meta}${reacts}</div>`
 }
@@ -2004,6 +2076,7 @@ function renderCrm() {
       ${EMBEBIDO ? `<button class="info-fila" data-act="crm-ver">${ic('user')}<span>Ver ficha en el CRM</span></button>` : ''}
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="seguimiento">${ic('file')}<span>Registrar seguimiento</span></button>
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="alerta">${ic('alert')}<span>Crear alerta</span></button>
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('unlink')}<span>${f.vinculo === 'manual' ? 'Cambiar el cliente' : 'No es este cliente'}</span></button>
     </div>`)
   } else {
@@ -2034,9 +2107,18 @@ function formCrm(tipo, f) {
       <label>Qué se habló<textarea name="texto" rows="3" required maxlength="2000" autofocus placeholder="Ej.: pidió precio del Corolla, le paso cotización el lunes"></textarea></label>
       ${botones('Guardar')}</form>`
   }
+  const yo = sesion.usuario?.id
+  const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
+  if (tipo === 'alerta') {
+    return `<form class="crm-form" data-crm-form="alerta">
+      <label>Alerta<input name="titulo" required maxlength="200" autofocus placeholder="Ej.: Llamar para ver si se decidió por el Gol"></label>
+      <div class="crm-par"><label>Fecha<input type="date" name="fecha" required value="${hoyISO()}"></label><label>Hora<input type="time" name="hora" required></label></div>
+      ${opciones ? `<label>Avisarle a<select name="asignadoA">${opciones}</select></label>` : ''}
+      <label>Detalle<textarea name="descripcion" rows="2" maxlength="1000"></textarea></label>
+      <p class="info-sub">Avisa por notificación, mail y WhatsApp a esa hora.</p>
+      ${botones('Crear alerta')}</form>`
+  }
   if (tipo === 'tarea') {
-    const yo = sesion.usuario?.id
-    const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
     return `<form class="crm-form" data-crm-form="tarea">
       <label>Tarea<input name="titulo" required maxlength="200" autofocus placeholder="Ej.: Llamar para coordinar la prueba de manejo"></label>
       <div class="crm-par"><label>Fecha<input type="date" name="fecha" required value="${hoyISO()}"></label><label>Hora<input type="time" name="hora"></label></div>
@@ -2070,24 +2152,24 @@ async function buscarClienteCrm(q) {
 async function abrirFormCrm(tipo) {
   crmUi.form = tipo
   crmUi.resultados = []
-  if (tipo === 'tarea' && !crmUi.usuarios) crmUi.usuarios = await api('/api/crm/usuarios').catch(() => [])
+  if ((tipo === 'tarea' || tipo === 'alerta') && !crmUi.usuarios) crmUi.usuarios = await api('/api/crm/usuarios').catch(() => [])
   renderCrm()
 }
 
-/** Guarda lo del formulario (crear cliente, seguimiento, tarea) o el vínculo elegido. */
+/** Guarda lo del formulario (crear cliente, seguimiento, tarea, alerta) o el vínculo elegido. */
 async function enviarCrm(tipo, datos, boton) {
   const chat = crmUi.chat
   const err = $('#crmBloque .crm-err')
   if (err) err.hidden = true
   if (boton) boton.disabled = true
-  const ruta = { crear: 'cliente', seguimiento: 'seguimiento', tarea: 'tarea', vincular: 'vincular' }[tipo]
+  const ruta = { crear: 'cliente', seguimiento: 'seguimiento', tarea: 'tarea', alerta: 'alerta', vincular: 'vincular' }[tipo]
   try {
     const r = await api(`/api/chats/${enc(chat)}/crm/${ruta}`, { method: 'POST', json: datos })
     if (crmUi.chat !== chat) return
     crmUi.form = null
     if (r?.configurado !== undefined) crmUi.ficha = r
     renderCrm()
-    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
+    toast({ crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
   } catch (e) {
     if (err) {
       err.textContent = e.message
@@ -2400,7 +2482,7 @@ function abrirMenu(id, ancla, boton = null) {
   const mia = m.reacciones?.yo
   const puedeEliminar = m.deMi && !m.eliminado
   // Sin servidor (solo lectura) quedan las opciones que no cambian nada: copiar, bajar, ver.
-  const lectura = sinServidor()
+  const lectura = sinServidor() || !!m.sofia // lo de Sofía no se responde, reenvía, reacciona ni elimina
   menu.innerHTML = `
     ${lectura ? '' : `<div class="reac-bar">${REACCIONES.map((e) => `<button data-reaccionar="${e}" aria-pressed="${mia === e}" aria-label="Reaccionar con ${e}">${e}</button>`).join('')}</div>
     <button class="item" role="menuitem" data-act="responder">${ic('reply')}Responder</button>
@@ -3616,6 +3698,7 @@ function setView(view) {
     renderLog()
     renderPrefs()
     renderPrivacidad()
+    renderRespaldoMensajes()
   }
   renderPill()
 }
@@ -3635,6 +3718,60 @@ function renderPrivacidad() {
   $('#privacidadCard').innerHTML = `<ul class="priv">${filas.map(([t, d]) => `<li><b>${esc(t)}</b><span>${esc(d)}</span></li>`).join('')}</ul>
     <p class="card-sub">Lo define la concesionaria en la configuración del servidor. Todo lo que se hace desde el panel queda registrado con el nombre de quien lo hizo.</p>`
 }
+
+/** Respaldo programado de los mensajes (solo quien maneja la línea): último bueno, si se pudo leer de vuelta y "Respaldar ahora". */
+async function renderRespaldoMensajes() {
+  if (!puede.linea()) return
+  const el = $('#respaldoMsgCard')
+  let r
+  try {
+    r = await api('/api/respaldo/mensajes')
+  } catch (err) {
+    el.innerHTML = `<p class="path">No se pudo leer el estado del respaldo: ${esc(err.message)}</p>`
+    return
+  }
+  const fecha = r.ultimoOk ? new Date(r.ultimoOk).toLocaleString('es-AR', { dateStyle: 'short', timeStyle: 'short' }) : null
+  const estado = !r.activo
+    ? 'Inactivo: falta configurar R2 y WA_BACKUP_CLAVE en el servidor.'
+    : r.error
+      ? `Error: ${r.error}`
+      : r.verificado ? 'Verificado ✓ (se pudo leer de vuelta)' : 'Todavía no hay respaldo.'
+  el.innerHTML = `<div class="toggle-row"><div>${fecha ? `Último respaldo: ${esc(fecha)}` : 'Sin respaldos todavía'}<span>${esc(estado)}${r.ultimoOk ? ` · ${fmtNum(r.chats)} chats · ${fmtNum(r.mensajes)} mensajes` : ''}</span></div>
+    <button class="btn ghost" data-act="respaldar-mensajes" ${r.activo && !r.corriendo ? '' : 'disabled'}>${ic('download')}${r.corriendo ? 'Respaldando…' : 'Respaldar ahora'}</button></div>
+    <p class="card-sub">Cada 2 días, solo el texto (las fotos y archivos ya están en R2), cifrado. Si deja de funcionar, se avisa a admin, dueño y a quienes marques abajo.</p>
+    <div id="avisarRespaldo"></div>`
+  renderAvisarRespaldo()
+}
+
+/** Empleados del CRM que reciben el aviso de respaldo atrasado (admin y dueño, siempre). */
+async function renderAvisarRespaldo() {
+  const el = $('#avisarRespaldo')
+  if (!el) return
+  const usuarios = await api('/api/crm/usuarios').catch(() => null)
+  if (!usuarios?.length) return (el.innerHTML = '')
+  const elegidos = new Set(state.config.avisarRespaldo || [])
+  const fila = (u) => {
+    const siempre = ['admin', 'dueno'].includes(u.rol)
+    return `<label class="check-row"><input type="checkbox" data-avisar-respaldo="${esc(u.id)}" ${siempre || elegidos.has(u.id) ? 'checked' : ''} ${siempre ? 'disabled' : ''}>
+      <span>${esc(u.nombre || u.usuario)}${siempre ? ' <small>(siempre)</small>' : ''}</span></label>`
+  }
+  el.innerHTML = `<h3 class="sub-titulo">Avisar si se atrasa</h3><div class="check-lista">${usuarios.map(fila).join('')}</div>`
+}
+
+document.addEventListener('change', async (e) => {
+  const id = e.target.dataset?.avisarRespaldo
+  if (!id) return
+  const elegidos = new Set(state.config.avisarRespaldo || [])
+  if (e.target.checked) elegidos.add(id)
+  else elegidos.delete(id)
+  try {
+    state.config = await api('/api/config', { method: 'POST', json: { avisarRespaldo: [...elegidos] } })
+    toast(e.target.checked ? 'Va a recibir el aviso si el respaldo se atrasa.' : 'Ya no recibe el aviso.')
+  } catch (err) {
+    e.target.checked = !e.target.checked
+    toast(`No se pudo guardar: ${err.message}`)
+  }
+})
 
 function esOscuro() {
   const t = document.documentElement.dataset.theme
@@ -3770,7 +3907,7 @@ document.addEventListener('click', async (e) => {
   }
   if (seleccion.activa) {
     const burbuja = e.target.closest('.msg')
-    if (burbuja && !e.target.closest('[data-act]')) return alternarSeleccion(burbuja.dataset.id)
+    if (burbuja && !e.target.closest('[data-act]')) return burbuja.classList.contains('sofia') || alternarSeleccion(burbuja.dataset.id)
   }
   const enMenu = e.target.closest('#menuMsg, #menuChat, [data-opciones]')
   if (!enMenu) cerrarMenu()
@@ -4129,6 +4266,17 @@ document.addEventListener('click', async (e) => {
       if (como) await exportarTodo(como, t)
       break
     }
+    case 'respaldar-mensajes':
+      t.disabled = true
+      toast('Respaldando los mensajes…', 600000)
+      try {
+        const r = await api('/api/respaldo/mensajes', { method: 'POST' })
+        toast(`Respaldo listo y verificado: ${fmtNum(r.chats)} chats, ${fmtNum(r.mensajes)} mensajes.`, 5000)
+      } catch (err) {
+        toast(`No se pudo respaldar: ${err.message}`, 8000)
+      }
+      renderRespaldoMensajes()
+      break
     case 'log-filtro':
       state.logFiltro = t.dataset.valor
       renderLog()

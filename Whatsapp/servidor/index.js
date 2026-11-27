@@ -24,10 +24,13 @@ import {
 import { agentes, emitir, log, marcarViendo, ocupanteDe, suscribir, ultimosLogs } from './src/eventos.js'
 import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesion, iniciarSesion, sesionActual, sinUsuario } from './src/auth.js'
 import { vigilarAlertas } from './src/alertas.js'
+import { respaldarMensajes, vigilarRespaldoMensajes, vistaRespaldoMensajes } from './src/respaldoMensajes.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
 import * as crm from './src/crm.js'
+import { rutasBot } from './src/bot.js'
+import { esDeSofia, sofiaVisto } from './src/sofia.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
 import { crearZip, exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
@@ -155,8 +158,9 @@ app.post('/api/sesion/salir', cerrarSesion)
 // QR, sin login del CRM. Exige la clave que la app genera en cada arranque (WA_CLAVE_LOCAL)
 // y que el pedido salga de esta misma PC, no por el túnel. Para cualquier otro no existe.
 const CLAVE_LOCAL = Buffer.from(process.env.WA_CLAVE_LOCAL || '')
+const esDeEstaPc = (req) => ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
 app.get('/api/local/estado', (req, res) => {
-  const deEstaPc = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress) && !req.get('cf-connecting-ip') && !req.get('x-forwarded-for')
+  const deEstaPc = esDeEstaPc(req)
   const clave = Buffer.from(String(req.get('x-nf-local') || ''))
   if (!CLAVE_LOCAL.length || !deEstaPc || clave.length !== CLAVE_LOCAL.length || !crypto.timingSafeEqual(clave, CLAVE_LOCAL)) {
     return res.status(404).json({ error: 'Ruta inexistente' })
@@ -164,6 +168,20 @@ app.get('/api/local/estado', (req, res) => {
   const { conexion, desde, qr, numeroLinea: linea, rechazo, yo } = wa.estadoConexion({ linea: true })
   res.json({ conexion, desde, qr, numeroLinea: linea, rechazo, telefono: yo?.telefono || null, nombre: yo?.nombre || null })
 })
+
+// El bot de respuestas automáticas (otro programa, en esta misma PC) habla con el CRM por
+// acá: exige WA_BOT_SECRETO y que el pedido salga de esta PC, no por el túnel. Sin el
+// secreto configurado, la ruta no existe.
+const SECRETO_BOT = Buffer.from(process.env.WA_BOT_SECRETO || '')
+function exigirBot(req, res, next) {
+  const clave = Buffer.from(String(req.get('authorization') || '').replace(/^Bearer\s+/i, ''))
+  if (!SECRETO_BOT.length || !esDeEstaPc(req) || clave.length !== SECRETO_BOT.length || !crypto.timingSafeEqual(clave, SECRETO_BOT)) {
+    return res.status(404).json({ error: 'Ruta inexistente' })
+  }
+  req.usuario = null
+  next()
+}
+app.use('/api/bot', exigirBot, rutasBot({ ruta, accion }))
 
 // Todo lo demás exige haber entrado desde el CRM.
 app.use('/api', exigirSesion)
@@ -181,6 +199,17 @@ app.use('/api/chats/:id', (req, res, next) => {
   const ocupante = ocupanteDe(req.params.id, req.usuario.id)
   if (!ocupante) return next()
   res.status(423).json({ error: `${ocupante.nombre} está atendiendo este chat: mientras tanto no se puede cambiar nada.`, ocupado: ocupante })
+})
+// Los mensajes de Sofía son de otra línea: no se les contesta, reacciona, reenvía ni borra desde acá.
+app.use('/api/chats/:id', (req, res, next) => {
+  if (req.method === 'GET') return next()
+  // Rutas /salida/:msgId/... y /media/:msgId/...: el id es el segundo tramo (puede venir codificado).
+  const enRuta = req.path.split('/')[2]
+  let decodificado = enRuta
+  try { decodificado = enRuta && decodeURIComponent(enRuta) } catch { /* queda como vino */ }
+  const ids = [decodificado, req.body?.id, req.body?.citadoId, ...(Array.isArray(req.body?.ids) ? req.body.ids : [])]
+  if (ids.some(esDeSofia)) return res.status(400).json({ error: 'Ese mensaje es de la charla con el asistente: no se puede usar desde esta línea.' })
+  next()
 })
 
 /* Estado y conexión */
@@ -326,6 +355,12 @@ app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) 
   const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
   res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
 }, () => ({})))
+// Respaldo programado de los mensajes (src/respaldoMensajes.js): el estado y "respaldar ahora".
+app.get('/api/respaldo/mensajes', exigirLinea, ruta(() => vistaRespaldoMensajes()))
+app.post('/api/respaldo/mensajes', exigirLinea, accion('respaldo_mensajes', async () => {
+  await respaldarMensajes()
+  return vistaRespaldoMensajes()
+}, (req, r) => ({ chats: r.chats, mensajes: r.mensajes, verificado: r.verificado })))
 // Archivar, fijar, silenciar y marcar como no leído. Viaja al celular vía chatModify.
 app.get('/api/chats/:id/info', ruta((req) => wa.fichaChat(chatId(req))))
 app.post('/api/chats/:id/reenviar', exigirEscritura, accion('reenviar', (req) => wa.reenviarMensajes(chatId(req), req.body?.ids, req.body?.destinos), (req) => ({ mensajes: req.body?.ids?.length || 0, destinos: req.body?.destinos })))
@@ -334,6 +369,7 @@ app.post('/api/chats/:id/salir', exigirLinea, accion('salir_grupo', (req) => wa.
 app.post('/api/chats/:id/borrar', exigirLinea, accion('borrar_chat', (req) => wa.borrarChat(chatId(req)), (req, r) => r))
 app.post('/api/chats/:id/marca', exigirEscritura, accion('marca', (req) => wa.cambiarMarca(chatId(req), req.body?.accion, req.body?.valor ?? null), (req) => ({ marca: req.body?.accion, valor: req.body?.valor ?? null })))
 app.post('/api/chats/:id/leido', exigirEscritura, ruta(async (req) => {
+  sofiaVisto(chatId(req))
   await wa.confirmarLectura(chatId(req))
   return { ok: true }
 }))
@@ -375,6 +411,7 @@ app.post('/api/chats/:id/crm/cliente', exigirEscritura, accion('crm_crear_client
 }, (req, r) => ({ cliente: r.cliente?.id })))
 app.post('/api/chats/:id/crm/seguimiento', exigirEscritura, accion('crm_seguimiento', (req) => crm.registrarSeguimiento(chatId(req), req.body?.texto, req.usuario), (req, r) => ({ cliente: r.clienteId })))
 app.post('/api/chats/:id/crm/tarea', exigirEscritura, accion('crm_tarea', (req) => crm.crearTarea(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, tarea: r.tareaId })))
+app.post('/api/chats/:id/crm/alerta', exigirEscritura, accion('crm_alerta', (req) => crm.crearAlerta(chatId(req), req.body || {}, req.usuario), (req, r) => ({ cliente: r.clienteId, alerta: r.alertaId })))
 
 app.get('/api/chats/:id/integrantes',ruta((req) => wa.integrantesDe(chatId(req))))
 app.post('/api/chats/:id/reaccion', exigirEscritura, accion('reaccion', (req) => wa.enviarReaccion(chatId(req), req.body?.id, req.body?.emoji), (req) => ({ mensaje: req.body?.id })))
@@ -467,9 +504,17 @@ const servidor = app.listen(PUERTO, HOST, () => {
       // Si se está apagando (se cerró la app justo al arrancar), la base ya se cerró: no es un error.
       .catch((err) => cerrando || log('aviso', 'No se pudo reabrir la vista sin conexión del CRM', err.message))
     // Este CRM (CRM_URL) muestra esta línea cuando el servidor está apagado.
-    registrarCrm()
-      .then((r) => r && log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`))
-      .catch((err) => cerrando || log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message))
+    const anotarCrm = (primera) =>
+      registrarCrm()
+        .then((r) => {
+          if (!r) return
+          if (r.ocupada) primera && log('aviso', 'Vista sin conexión del CRM', `${r.host} muestra la línea +${r.ocupada}, que tiene su servidor andando`)
+          else if (primera || r.antes) log('info', 'Vista sin conexión del CRM', `${r.host} muestra esta línea${r.antes ? ' (antes mostraba otra)' : ''}`)
+        })
+        .catch((err) => cerrando || (primera && log('aviso', 'No se pudo anotar qué línea muestra el CRM sin conexión', err.message)))
+    anotarCrm(true)
+    // Cada 10 min: si otra línea se la había quedado y su servidor ya se apagó, se recupera.
+    setInterval(() => anotarCrm(false), 10 * 60e3).unref()
   }
   // Primero las carpetas de archivos al formato con nombre: así nada nuevo cae en una vieja.
   organizarCarpetas()
@@ -495,6 +540,8 @@ const servidor = app.listen(PUERTO, HOST, () => {
       log,
     })
   }
+  // Respaldo de los mensajes cada 2 días (con aviso a admin/dueño si se atrasa): solo con la base en Supabase.
+  if (almacen.modo === 'supabase') vigilarRespaldoMensajes()
   // Y después, una vez por día.
   setInterval(limpiarVentana, 24 * 3600 * 1000)
 })
@@ -554,4 +601,12 @@ process.on('SIGTERM', () => cerrar())
 process.on('message', (m) => m?.tipo === 'cerrar' && cerrar({ cerrarLectura: !!m.cerrarLectura }))
 // Si la app se cerró de golpe, el servidor no queda huérfano ocupando el puerto.
 process.on('disconnect', () => cerrar())
-process.on('unhandledRejection', (err) => log('error', 'Error no controlado', err?.message || String(err)))
+// Con el código y el lugar del código donde pasó: sin eso no se sabe qué lo causó.
+const dondeFue = (err) => {
+  const m = String(err?.stack || '').match(/[\\/](src[\\/][\w.]+|index\.js):(\d+)/)
+  return m ? `${m[1].replace(/\\/g, '/')}:${m[2]}` : null
+}
+process.on('unhandledRejection', (err) => {
+  const lugar = dondeFue(err)
+  log('error', 'Error no controlado', [err?.message || String(err), err?.code, lugar && `en ${lugar}`].filter(Boolean).join(' · '))
+})

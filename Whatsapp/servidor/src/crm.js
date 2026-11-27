@@ -16,6 +16,7 @@
 import { SUPABASE_SERVICE_ROLE_KEY, SUPABASE_URL } from './config.js'
 import { buscarChat, esGrupo, nombreDe, pnDeLid, telefonoDe, upsertChat } from './almacen.js'
 import { normalizarAR } from './telefono.js'
+import { telefonoEmpleado } from './alertas.js'
 
 export const CRM_CONFIGURADO = Boolean(SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY)
 const CACHE_MS = 2 * 60 * 1000
@@ -149,16 +150,13 @@ async function evento(usuario, clienteId, tipo, datos) {
   })
 }
 
-/** Crea el cliente con el teléfono y nombre del chat, y lo deja vinculado. */
-export async function crearCliente(jid, { nombre, localidad, notas } = {}, usuario) {
-  if (esGrupo(jid)) throw error('Un grupo no se puede cargar como cliente.')
-  const ficha = await fichaCrm(jid)
-  if (ficha.cliente) throw error(`Este chat ya es de ${ficha.cliente.nombre}.`, 409)
-  // Como se cargan en el CRM: los 10 dígitos (código de área + número), sin +54 9.
-  const normal = normalizarAR(ficha.telefono)
-  const telefono = /^549\d{10}$/.test(normal) ? normal.slice(3) : ficha.telefono
+/** Como se cargan en el CRM: los 10 dígitos (código de área + número), sin +54 9. */
+const telefonoParaCrm = (normal, crudo) => (/^549\d{10}$/.test(normal) ? normal.slice(3) : crudo)
+
+/** Alta del cliente en el CRM + evento 'alta'. Devuelve la fila creada. */
+async function altaCliente({ nombre, telefono, localidad, notas }, usuario, origen) {
   const fila = {
-    nombre: String(nombre || '').trim() || nombreDe(jid),
+    nombre,
     telefono,
     localidad: String(localidad || '').trim() || null,
     notas: String(notas || '').trim() || null,
@@ -168,8 +166,21 @@ export async function crearCliente(jid, { nombre, localidad, notas } = {}, usuar
     editado_por: usuario?.id || null,
   }
   const [cliente] = await rest('clientes', { metodo: 'POST', cuerpo: fila })
-  await evento(usuario, cliente.id, 'alta', { origen: 'whatsapp' }).catch(() => {})
+  await evento(usuario, cliente.id, 'alta', { origen }).catch(() => {})
   olvidarCache()
+  return cliente
+}
+
+/** Crea el cliente con el teléfono y nombre del chat, y lo deja vinculado. */
+export async function crearCliente(jid, { nombre, localidad, notas } = {}, usuario) {
+  if (esGrupo(jid)) throw error('Un grupo no se puede cargar como cliente.')
+  const ficha = await fichaCrm(jid)
+  if (ficha.cliente) throw error(`Este chat ya es de ${ficha.cliente.nombre}.`, 409)
+  const cliente = await altaCliente(
+    { nombre: String(nombre || '').trim() || nombreDe(jid), telefono: telefonoParaCrm(normalizarAR(ficha.telefono), ficha.telefono), localidad, notas },
+    usuario,
+    'whatsapp',
+  )
   upsertChat(jid, { clienteId: cliente.id })
   return fichaCrm(jid)
 }
@@ -180,23 +191,31 @@ async function clienteDelChat(jid) {
   return ficha.cliente
 }
 
-/** Seguimiento en la bitácora del cliente (lo mismo que "Agregar contacto" en el CRM). */
-export async function registrarSeguimiento(jid, texto, usuario) {
+const textoSeguimiento = (texto) => {
   const limpio = String(texto || '').trim()
   if (!limpio) throw error('Escribí qué se habló.')
-  const cliente = await clienteDelChat(jid)
-  await evento(usuario, cliente.id, 'contacto', { texto: limpio.slice(0, 2000), via: 'whatsapp' })
+  return limpio.slice(0, 2000)
+}
+
+async function seguimientoDe(cliente, texto, usuario, via) {
+  await evento(usuario, cliente.id, 'contacto', { texto, via })
   return { ok: true, clienteId: cliente.id }
 }
 
-/** Tarea en el CRM para este cliente. */
-export async function crearTarea(jid, { titulo, descripcion, fecha, hora, prioridad, asignadoA } = {}, usuario) {
-  const limpio = String(titulo || '').trim()
-  if (!limpio) throw error('La tarea necesita un título.')
+/** Seguimiento en la bitácora del cliente (lo mismo que "Agregar contacto" en el CRM). */
+export async function registrarSeguimiento(jid, texto, usuario) {
+  const limpio = textoSeguimiento(texto)
+  return seguimientoDe(await clienteDelChat(jid), limpio, usuario, 'whatsapp')
+}
+
+const validarTarea = ({ titulo, fecha }) => {
+  if (!String(titulo || '').trim()) throw error('La tarea necesita un título.')
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) throw error('Elegí la fecha de la tarea.')
-  const cliente = await clienteDelChat(jid)
+}
+
+async function tareaDe(cliente, { titulo, descripcion, fecha, hora, prioridad, asignadoA }, usuario, datosEvento = {}) {
   const fila = {
-    titulo: limpio.slice(0, 200),
+    titulo: String(titulo).trim().slice(0, 200),
     descripcion: String(descripcion || '').trim() || null,
     fecha,
     hora: /^\d{2}:\d{2}$/.test(hora || '') ? hora : null,
@@ -206,11 +225,138 @@ export async function crearTarea(jid, { titulo, descripcion, fecha, hora, priori
     creado_por: usuario?.id || null,
   }
   const [tarea] = await rest('tareas', { metodo: 'POST', cuerpo: fila })
-  await evento(usuario, cliente.id, 'tarea', { titulo: fila.titulo, done: false }).catch(() => {})
+  await evento(usuario, cliente.id, 'tarea', { titulo: fila.titulo, done: false, ...datosEvento }).catch(() => {})
   return { ok: true, tareaId: tarea.id, clienteId: cliente.id }
 }
 
-/** Usuarios activos del CRM, para asignar la tarea. */
+/** Tarea en el CRM para este cliente. */
+export async function crearTarea(jid, datos = {}, usuario) {
+  validarTarea(datos)
+  return tareaDe(await clienteDelChat(jid), datos, usuario)
+}
+
+/**
+ * Alerta en el CRM para este cliente: avisa por push, mail y WhatsApp a la fecha y hora
+ * elegidas (api/crm/check-alertas.js y alertas.js). A diferencia de la tarea, la hora es
+ * obligatoria y siempre tiene a quién avisar.
+ */
+export async function crearAlerta(jid, { titulo, descripcion, fecha, hora, asignadoA } = {}, usuario) {
+  const limpio = String(titulo || '').trim()
+  if (!limpio) throw error('La alerta necesita un título.')
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) throw error('Elegí la fecha de la alerta.')
+  if (!/^\d{2}:\d{2}$/.test(hora || '')) throw error('Elegí la hora de la alerta.')
+  const asignado = asignadoA || usuario?.id
+  if (!asignado) throw error('Elegí a quién avisarle.')
+  const cliente = await clienteDelChat(jid)
+  const fila = {
+    titulo: limpio.slice(0, 200),
+    descripcion: String(descripcion || '').trim() || null,
+    fecha,
+    hora,
+    asignado_a: asignado,
+    cliente_id: cliente.id,
+    creado_por: usuario?.id || null,
+  }
+  const [alerta] = await rest('alertas', { metodo: 'POST', cuerpo: fila })
+  return { ok: true, alertaId: alerta.id, clienteId: cliente.id }
+}
+
+/** Usuarios activos del CRM, para asignar la tarea o la alerta. */
 export async function usuariosCrm() {
   return rest('usuarios?select=id,nombre,usuario,rol&activo=eq.true&order=nombre.asc')
+}
+
+/* ---------------- Por teléfono (el bot de respuestas automáticas, sin chat) ---------------- */
+
+/** El cliente cuyo teléfono coincide (misma regla que el vínculo automático del chat), o null. */
+export async function clientePorTelefono(telefono) {
+  const normal = normalizarAR(telefono)
+  if (!normal) return null
+  return vistaCliente((await clientes()).porTelefono.get(normal)) || null
+}
+
+async function clienteDeTelefono(telefono) {
+  const cliente = await clientePorTelefono(telefono)
+  if (!cliente) throw error('Ese teléfono no es cliente del CRM.', 404)
+  return cliente
+}
+
+/** Devuelve el cliente de ese teléfono; si no existe lo da de alta. { cliente, creado } */
+export async function asegurarCliente({ telefono, nombre, localidad, interes, notas } = {}, usuario) {
+  const normal = normalizarAR(telefono)
+  if (!normal) throw error('Teléfono inválido.')
+  const interesLimpio = String(interes || '').trim()
+  const existente = await clientePorTelefono(telefono)
+  if (existente) {
+    if (interesLimpio) await seguimientoDe(existente, `Interés: ${interesLimpio}`.slice(0, 2000), usuario, 'bot')
+    return { cliente: existente, creado: false }
+  }
+  const fila = await altaCliente(
+    {
+      nombre: String(nombre || '').trim().slice(0, 120) || 'Contacto de WhatsApp',
+      telefono: telefonoParaCrm(normal, `+${normal}`),
+      localidad,
+      notas: [String(notas || '').trim(), interesLimpio && `Interés: ${interesLimpio}`].filter(Boolean).join('\n'),
+    },
+    usuario,
+    'bot',
+  )
+  return { cliente: vistaCliente(fila), creado: true }
+}
+
+export async function seguimientoPorTelefono(telefono, texto, usuario) {
+  const limpio = textoSeguimiento(texto)
+  return seguimientoDe(await clienteDeTelefono(telefono), limpio, usuario, 'bot')
+}
+
+/** Sin fecha, la tarea es para hoy (hora de Argentina, UTC-3). */
+export async function tareaPorTelefono(telefono, datos = {}, usuario) {
+  const hoy = new Date(Date.now() - 3 * 3600_000).toISOString().slice(0, 10)
+  const completos = { ...datos, fecha: datos.fecha || hoy }
+  validarTarea(completos)
+  return tareaDe(await clienteDeTelefono(telefono), completos, usuario, { via: 'bot' })
+}
+
+/* ---------------- Alta automática ---------------- */
+
+let empleados = { ts: 0, telefonos: new Set() }
+
+async function telefonosEmpleados() {
+  if (Date.now() - empleados.ts < CACHE_MS) return empleados.telefonos
+  const filas = await rest('usuarios?select=telefono&telefono=not.is.null')
+  empleados = { ts: Date.now(), telefonos: new Set(filas.map((u) => telefonoEmpleado(u.telefono)).filter(Boolean)) }
+  return empleados.telefonos
+}
+
+const enCurso = new Set()
+
+/**
+ * Quien escribe por primera vez queda cargado como cliente (preferencia
+ * "clientesAutomaticos"). No entran los grupos, los empleados del CRM, los chats que ya
+ * tienen un cliente elegido a mano o marcados como "no es cliente", ni los números que ya
+ * están en el CRM. Devuelve el cliente creado o null.
+ */
+export async function altaAutomatica(jid) {
+  if (!CRM_CONFIGURADO || esGrupo(jid) || buscarChat(jid)?.clienteId) return null
+  const telefono = telefonoDelChat(jid)
+  const normal = normalizarAR(telefono)
+  if (!normal || enCurso.has(normal)) return null
+  enCurso.add(normal)
+  try {
+    const { porTelefono } = await clientes()
+    if (porTelefono.has(normal) || (await telefonosEmpleados()).has(normal)) return null
+    const nombre = nombreDe(jid)
+    const cliente = await altaCliente(
+      {
+        // Sin nombre de WhatsApp, nombreDe devuelve el número: mejor un nombre que se note pendiente.
+        nombre: /^\+?[\d\s-]+$/.test(nombre) ? 'Contacto de WhatsApp' : nombre.slice(0, 120),
+        telefono: telefonoParaCrm(normal, telefono),
+      },
+      null,
+      'whatsapp_automatico',
+    )
+    return vistaCliente(cliente)
+  } finally {
+    enCurso.delete(normal)
+  }
 }
