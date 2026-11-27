@@ -26,11 +26,11 @@ export function rutasBot({ ruta, accion }) {
     const lista = (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))
     return FILTROS.some((f) => req.query[f] !== undefined) ? filtrarVehiculos(lista, req.query) : lista
   }))
-  // Las fotos de un auto: { nombre, descripcion, fotos: ['/vehiculos/<id>/foto/0', ...] } (hasta 5, rutas de este mismo API).
+  // Las fotos de un auto: { nombre, descripcion, fotos: ['/vehiculos/<id>/foto/0', ...] } (hasta 10, rutas de este mismo API).
   r.get('/vehiculos/:id/fotos', ruta(async (req) => {
     const v = await fotosDeVehiculoWeb(req.params.id)
     if (!v) throw Object.assign(new Error('No existe ese auto'), { status: 404 })
-    const fotos = v.fotos.slice(0, 5).map((_, i) => `/vehiculos/${encodeURIComponent(req.params.id)}/foto/${i}`)
+    const fotos = v.fotos.slice(0, 10).map((_, i) => `/vehiculos/${encodeURIComponent(req.params.id)}/foto/${i}`)
     return { nombre: v.nombre, descripcion: v.descripcion, fotos }
   }))
   // Una foto como JPEG (1280 px como mucho), lista para mandar por WhatsApp.
