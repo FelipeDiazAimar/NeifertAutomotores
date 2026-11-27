@@ -257,11 +257,7 @@ dl.kv dd { margin: 0; text-align: right; font-weight: 500; }
 .new-client b { color: var(--ink); font-size: 13.5px; }
 
 /* ---------- Conexión ---------- */
-/* Las tarjetas se reparten en dos columnas balanceadas: si una columna es más corta, la siguiente tarjeta sube (sin huecos). */
-.connect { display: block; column-count: 2; column-gap: 12px; }
-.connect > .col { display: contents; }
-.connect .card { break-inside: avoid; margin-bottom: 12px; }
-.connect > .actividad-card { column-span: all; }
+.connect { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; align-items: start; }
 .card { border-radius: 20px; padding: 20px; display: flex; flex-direction: column; gap: 16px; }
 .card h2 { font-size: 17px; }
 .card-sub { margin: -10px 0 0; color: var(--ink-3); font-size: 13px; }
@@ -341,7 +337,7 @@ body.show-notes .anno { display: flex; }
   .sidebar { display: none; }
   .app { padding-inline: 16px; }
   .mobile-top { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-radius: 16px; }
-  .connect { column-count: 1; }
+  .connect { grid-template-columns: 1fr; }
 }
 @media (max-width: 720px) {
   .inbox { grid-template-columns: 1fr; height: calc(100vh - 150px); min-height: 560px; }
