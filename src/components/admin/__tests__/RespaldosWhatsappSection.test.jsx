@@ -6,7 +6,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
 const ITEMS = [
   { tipo: 'nube', ts: '2026-12-03T15:00:00Z', ok: true, chats: 40, mensajes: 9000, bytes: 2_500_000, conArchivos: false, sofia: { chats: 2, mensajes: 8 } },
-  { tipo: 'local', ts: '2026-12-02T15:00:00Z', ok: true, chats: 40, mensajes: 8900, usuario: 'Feli', conArchivos: true },
+  { tipo: 'local', ts: '2026-12-02T15:00:00Z', ok: true, chats: 40, mensajes: 8900, usuario: 'Feli', conArchivos: true, cifrado: true },
   { tipo: 'nube', ts: '2026-12-02T03:30:00Z', ok: false, error: 'R2 no responde' }, // 00:30 del 02/12 en Argentina
 ]
 vi.mock('@/crm/services/usuarios.service', () => ({ respaldosWhatsapp: async () => ({ ok: true, items: ITEMS }) }))
@@ -28,8 +28,8 @@ describe('RespaldosWhatsappSection', () => {
   it('lista locales y de la nube con su contenido y los errores', async () => {
     montar()
     expect(await screen.findByText(/Falló: R2 no responde/)).toBeInTheDocument()
-    expect(screen.getByText(/Texto y archivos/)).toBeInTheDocument()
-    expect(screen.getByText(/Solo texto \(cifrado\)/)).toBeInTheDocument()
+    expect(screen.getByText(/Texto y archivos, cifrado/)).toBeInTheDocument()
+    expect(screen.getByText(/Solo texto, cifrado/)).toBeInTheDocument()
     expect(screen.getByText(/Charlas de Sofía: 2 chats/)).toBeInTheDocument()
   })
 

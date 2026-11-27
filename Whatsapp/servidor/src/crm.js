@@ -192,21 +192,25 @@ async function clienteDelChat(jid) {
 }
 
 /**
- * El cliente de este chat para una tarea o una alerta. Si todavía no es cliente, se crea en el
- * momento con su nombre de WhatsApp y su teléfono (el mismo alta que "Crear cliente"), así se
- * puede crear la tarea directo desde el chat. Respeta "no es cliente" (marcado a mano) y no
- * aplica a grupos. Devuelve { cliente, creado }.
+ * A quién va una tarea o una alerta de este chat. Si es cliente del CRM, queda de ese cliente. Si no
+ * lo es (un proveedor, alguien que recién escribe, un grupo), igual se puede crear: queda sin cliente
+ * y el detalle dice de qué contacto de WhatsApp es. No se crea ningún cliente. Devuelve
+ * { cliente, contacto }: `contacto` es esa línea de detalle (null si es cliente).
  */
-async function clienteParaTarea(jid, usuario) {
+async function destinoDeTarea(jid) {
   const ficha = await fichaCrm(jid)
-  if (ficha.cliente) return { cliente: ficha.cliente, creado: false }
-  if (ficha.grupo) throw error('Un grupo no se puede cargar como cliente.', 409)
-  if (ficha.vinculo === 'ninguno') throw error('Este chat está marcado como "no es cliente": vinculalo a un cliente para crear la tarea.', 409)
+  if (ficha.cliente) return { cliente: ficha.cliente, contacto: null }
   if (!ficha.configurado) throw error('El CRM no está configurado.', 503)
   const nombre = nombreDe(jid)
-  const creada = await crearCliente(jid, { nombre: /^\+?[\d\s-]+$/.test(nombre) ? 'Contacto de WhatsApp' : nombre }, usuario)
-  return { cliente: creada.cliente, creado: true }
+  if (ficha.grupo) return { cliente: null, contacto: `Grupo de WhatsApp: ${nombre}` }
+  const telefono = ficha.telefono || ''
+  const soloNumero = !nombre || nombre.replace(/\D/g, '') === telefono.replace(/\D/g, '')
+  const quien = soloNumero ? telefono : `${nombre}${telefono ? ` · ${telefono}` : ''}`
+  return { cliente: null, contacto: `Contacto de WhatsApp (no es cliente): ${quien}` }
 }
+
+/** El detalle de la tarea o alerta, con la línea del contacto arriba cuando no hay cliente. */
+const detalleConContacto = (descripcion, contacto) => [contacto, String(descripcion || '').trim()].filter(Boolean).join('\n') || null
 
 const textoSeguimiento = (texto) => {
   const limpio = String(texto || '').trim()
@@ -230,28 +234,27 @@ const validarTarea = ({ titulo, fecha }) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(fecha || '')) throw error('Elegí la fecha de la tarea.')
 }
 
-async function tareaDe(cliente, { titulo, descripcion, fecha, hora, prioridad, asignadoA }, usuario, datosEvento = {}) {
+async function tareaDe(cliente, { titulo, descripcion, fecha, hora, prioridad, asignadoA }, usuario, datosEvento = {}, contacto = null) {
   const fila = {
     titulo: String(titulo).trim().slice(0, 200),
-    descripcion: String(descripcion || '').trim() || null,
+    descripcion: detalleConContacto(descripcion, contacto),
     fecha,
     hora: /^\d{2}:\d{2}$/.test(hora || '') ? hora : null,
     prioridad: ['baja', 'normal', 'alta'].includes(prioridad) ? prioridad : 'normal',
     asignado_a: asignadoA || usuario?.id || null,
-    cliente_id: cliente.id,
+    cliente_id: cliente?.id || null,
     creado_por: usuario?.id || null,
   }
   const [tarea] = await rest('tareas', { metodo: 'POST', cuerpo: fila })
-  await evento(usuario, cliente.id, 'tarea', { titulo: fila.titulo, done: false, ...datosEvento }).catch(() => {})
-  return { ok: true, tareaId: tarea.id, clienteId: cliente.id }
+  if (cliente) await evento(usuario, cliente.id, 'tarea', { titulo: fila.titulo, done: false, ...datosEvento }).catch(() => {})
+  return { ok: true, tareaId: tarea.id, clienteId: cliente?.id || null, ...(cliente ? {} : { sinCliente: true }) }
 }
 
 /** Tarea en el CRM para este cliente. */
 export async function crearTarea(jid, datos = {}, usuario) {
   validarTarea(datos)
-  const { cliente, creado } = await clienteParaTarea(jid, usuario)
-  const r = await tareaDe(cliente, datos, usuario)
-  return creado ? { ...r, clienteCreado: true } : r
+  const { cliente, contacto } = await destinoDeTarea(jid)
+  return tareaDe(cliente, datos, usuario, {}, contacto)
 }
 
 /**
@@ -266,18 +269,18 @@ export async function crearAlerta(jid, { titulo, descripcion, fecha, hora, asign
   if (!/^\d{2}:\d{2}$/.test(hora || '')) throw error('Elegí la hora de la alerta.')
   const asignado = asignadoA || usuario?.id
   if (!asignado) throw error('Elegí a quién avisarle.')
-  const { cliente, creado } = await clienteParaTarea(jid, usuario)
+  const { cliente, contacto } = await destinoDeTarea(jid)
   const fila = {
     titulo: limpio.slice(0, 200),
-    descripcion: String(descripcion || '').trim() || null,
+    descripcion: detalleConContacto(descripcion, contacto),
     fecha,
     hora,
     asignado_a: asignado,
-    cliente_id: cliente.id,
+    cliente_id: cliente?.id || null,
     creado_por: usuario?.id || null,
   }
   const [alerta] = await rest('alertas', { metodo: 'POST', cuerpo: fila })
-  return { ok: true, alertaId: alerta.id, clienteId: cliente.id, ...(creado ? { clienteCreado: true } : {}) }
+  return { ok: true, alertaId: alerta.id, clienteId: cliente?.id || null, ...(cliente ? {} : { sinCliente: true }) }
 }
 
 /** Usuarios activos del CRM, para asignar la tarea o la alerta. */

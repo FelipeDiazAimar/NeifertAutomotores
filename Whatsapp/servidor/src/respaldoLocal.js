@@ -48,6 +48,8 @@ export async function registrarRespaldoLocal(datos, { almacen = almacenPorDefect
       chats: datos.chats || 0,
       mensajes: datos.mensajes || 0,
       conArchivos: !!datos.conArchivos,
+      archivos: datos.archivos || 0,
+      cifrado: !!datos.cifrado,
       hasta: datos.hasta || null,
     }
     await almacen.guardar({ ...e, ultimo: registro.ts, ultimoAviso: null, historial: [registro, ...e.historial].slice(0, MAX_HISTORIAL) })

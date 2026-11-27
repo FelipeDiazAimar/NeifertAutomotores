@@ -128,23 +128,15 @@ async function elegirExportacion(titulo) {
   return r === true ? 'archivos' : r === 'alternativa' ? 'texto' : null
 }
 
-/** Todos los chats: con los archivos (descarga directa) o solo el texto. */
-async function exportarTodo(como, boton = null) {
-  if (como === 'archivos') {
-    bajarDirecto('/api/exportar?archivos=1')
-    toast('Descargando los chats con sus archivos. Con muchas fotos y videos tarda: el navegador muestra el avance.', 9000)
-    return
-  }
-  if (boton) boton.disabled = true
-  toast('Preparando todos los chats… puede tardar un poco.', 120000)
-  try {
-    await bajarArchivo('/api/exportar', 'chats.zip')
-    toast('Chats exportados: una carpeta por chat dentro del .zip.', 5000)
-  } catch (err) {
-    toast(err.message)
-  } finally {
-    if (boton) boton.disabled = false
-  }
+/**
+ * El respaldo local: todos los chats con todos sus archivos, siempre cifrado (descarga directa).
+ * El servidor lo anota en el historial; si le falta la clave de cifrado, avisa en vez de bajar uno sin cifrar.
+ */
+async function exportarTodo() {
+  // Sin la clave de cifrado el servidor no hace el respaldo (nunca sale uno sin cifrar): se avisa antes de bajar.
+  if (state.config && state.config.respaldoCifrado === false) return toast('Falta WA_BACKUP_CLAVE en la configuración del servidor: el respaldo local va siempre cifrado.', 9000)
+  bajarDirecto('/api/exportar')
+  toast('Descargando el respaldo completo (cifrado). Con muchas fotos y videos tarda: el navegador muestra el avance.', 9000)
 }
 
 /*
@@ -154,7 +146,7 @@ async function exportarTodo(como, boton = null) {
  */
 const PARTE_MB = 20
 async function cargarRespaldo(archivo) {
-  if (!archivo || !/\.(zip|rar)$/i.test(archivo.name)) return toast('Elegí un archivo .zip o .rar.', 5000)
+  if (!archivo || !/\.(zip|rar|enc)$/i.test(archivo.name)) return toast('Elegí un archivo .enc (respaldo de acá), .zip o .rar.', 5000)
   const mb = (archivo.size / 1024 / 1024).toFixed(1)
   const seguir = await confirmar(
     `Se suman al historial los mensajes, fotos, audios y documentos de "${archivo.name}" (${mb} MB) que todavía no estén guardados. No se borra ni se pisa nada, y cargarlo dos veces no duplica.\n\nSirve la exportación de este sistema y la de "Exportar chat" del celular. Un grupo se reconoce por su nombre.`,
@@ -1621,7 +1613,7 @@ window.addEventListener('message', async (e) => {
   } else if (tipo === 'nf-wa:actualizar' && (await delCrm(e))) {
     actualizarTodo()
   } else if (tipo === 'nf-wa:exportar' && (await delCrm(e))) {
-    exportarTodo(e.data.archivos ? 'archivos' : 'texto')
+    exportarTodo()
   } else if (tipo === 'nf-wa:importar' && (await delCrm(e))) {
     // El archivo lo elige el CRM (desde adentro del panel el navegador no deja abrir el selector).
     if (e.data.archivo instanceof Blob) {
@@ -2083,8 +2075,8 @@ function renderCrm() {
     partes.push(`<p class="info-vacio">${f.vinculo === 'ninguno' ? 'Marcado como que no es cliente del CRM.' : 'Este número no está cargado como cliente.'}</p>
     <div class="info-filas">
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="crear">${ic('plus')}<span>Crear cliente</span></button>
-      ${f.vinculo === 'ninguno' ? '' : `<button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea (crea el cliente)</span></button>
-      <button class="info-fila solo-escritura" data-act="crm-form" data-form="alerta">${ic('alert')}<span>Crear alerta (crea el cliente)</span></button>`}
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="tarea">${ic('clock')}<span>Crear tarea</span></button>
+      <button class="info-fila solo-escritura" data-act="crm-form" data-form="alerta">${ic('alert')}<span>Crear alerta</span></button>
       <button class="info-fila solo-escritura" data-act="crm-form" data-form="vincular">${ic('search')}<span>Vincular a un cliente existente</span></button>
     </div>`)
   }
@@ -2110,7 +2102,7 @@ function formCrm(tipo, f) {
       ${botones('Guardar')}</form>`
   }
   const yo = sesion.usuario?.id
-  const avisoNuevo = f.cliente ? '' : '<p class="info-sub">Todavía no es cliente: se crea solo, con su nombre de WhatsApp y su teléfono, al guardar.</p>'
+  const avisoNuevo = f.cliente ? '' : '<p class="info-sub">No es cliente del CRM: queda sin cliente, con su nombre y teléfono de WhatsApp en el detalle.</p>'
   const opciones = (crmUi.usuarios || []).map((u) => `<option value="${esc(u.id)}"${u.id === yo ? ' selected' : ''}>${esc(u.nombre || u.usuario)}</option>`).join('')
   if (tipo === 'alerta') {
     return `<form class="crm-form" data-crm-form="alerta">
@@ -2163,8 +2155,8 @@ async function abrirFormCrm(tipo) {
 
 /**
  * "Crear tarea" / "Crear alerta" desde el menú del chat: abre el chat y su ficha con el
- * formulario ya puesto. Si el contacto todavía no es cliente del CRM, no hace falta crearlo
- * antes: el servidor lo crea solo (con su nombre de WhatsApp y su teléfono) al guardar.
+ * formulario ya puesto. Si el contacto no es cliente del CRM, igual se puede: la tarea o alerta
+ * queda sin cliente y el detalle lleva su nombre y teléfono de WhatsApp.
  */
 async function crearDesdeChat(id, tipo) {
   if (state.activo !== id) await abrirChat(id)
@@ -2172,7 +2164,6 @@ async function crearDesdeChat(id, tipo) {
   await cargarInfo(id)
   await cargarCrm(id)
   if (crmUi.ficha?.error) return toast(`No se pudo consultar el CRM: ${crmUi.ficha.error}`)
-  if (crmUi.ficha?.vinculo === 'ninguno') return toast(`Este chat está marcado como "no es cliente": vinculalo a un cliente para crear la ${tipo}.`, 7000)
   await abrirFormCrm(tipo)
   $('#crmBloque form')?.scrollIntoView({ block: 'center', behavior: 'smooth' })
 }
@@ -2190,9 +2181,7 @@ async function enviarCrm(tipo, datos, boton) {
     crmUi.form = null
     if (r?.configurado !== undefined) crmUi.ficha = r
     renderCrm()
-    // Si el cliente se creó solo con la tarea/alerta, se vuelve a pedir la ficha para que aparezca.
-    if (r?.clienteCreado) cargarCrm(chat)
-    toast(r?.clienteCreado ? `Cliente creado en el CRM y ${tipo === 'tarea' ? 'tarea creada' : 'alerta creada'}.` : { crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
+    toast(r?.sinCliente ? `${tipo === 'tarea' ? 'Tarea creada' : 'Alerta creada'} en el CRM (sin cliente: no es cliente).` : { crear: 'Cliente creado en el CRM.', seguimiento: 'Seguimiento registrado en el CRM.', tarea: 'Tarea creada en el CRM.', alerta: 'Alerta creada en el CRM.', vincular: datos.clienteId === 'ninguno' ? 'Listo: este chat no es de ese cliente.' : datos.clienteId ? 'Chat vinculado al cliente.' : 'Se vuelve a reconocer por el teléfono.' }[tipo])
   } catch (e) {
     if (err) {
       err.textContent = e.message
@@ -4293,8 +4282,7 @@ document.addEventListener('click', async (e) => {
       break
     case 'actualizar': actualizarTodo(); break
     case 'exportar-todo': {
-      const como = await elegirExportacion('Exportar todos los chats')
-      if (como) await exportarTodo(como, t)
+      await exportarTodo()
       break
     }
     case 'respaldar-mensajes':

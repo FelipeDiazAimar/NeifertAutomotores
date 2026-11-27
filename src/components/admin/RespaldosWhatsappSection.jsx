@@ -26,7 +26,8 @@ const TIPOS = [
 ]
 
 /** Lo que incluye cada respaldo: la nube guarda solo el texto (los archivos ya viven en R2); el local, según cómo se exportó. */
-const contenido = (h) => (h.tipo === 'nube' ? 'Solo texto (cifrado)' : h.conArchivos ? 'Texto y archivos' : 'Solo texto')
+const contenido = (h) =>
+  h.tipo === 'nube' ? 'Solo texto, cifrado' : `${h.conArchivos ? 'Texto y archivos' : 'Solo texto'}${h.cifrado ? ', cifrado' : ' (sin cifrar)'}`
 
 export default function RespaldosWhatsappSection() {
   const { data, isLoading, error } = useQuery({ queryKey: ['respaldos-whatsapp'], queryFn: respaldosWhatsapp })
@@ -41,8 +42,8 @@ export default function RespaldosWhatsappSection() {
   return (
     <div className="space-y-4">
       <p className="text-sm text-ink-3">
-        Respaldos locales (los que se bajan con “Exportar todos los chats”) y automáticos en la nube. El de la nube guarda solo el
-        texto: las fotos, audios y documentos ya están en R2. El local incluye los archivos solo si se eligió “Con los archivos”.
+        Respaldos locales (los que se bajan con “Exportar todos los chats”: siempre completos, con todos los archivos, y cifrados) y
+        automáticos en la nube (solo el texto, cifrado: las fotos, audios y documentos ya están en R2).
       </p>
 
       <div className="flex flex-wrap items-end gap-3">

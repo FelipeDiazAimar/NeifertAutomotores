@@ -56,6 +56,7 @@ import { emitir, log } from './eventos.js'
 import { alertar, resolver, vigilar } from './vigia.js'
 import { mismoNumero } from './telefono.js'
 import { altaAutomatica } from './crm.js'
+import { armarNegocio } from './negocioBot.js'
 import { renovarConexiones } from './nube.js'
 import { extensionDe } from './tipos.js'
 import { respaldarEnv, respaldarSesion, respaldoActivo } from './respaldo.js'
@@ -2915,9 +2916,42 @@ async function vehiculosWebTodos() {
   return vehiculosWebCache.lista
 }
 
+/** Dirección del auto en la página (usados o 0 km), en el mismo dominio que el CRM. '' si no se sabe el dominio. */
+const enlaceWeb = (v) => {
+  try {
+    return `${new URL(CRM_URL).origin}/${v.es_nuevo ? 'catalogo-0km' : 'catalogo'}/${v.id}`
+  } catch {
+    return ''
+  }
+}
+
 const tituloWeb = (v) => [v.marca, v.modelo, v.version].filter(Boolean).join(' ')
 const fotosWeb = (v) => [v.imagen_principal, ...(Array.isArray(v.imagenes) ? v.imagenes : [])].filter((u, i, a) => typeof u === 'string' && u && a.indexOf(u) === i)
 const precioWeb = (v) => (v.precio ? `${v.moneda === 'ARS' ? '$' : 'U$S'} ${Number(v.precio).toLocaleString('es-AR')}` : '')
+
+let negocioCache = { ts: 0, datos: null }
+
+/** Dirección, horarios y contacto de la página (para que el bot los consulte). Se guarda 1 minuto. */
+export async function datosNegocio() {
+  if (negocioCache.datos && Date.now() - negocioCache.ts < 60_000) return negocioCache.datos
+  let web = ''
+  try {
+    web = new URL(CRM_URL).origin
+  } catch {
+    /* sin CRM_URL: no se sabe la dirección de la página */
+  }
+  let contenido = {}
+  if (SUPABASE_URL && SUPABASE_SERVICE_ROLE_KEY) {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/contenido_sitio?clave=in.(socials,categories)&select=clave,valor`, {
+      headers: { apikey: SUPABASE_SERVICE_ROLE_KEY, Authorization: `Bearer ${SUPABASE_SERVICE_ROLE_KEY}` },
+      signal: AbortSignal.timeout(15000),
+    })
+    if (!res.ok) throw Object.assign(new Error(`No se pudo leer el contenido de la página (${res.status})`), { status: 502 })
+    contenido = Object.fromEntries((await res.json()).map((f) => [f.clave, f.valor]))
+  }
+  negocioCache = { ts: Date.now(), datos: armarNegocio(contenido, web) }
+  return negocioCache.datos
+}
 
 /** Los autos publicados en la página (disponibles y reservados), con el mismo formato que el catálogo de WhatsApp. */
 export async function vehiculosWeb() {
@@ -2936,6 +2970,9 @@ export async function vehiculosWeb() {
     precio: v.precio ? Number(v.precio) : null,
     moneda: v.moneda || null,
     nuevo: !!v.es_nuevo,
+    condicion: v.es_nuevo ? '0km' : 'usado',
+    categoria: v.categoria || '',
+    enlace: enlaceWeb(v),
     imagen: fotosWeb(v).length ? `/api/vehiculos-web/${v.id}/foto` : null,
   }))
 }

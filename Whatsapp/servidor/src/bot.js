@@ -6,7 +6,7 @@
  */
 import { Router } from 'express'
 import { CRM_CONFIGURADO, asegurarCliente, clientePorTelefono, seguimientoPorTelefono, tareaPorTelefono } from './crm.js'
-import { vehiculosWeb } from './whatsapp.js'
+import { datosNegocio, vehiculosWeb } from './whatsapp.js'
 import { guardarCharla } from './sofia.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
 
@@ -16,6 +16,8 @@ export function rutasBot({ ruta, accion }) {
   const r = Router()
   r.get('/salud', ruta(() => ({ ok: true, crm: CRM_CONFIGURADO })))
   // `imagen` es una ruta interna del panel: al bot no le sirve.
+  // Dirección, horarios, teléfonos y categorías de la página.
+  r.get('/negocio', ruta(() => datosNegocio()))
   // Sin filtros: la lista entera (como siempre). Con filtros: { total, vehiculos } para que la IA consulte lo que necesita.
   r.get('/vehiculos', ruta(async (req) => {
     const lista = (await vehiculosWeb()).map((v) => ({ ...v, imagen: undefined }))

@@ -1,9 +1,11 @@
 import crypto from 'node:crypto'
+import { once } from 'node:events'
 import fs from 'node:fs'
 import path from 'node:path'
 import express from 'express'
 import {
   ALERTAS_CRM,
+  BACKUP_CLAVE,
   CONSERVAR_EDICIONES,
   DATA_DIR,
   CONSERVAR_ELIMINADOS,
@@ -26,6 +28,7 @@ import { cerrarSesion, exigirCabecera, exigirEscritura, exigirLinea, exigirSesio
 import { vigilarAlertas } from './src/alertas.js'
 import { respaldarMensajes, vigilarRespaldoMensajes, vistaRespaldoMensajes } from './src/respaldoMensajes.js'
 import { registrarRespaldoLocal, vigilarRespaldoLocal, vistaRespaldoLocal } from './src/respaldoLocal.js'
+import { crearCifrador, descifrarArchivo, esRespaldoCifrado } from './src/cifradoFlujo.js'
 import { auditar, ultimasAcciones } from './src/auditoria.js'
 import { buscarMensaje, buscarMensajes, cerrarAlmacen, claveMedia, config, iniciarAlmacen, listarChats, listarMensajes, organizarCarpetas, paginaDeMensajes, setConfig, usoAlmacenamiento, vistaMensaje } from './src/almacen.js'
 import * as wa from './src/whatsapp.js'
@@ -34,7 +37,7 @@ import { rutasBot } from './src/bot.js'
 import { esDeSofia, sofiaVisto } from './src/sofia.js'
 import { claveFoto, recuperarFoto } from './src/fotos.js'
 import { DONDE, leer as leerGuardado, servir } from './src/archivos.js'
-import { crearZip, exportarConArchivos, nombreArchivo, rutasDeChats, textoDeChat, zipEnVivo } from './src/exportar.js'
+import { exportarConArchivos, nombreArchivo, textoDeChat, zipEnVivo } from './src/exportar.js'
 import { importarRespaldo } from './src/importar.js'
 import { cerrarLecturaAlApagar, reabrirLecturaAlEncender, registrarCrm, soltarServidor, tomarServidor } from './src/nube.js'
 
@@ -217,7 +220,7 @@ app.use('/api/chats/:id', (req, res, next) => {
 app.get('/api/eventos', (req, res) => suscribir(req, res))
 // Lo que el panel necesita saber de la configuración del servidor (límite de archivos y
 // la definición de privacidad: si se conservan los eliminados y las ediciones).
-const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, subidaMaxMb: SUBIDA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO })
+const configPublica = () => ({ ...config(), mediaMaxMb: MEDIA_MAX_MB, subidaMaxMb: SUBIDA_MAX_MB, conservarEliminados: CONSERVAR_ELIMINADOS, conservarEdiciones: CONSERVAR_EDICIONES, ventanaDias: VENTANA_DIAS, crm: crm.CRM_CONFIGURADO, respaldoCifrado: Boolean(BACKUP_CLAVE) })
 app.get('/api/estado', ruta((req) => ({ ...wa.estadoConexion(req.usuario), config: configPublica() })))
 app.get('/api/log', exigirLinea, ruta(() => ultimosLogs()))
 app.get('/api/auditoria', exigirLinea, ruta((req) => ultimasAcciones(Math.min(Number(req.query.limite) || 100, 500))))
@@ -265,16 +268,25 @@ app.get('/api/chats/:id/mensajes/:msgId', ruta((req) => {
  * de a un archivo por vez mientras se arma, así que la descarga empieza enseguida.
  */
 const leerMedia = (jid, m) => leerGuardado(claveMedia(jid, m.media.archivo))
-async function exportarZip(req, res, chats, nombre) {
-  res.attachment(nombre).type('application/zip')
+async function exportarZip(req, res, chats, nombre, { cifrarCon = null } = {}) {
+  res.attachment(nombre).type(cifrarCon ? 'application/octet-stream' : 'application/zip')
   res.setHeader('Cache-Control', 'no-store')
-  const zip = zipEnVivo(res)
+  // Con clave, el .zip sale cifrado de a trozos (src/cifradoFlujo.js): nunca pasa sin cifrar por la red ni por el disco.
+  const cifrador = cifrarCon ? crearCifrador(cifrarCon) : null
+  if (cifrador) {
+    cifrador.pipe(res)
+    res.on('close', () => cifrador.destroy()) // si se cancela la descarga, se frena todo
+  }
+  const zip = zipEnVivo(cifrador || res)
   try {
     const r = await exportarConArchivos(zip, chats, { mensajesDe: listarMensajes, leerMedia })
     await zip.terminar()
+    // Con cifrado, "terminó" es cuando salió el último byte: recién ahí cuenta como respaldo hecho.
+    if (cifrador && !res.writableFinished) await once(res, 'finish')
     return { chats: chats.length, ...r }
   } catch (err) {
     // La descarga ya empezó: no se puede avisar con un error, se corta.
+    cifrador?.destroy()
     res.destroy(err)
     throw err
   }
@@ -327,8 +339,16 @@ app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req
   emitir('importacion', { estado: 'cargando', nombre })
   ;(async () => {
     try {
-      const r = await importarRespaldo(archivo, {
-        nombreArchivo: nombre,
+      // Un respaldo local (.enc) viene cifrado: se descifra de a trozos a un .zip temporal y se carga ese.
+      let aCargar = archivo
+      if (esRespaldoCifrado(archivo)) {
+        if (!BACKUP_CLAVE) throw new Error('El respaldo está cifrado y falta WA_BACKUP_CLAVE en el servidor.')
+        aCargar = `${archivo}.zip`
+        emitir('importacion', { estado: 'cargando', nombre, paso: 0, total: 1, chat: 'Descifrando…' })
+        await descifrarArchivo(archivo, aCargar, BACKUP_CLAVE)
+      }
+      const r = await importarRespaldo(aCargar, {
+        nombreArchivo: nombre.replace(/\.enc$/i, '.zip'),
         nombrePropio: wa.estadoConexion(null).yo?.nombre || '',
         carpetaTmp,
         avance: (a) => emitir('importacion', { estado: 'cargando', nombre, ...a }),
@@ -341,6 +361,7 @@ app.post('/api/importar/procesar', exigirLinea, accion('importar_respaldo', (req
     } finally {
       importando = null
       fs.rmSync(archivo, { force: true })
+      fs.rmSync(`${archivo}.zip`, { force: true })
       fs.rmSync(carpetaTmp, { recursive: true, force: true })
     }
   })()
@@ -358,20 +379,16 @@ const resumenDeExportacion = (chats) => {
   }
   return { chats: chats.length, mensajes, hasta }
 }
+// El respaldo local es SIEMPRE completo (todos los chats con todos sus archivos descargados) y cifrado con
+// WA_BACKUP_CLAVE, igual que el de la nube. Sin la clave no se hace: nunca sale uno sin cifrar.
+// Se abre con "Cargar respaldo" en el panel o con `npm run descifrar-respaldo`.
 app.get('/api/exportar', exigirLinea, accion('exportar_chats', async (req, res) => {
+  if (!BACKUP_CLAVE) throw Object.assign(new Error('Falta WA_BACKUP_CLAVE en la configuración del servidor: el respaldo local va siempre cifrado.'), { status: 400 })
   const chats = listarChats()
   const resumen = resumenDeExportacion(chats)
   const usuario = req.usuario?.nombre || req.usuario?.usuario || null
-  if (req.query.archivos === '1') {
-    await exportarZip(req, res, chats, `Chats de WhatsApp Neifert con archivos ${hoyIso()}.zip`)
-    await registrarRespaldoLocal({ ...resumen, usuario, conArchivos: true })
-    return
-  }
-  const rutas = rutasDeChats(chats)
-  const zip = crearZip(chats.map((c, i) => ({ nombre: rutas[i], datos: textoDeChat(c, listarMensajes(c.id)) })))
-  const hoy = new Date().toLocaleDateString('sv-SE') // AAAA-MM-DD
-  res.attachment(`Chats de WhatsApp Neifert ${hoy}.zip`).type('application/zip').send(zip)
-  await registrarRespaldoLocal({ ...resumen, usuario, conArchivos: false })
+  const r = await exportarZip(req, res, chats, `Respaldo de WhatsApp Neifert ${hoyIso()}.enc`, { cifrarCon: BACKUP_CLAVE })
+  await registrarRespaldoLocal({ ...resumen, archivos: r.archivos, usuario, conArchivos: true, cifrado: true })
 }, () => ({})))
 // Respaldo programado de los mensajes (src/respaldoMensajes.js): el estado y "respaldar ahora".
 app.get('/api/respaldo/mensajes', exigirLinea, ruta(async () => ({ ...vistaRespaldoMensajes(), local: await vistaRespaldoLocal() })))

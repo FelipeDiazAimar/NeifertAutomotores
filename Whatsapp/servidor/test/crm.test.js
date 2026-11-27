@@ -107,94 +107,56 @@ describe('cliente del CRM en cada chat', () => {
   })
 })
 
-describe('tarea o alerta desde un chat que todavía no es cliente', () => {
-  it('crea el cliente con su nombre de WhatsApp y su teléfono, y la tarea queda de ese cliente', async () => {
+describe('tarea o alerta de un chat que no es cliente', () => {
+  const tareas = () => enviados.filter((e) => e.tabla === 'tareas')
+  const clientesCreados = () => enviados.filter((e) => e.tabla === 'clientes').length
+
+  it('la tarea queda sin cliente, con el contacto en el detalle, y no se crea ningún cliente', async () => {
     const J = '5493492666111@s.whatsapp.net'
     upsertChat(J, { pushName: 'Sergio' })
-    const r = await crearTarea(J, { titulo: 'Llamar', fecha: '2026-12-05' }, USUARIO)
-    expect(r.clienteCreado).toBe(true)
-    const cliente = enviados.filter((e) => e.tabla === 'clientes').at(-1).fila
-    expect(cliente).toMatchObject({ nombre: 'Sergio', telefono: '3492666111' })
-    expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.cliente_id === r.clienteId)).toBeTruthy()
-    // La segunda vez ya es cliente: no se crea otro.
-    const otra = await crearTarea(J, { titulo: 'Otra', fecha: '2026-12-06' }, USUARIO)
-    expect(otra.clienteCreado).toBeUndefined()
-    expect(otra.clienteId).toBe(r.clienteId)
+    const antes = clientesCreados()
+    const r = await crearTarea(J, { titulo: 'Llamar al proveedor', fecha: '2026-12-05', descripcion: 'Pedir presupuesto' }, USUARIO)
+    expect(r).toMatchObject({ ok: true, clienteId: null, sinCliente: true })
+    const fila = tareas().at(-1).fila
+    expect(fila).toMatchObject({ titulo: 'Llamar al proveedor', cliente_id: null, creado_por: 'u-vend' })
+    expect(fila.descripcion).toBe('Contacto de WhatsApp (no es cliente): Sergio · +5493492666111\nPedir presupuesto')
+    expect(clientesCreados()).toBe(antes)
+    // No se anota nada en la bitácora de un cliente que no existe.
+    expect(enviados.filter((e) => e.tabla === 'eventos' && e.fila.datos?.titulo === 'Llamar al proveedor')).toHaveLength(0)
   })
 
-  it('con la alerta pasa lo mismo, y sin nombre queda como "Contacto de WhatsApp"', async () => {
+  it('la alerta también: sin cliente y con el contacto (sin nombre, solo el teléfono)', async () => {
     const J = '5493492666222@s.whatsapp.net'
     upsertChat(J)
     const r = await crearAlerta(J, { titulo: 'Avisar', fecha: '2026-12-05', hora: '10:00' }, USUARIO)
-    expect(r.clienteCreado).toBe(true)
-    expect(enviados.filter((e) => e.tabla === 'clientes').at(-1).fila.nombre).toBe('Contacto de WhatsApp')
+    expect(r).toMatchObject({ ok: true, clienteId: null, sinCliente: true })
+    const fila = enviados.filter((e) => e.tabla === 'alertas').at(-1).fila
+    expect(fila).toMatchObject({ cliente_id: null, asignado_a: 'u-vend' })
+    expect(fila.descripcion).toBe('Contacto de WhatsApp (no es cliente): +5493492666222')
   })
 
-  it('si faltan datos no crea el cliente de balde', async () => {
-    const J = '5493492666333@s.whatsapp.net'
-    upsertChat(J, { pushName: 'Nadie' })
-    const antes = enviados.filter((e) => e.tabla === 'clientes').length
-    await expect(crearTarea(J, { titulo: 'Sin fecha' }, USUARIO)).rejects.toThrow(/fecha/)
-    await expect(crearAlerta(J, { titulo: 'Sin hora', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/hora/)
-    expect(enviados.filter((e) => e.tabla === 'clientes')).toHaveLength(antes)
-  })
-
-  it('respeta "no es cliente" y no crea nada en grupos', async () => {
+  it('un chat marcado "no es cliente" y un grupo también pueden tener tarea', async () => {
     const J = '5493492666444@s.whatsapp.net'
     upsertChat(J, { pushName: 'Spam', clienteId: 'ninguno' })
-    await expect(crearTarea(J, { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/no es cliente/)
-    await expect(crearTarea('120363000000000009@g.us', { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).rejects.toThrow(/grupo/i)
-  })
-})
-
-describe('el bot habla con el CRM por teléfono', () => {
-  it('reconoce al cliente por teléfono, con cualquier formato; inválido o desconocido da null', async () => {
-    expect((await clientePorTelefono('+54 9 3576 41-2286'))).toMatchObject({ id: 'c1' })
-    expect((await clientePorTelefono('3406518585')).id).toBe('c2')
-    expect(await clientePorTelefono('3511000000')).toBeNull()
-    expect(await clientePorTelefono('abc')).toBeNull()
+    expect((await crearTarea(J, { titulo: 'x', fecha: '2026-12-05' }, USUARIO)).sinCliente).toBe(true)
+    const G = '120363000000000009@g.us'
+    upsertChat(G, { nombre: 'Proveedores' })
+    await crearTarea(G, { titulo: 'Pedir lista', fecha: '2026-12-05' }, USUARIO)
+    expect(tareas().at(-1).fila.descripcion).toMatch(/^Grupo de WhatsApp: /)
   })
 
-  it('si el cliente existe lo devuelve; con interés deja un contacto del bot', async () => {
-    const antes = enviados.length
-    expect(await asegurarCliente({ telefono: '3576412286', nombre: 'Otro' }, null)).toMatchObject({ creado: false, cliente: { id: 'c1' } })
-    expect(enviados.length).toBe(antes)
-    await asegurarCliente({ telefono: '3576412286', interes: 'Corolla 2020' }, null)
-    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { entidad_id: 'c1', tipo: 'contacto', usuario_id: null, datos: { texto: 'Interés: Corolla 2020', via: 'bot' } } })
+  it('si es cliente, queda del cliente y sin la línea de contacto', async () => {
+    const J = '5493576412286@s.whatsapp.net'
+    await crearTarea(J, { titulo: 'Con cliente', fecha: '2026-12-05' }, USUARIO)
+    expect(tareas().at(-1).fila).toMatchObject({ cliente_id: 'c1', descripcion: null })
   })
 
-  it('si no existe lo crea con los 10 dígitos, nombre por defecto y el interés en las notas', async () => {
-    const r = await asegurarCliente({ telefono: '+54 9 351 555-0101', localidad: 'Rafaela', interes: 'Gol', notas: 'Pidió financiar' }, null)
-    expect(r).toMatchObject({ creado: true, cliente: { nombre: 'Contacto de WhatsApp', telefono: '3515550101' } })
-    const alta = enviados.filter((e) => e.tabla === 'clientes').at(-1).fila
-    expect(alta).toMatchObject({ canal: 'whatsapp', status: 'activo', creado_por: null, localidad: 'Rafaela', notas: 'Pidió financiar\nInterés: Gol' })
-    expect(enviados.at(-1)).toMatchObject({ tabla: 'eventos', fila: { tipo: 'alta', datos: { origen: 'bot' } } })
-    // El segundo pedido ya lo encuentra (se olvidó la caché).
-    expect((await asegurarCliente({ telefono: '3515550101' }, null)).creado).toBe(false)
-  })
-
-  it('un teléfono inválido es un error 400', async () => {
-    await expect(asegurarCliente({ telefono: 'xx' }, null)).rejects.toMatchObject({ status: 400, message: 'Teléfono inválido.' })
-  })
-
-  it('seguimiento y tarea de un teléfono que no es cliente dan 404', async () => {
-    await expect(seguimientoPorTelefono('3511000000', 'hola', null)).rejects.toMatchObject({ status: 404, message: 'Ese teléfono no es cliente del CRM.' })
-    await expect(tareaPorTelefono('3511000000', { titulo: 'x' }, null)).rejects.toMatchObject({ status: 404 })
-    await expect(seguimientoPorTelefono('3576412286', '  ', null)).rejects.toThrow(/qué se habló/)
-    await seguimientoPorTelefono('3576412286', 'Quiere visitar', null)
-    expect(enviados.at(-1).fila.datos).toEqual({ texto: 'Quiere visitar', via: 'bot' })
-  })
-
-  it('la tarea del bot sin fecha es para hoy (Argentina) y sin asignado', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] })
-    vi.setSystemTime(new Date('2026-11-25T01:30:00Z')) // en Argentina todavía es 24
-    try {
-      await tareaPorTelefono('3576412286', { titulo: 'Llamar' }, null)
-    } finally {
-      vi.useRealTimers()
-    }
-    expect(enviados.find((e) => e.tabla === 'tareas' && e.fila.titulo === 'Llamar' && e.fila.fecha === '2026-11-24').fila).toMatchObject({ cliente_id: 'c1', asignado_a: null, creado_por: null })
-    expect(enviados.at(-1).fila.datos).toMatchObject({ titulo: 'Llamar', via: 'bot' })
+  it('con datos que faltan no crea nada', async () => {
+    const J = '5493492666333@s.whatsapp.net'
+    upsertChat(J, { pushName: 'Nadie' })
+    const antes = tareas().length
+    await expect(crearTarea(J, { titulo: 'Sin fecha' }, USUARIO)).rejects.toThrow(/fecha/)
+    expect(tareas()).toHaveLength(antes)
   })
 })
 
