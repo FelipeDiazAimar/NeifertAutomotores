@@ -369,6 +369,8 @@ WhatsApp) habla con el CRM por **teléfono**, no por chat. Base: `http://localho
 |---|---|
 | `GET /salud` | `{ "ok": true, "crm": true }` |
 | `GET /vehiculos` | `[{ "id", "nombre", "marca", "modelo", "anio", "km", "combustible", "transmision", "reservado", "descripcion", "precioTexto" }]` (sin `imagen`) |
+| `GET /herramientas` | `{ "herramientas": [{ "nombre", "descripcion", "parametros": { "propiedades", "requeridos" } }], "reglas": ["..."] }`: las consultas de autos que puede hacer la IA (`buscar_vehiculos`, `ranking_vehiculos`, `consultar_negocio`, `verificar_horario`, `enviar_fotos_vehiculo`) y las reglas de concesionaria para su prompt. Viven en `servidor/src/herramientasBot.js` |
+| `POST /herramientas/:nombre` | `{ "args": {...}, "telefono"? }` → el resultado que ve la IA (llama directo a las mismas funciones que `/vehiculos`, `/negocio`, `/abierto` y `/vehiculos/:id/fotos`). `enviar_fotos_vehiculo` devuelve `imagenes: { rutas: ["/vehiculos/<id>/foto/<n>"], leyenda }` para que la app baje cada foto de `/vehiculos/:id/foto/:n`. Si no se puede leer el catálogo: `{ "error": "sin_acceso", "sin_acceso_a" }`. Herramienta inexistente: 404 `{ "error" }` |
 | `GET /cliente?telefono=3576412286` | `{ "cliente": { "id", "nombre", "telefono", "localidad", "status", "archivado" } }`, o `{ "cliente": null }` |
 | `POST /cliente` | `{ "telefono", "nombre"?, "localidad"?, "interes"?, "notas"? }` → `{ "cliente": {...}, "creado": true }`. Si ya existe devuelve `creado: false` (y con `interes` deja un contacto "Interés: ..."). Teléfono inválido: 400 |
 | `POST /seguimiento` | `{ "telefono", "texto" }` → `{ "ok": true, "clienteId" }`. 404 si no es cliente |

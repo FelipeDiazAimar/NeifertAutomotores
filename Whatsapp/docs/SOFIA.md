@@ -45,6 +45,8 @@ solo le llega eso. Así el pedido a la IA pesa unas 3.000 letras aunque haya cie
 | `buscar_vehiculos` | Autos usados y 0 km con precio, año, km, tipo, si está reservado y el enlace a la página | `q` (nombre), `marca`, `modelo`, `categoria` (pickup, SUV, sedán…), `condicion` (`usado` o `0km`), `anioDesde`, `anioHasta`, `kmMax`, `precioMax` + `moneda`, `combustible`, `transmision`, `disponibles`, `ordenar` (precio, año, km), `limite` |
 | `consultar_negocio` | Dirección y mapa, horarios, teléfono, WhatsApp, email, redes, web y categorías | — |
 
+Las herramientas (y las reglas de concesionaria que van al prompt) las declara el CRM: `GET /api/bot/herramientas`, y se ejecutan con `POST /api/bot/herramientas/:nombre`. Todo vive en `Whatsapp/servidor/src/herramientasBot.js`; la app del bot no sabe de autos. Las rutas sueltas (`/vehiculos`, `/negocio`, `/abierto`, `/vehiculos/:id/foto/:n`) siguen para el modo sin herramientas, el mensaje de falla y la descarga de las fotos.
+
 Los horarios y la dirección salen de lo que se edita en la página (Admin → Contenido → Redes y contacto): una sola
 fuente. Si el CRM no responde, Sofía le dice al cliente que **de momento no tiene acceso al catálogo (o a esos
 datos) pero que lo puede ayudar con cualquier otra consulta**, y lo queda en la actividad del asistente.

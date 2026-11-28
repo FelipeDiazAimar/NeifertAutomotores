@@ -14,6 +14,7 @@ import { normalizarAR } from './telefono.js'
 import { guardarCharla } from './sofia.js'
 import { guardarReporte } from './sofiaEstado.js'
 import { filtrarVehiculos } from './vehiculosFiltro.js'
+import { HERRAMIENTAS, REGLAS, ejecutar } from './herramientasBot.js'
 
 const FILTROS = ['q', 'marca', 'modelo', 'anioDesde', 'anioHasta', 'kmMax', 'precioMax', 'moneda', 'combustible', 'transmision', 'categoria', 'condicion', 'ordenar', 'nuevo', 'disponibles', 'limite']
 
@@ -56,6 +57,9 @@ export function rutasBot({ ruta, accion }) {
       res.status(err.status || 500).json({ error: err.message })
     }
   })
+  // Las consultas que la IA puede hacer (con las reglas de concesionaria para su prompt) y su ejecución: ver herramientasBot.js.
+  r.get('/herramientas', ruta(() => ({ herramientas: HERRAMIENTAS, reglas: REGLAS })))
+  r.post('/herramientas/:nombre', ruta((req) => ejecutar(req.params.nombre, req.body?.args || {}, { telefono: req.body?.telefono })))
   r.get('/cliente', ruta(async (req) => ({ cliente: await clientePorTelefono(req.query.telefono) })))
   r.post('/cliente', accion('bot_cliente', (req) => asegurarCliente(req.body || {}, null), (req, res) => ({ cliente: res.cliente.id, creado: res.creado })))
   r.post('/seguimiento', accion('bot_seguimiento', (req) => seguimientoPorTelefono(req.body?.telefono, req.body?.texto, null), (req, res) => ({ cliente: res.clienteId })))
